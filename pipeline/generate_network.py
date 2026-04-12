@@ -741,8 +741,8 @@ function showInfo(d){{
 window.closeInfo = function(){{ info.classList.remove("open"); }};
 
 function esc(s){{ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }}
-window.setEgo = function(id){{ egoId=id; render(); const d=nodesRaw.find(n=>n.id===id); if(d)showInfo(d); }};
-window.clearEgo = function(){{ egoId=null; render(); closeInfo(); }};
+window.setEgo = function(id){{ egoId=id; render(); if(use3D) update3D(); const d=nodesRaw.find(n=>n.id===id); if(d)showInfo(d); }};
+window.clearEgo = function(){{ egoId=null; render(); if(use3D) update3D(); closeInfo(); }};
 svg.on("click",()=>{{ closeInfo(); if(egoId){{egoId=null;render();}} }});
 info.addEventListener("click",function(e){{
   const link=e.target.closest(".conn-link");
@@ -974,6 +974,7 @@ document.getElementById("hl-reset").onclick=function(){{
   document.querySelectorAll(".hl-btn").forEach(b=>b.classList.remove("active"));
   info.classList.remove("open");
   render();
+  if(use3D) update3D();
 }};
 
 // Reset View: restore zoom/pan to the initial (identity) transform so the
@@ -1143,16 +1144,20 @@ function build3DObjects(){{
   const go=ghostOp();
   const nodeMap={{}};
 
+  // Apply all filters (category, year, AND ego) before building objects.
+  // getVisible() sets n._active on every node — this includes the ego
+  // neighbourhood filter, which isNodeActive() alone does not cover.
+  const [,ls]=getVisible();
+
   nodesRaw.forEach(n=>{{
     if(n.umap3X===undefined) return;
     const r=Math.max(1.2,Math.min(5,0.8+Math.sqrt(degree[n.id]||0)*0.8))*nodeSizeMul;
     const geo=new THREE.SphereGeometry(r,12,8);
     const col=nodeColor3(n);
-    const active=isNodeActive(n);
     const mat=new THREE.MeshPhongMaterial({{
       color:col,
       transparent:true,
-      opacity:active?1:go,
+      opacity:n._active?1:go,
     }});
     const mesh=new THREE.Mesh(geo,mat);
     mesh.position.set(n.umap3X,n.umap3Y,n.umap3Z);
@@ -1162,8 +1167,7 @@ function build3DObjects(){{
     nodeMap[n.id]=mesh;
   }});
 
-  // Links
-  const [,ls]=getVisible();
+  // Links (already filtered by getVisible above)
   ls.forEach(l=>{{
     const s=l.source.id||l.source, t=l.target.id||l.target;
     const sm=nodeMap[s], tm=nodeMap[t];
@@ -1180,10 +1184,11 @@ function build3DObjects(){{
 function update3D(){{
   if(!scene3) return;
   const go=ghostOp();
+  // Recompute n._active with ego filtering (getVisible handles it)
+  getVisible();
   spheres3.forEach(mesh=>{{
     const n=mesh.userData.node;
-    const active=isNodeActive(n);
-    mesh.material.opacity=active?1:go;
+    mesh.material.opacity=n._active?1:go;
     mesh.material.color.set(nodeColor3(n));
     mesh.visible=true;
   }});

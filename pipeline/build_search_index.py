@@ -228,6 +228,22 @@ def parse_review(md_path: Path, slug: str) -> dict:
             cleaned = cleaned[:MAX_CHUNK_CHARS].rsplit(" ", 1)[0] + "…"
         chunks.append({"section": sec_name, "text": cleaned})
 
+    # Personal notes: if a notes.md file sits alongside review.md
+    # (Obsidian-edited, git-ignored), include it as an extra chunk so
+    # Deep Research can cite the operator's own ideas and hypotheses.
+    notes_path = md_path.parent / "notes.md"
+    if notes_path.exists():
+        try:
+            notes_text = notes_path.read_text(encoding="utf-8")
+            notes_cleaned = clean_chunk_text(notes_text)
+            if len(notes_cleaned) >= MIN_CHUNK_CHARS:
+                chunks.append({
+                    "section": "My Notes",
+                    "text": notes_cleaned[:MAX_CHUNK_CHARS],
+                })
+        except Exception:
+            pass
+
     return {
         "title": title,
         "year": year,
@@ -327,6 +343,51 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
             })
 
     print(f"      {len(papers_meta)} papers, {len(pending_chunks)} chunks, {skipped} skipped")
+
+    # --- Index personal notes from docs/notes/{topic}/ (git-ignored) ---
+    # These are operator-authored markdown files (hypotheses, meeting notes,
+    # gap analyses, etc.) edited in Obsidian or any text editor. They are
+    # chunked and embedded alongside paper reviews so Deep Research can
+    # cite the operator's own thinking in its answers.
+    _notes_dir = DOCS_DIR / "notes" / topic
+    _notes_count = 0
+    if _notes_dir.exists():
+        for _note_path in sorted(_notes_dir.rglob("*.md")):
+            if _note_path.name.startswith("_"):
+                continue
+            try:
+                _note_text = _note_path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            _cleaned = clean_chunk_text(_note_text)
+            if len(_cleaned) < MIN_CHUNK_CHARS:
+                continue
+
+            _title_m = re.search(r"^#\s+(.+)$", _note_text, re.MULTILINE)
+            _title = _title_m.group(1).strip() if _title_m else _note_path.stem.replace("-", " ").replace("_", " ").title()
+            _note_slug = f"_note_{_note_path.stem}"
+
+            _rel = str(_note_path.relative_to(DOCS_DIR / "notes")).replace("\\\\", "/")
+            papers_meta[_note_slug] = {
+                "title": _title,
+                "year": "",
+                "category": "Personal Notes",
+                "url": f"../notes/{_rel}",
+                "figures": [],
+            }
+            # Split into paragraphs (max 5 chunks per note)
+            _paras = [p.strip() for p in _cleaned.split("\\n\\n") if len(p.strip()) >= MIN_CHUNK_CHARS]
+            if not _paras:
+                _paras = [_cleaned]
+            for _i, _para in enumerate(_paras[:5]):
+                pending_chunks.append({
+                    "slug": _note_slug,
+                    "section": "Personal Note" if len(_paras) == 1 else f"Personal Note ({_i + 1})",
+                    "text": _para[:MAX_CHUNK_CHARS],
+                })
+            _notes_count += 1
+    if _notes_count:
+        print(f"      + {_notes_count} personal notes from {_notes_dir}")
 
     if not pending_chunks:
         print("ERROR: no chunks to embed")

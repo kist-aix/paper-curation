@@ -282,6 +282,7 @@ img.lazy.loaded { opacity: 1; }
           <button class="deep-btn" id="deep-copy" disabled title="Copy markdown">&#x1F4CB; Copy</button>
           <button class="deep-btn" id="deep-download" disabled title="Download .md">&#x2B07; Download</button>
           <button class="deep-btn" id="deep-newtab" disabled title="Open in new tab">&#x1F517; New tab</button>
+          <button class="deep-btn" id="deep-obsidian" disabled title="Save answer + your notes to Obsidian">&#x1F4DD; Obsidian</button>
           <button class="deep-btn" id="deep-close" title="Close">&#x2715;</button>
         </div>
       </div>
@@ -19754,7 +19755,7 @@ function deepHidePanel() {
 }
 
 function deepUpdateButtons(enabled) {
-  for (const id of ['deep-copy', 'deep-download', 'deep-newtab', 'deep-rerun']) {
+  for (const id of ['deep-copy', 'deep-download', 'deep-newtab', 'deep-obsidian', 'deep-rerun']) {
     const b = document.getElementById(id);
     if (b) b.disabled = !enabled;
   }
@@ -20223,6 +20224,42 @@ function copyAnswerMd() {
   });
 }
 
+function saveToObsidian() {
+  if (!DEEP.currentAnswer) return;
+  var query = document.getElementById('search-input').value || 'research-note';
+  var topic = window.location.pathname.split('/').filter(Boolean).pop() || 'notes';
+  var ts = new Date().toISOString().slice(0, 10);
+  var slug = query.slice(0, 40).replace(/[^a-zA-Z0-9\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  var fileName = 'notes/' + topic + '/PCDR_' + ts + '-' + slug;
+  var lines = [
+    '# ' + query, '',
+    '> Deep Research (' + new Date().toLocaleString() + ')', '',
+    '## My Notes', '', '(\uC5EC\uAE30\uC5D0 \uC0DD\uAC01\uC744 \uC801\uC73C\uC138\uC694)', '',
+    '---', '',
+    '## Deep Research Answer', '',
+    DEEP.currentAnswer,
+  ];
+  var cited = collectCitedNums(DEEP.currentAnswer);
+  if (cited.size > 0) {
+    lines.push('', '## References', '');
+    var ordered = Array.from(cited).sort(function(a, b) { return a - b; });
+    for (var i = 0; i < ordered.length; i++) {
+      var n = ordered[i];
+      var ref = DEEP.currentRefs[n - 1];
+      if (!ref) continue;
+      lines.push('[' + n + '] [[papers/' + ref.slug + '/review|' + ref.title + ']]' + (ref.year ? ' (' + ref.year + ')' : ''));
+    }
+  }
+  var content = lines.join('\n');
+  // Fix relative paths: LLM answers use ../papers/ which is correct
+  // from docs/{topic}/, but notes live one level deeper in
+  // docs/notes/{topic}/ so we need ../../papers/ instead.
+  content = content.replace(/\.\.\//g, '../../');
+  var vault = 'docs';
+  var uri = 'obsidian://new?vault=' + encodeURIComponent(vault) + '&file=' + encodeURIComponent(fileName) + '&content=' + encodeURIComponent(content);
+  window.location.href = uri;
+}
+
 function downloadAnswerMd() {
   if (!DEEP.currentAnswer) return;
   const full = buildFullMarkdown();
@@ -20335,6 +20372,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (dl) dl.addEventListener('click', downloadAnswerMd);
   const nt = document.getElementById('deep-newtab');
   if (nt) nt.addEventListener('click', openAnswerInNewTab);
+  const ob = document.getElementById('deep-obsidian');
+  if (ob) ob.addEventListener('click', saveToObsidian);
   const rerun = document.getElementById('deep-rerun');
   if (rerun) rerun.addEventListener('click', function() {
     const q = document.getElementById('search-input').value;
