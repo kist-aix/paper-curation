@@ -77,7 +77,19 @@ def build_method_text():
     # 5. Key Design Decisions (CLAUDE.md)
     design_section = _extract_section(claude, "Key Design Decisions")
 
-    method = f"""## Paper Curation Pipeline — Automated Academic Paper Search, Review & Publishing
+    method = f"""## Paper Curation Pipeline — Zotero + Claude Code + Deep Research + Obsidian
+
+### TOOL ECOSYSTEM (show as interconnected logos/icons at the top)
+The system is orchestrated by **Claude Code** (Anthropic's CLI agent) which coordinates five tools:
+- **Zotero** (reference manager, red Z logo): paper collection, PDF storage, linked files
+- **Claude** (Anthropic LLM, Anthropic logo): structured reviews (Haiku), topic naming (Sonnet), timeline narratives (Opus), Deep Research answers (Extended Thinking)
+- **PaperBanana** (diagram engine, banana icon): auto-generates per-category research trend timeline diagrams from Claude Opus narratives
+- **Obsidian** (knowledge IDE, purple gem logo): personal notes editing, [[wiki-links]] between papers, Graph View for cross-query knowledge topology
+- **OpenAI** (embedding, OpenAI logo): text-embedding-3-small for Deep Research RAG index
+
+Data flow: Zotero → Claude Code → Claude (review/classify) → PaperBanana (timelines) → Deep Research (RAG Q&A) → Obsidian (compounding knowledge)
+
+Each tool MUST be represented by its recognizable logo/icon. Show Claude Code as the central orchestrator connecting all tools.
 
 ### PIPELINE PHASES (left to right flow)
 
@@ -102,9 +114,9 @@ VISUAL_RULES = """
 ### ABSOLUTE VISUAL RULES
 - Left to right flow, 21:9 ultra-wide aspect ratio
 - Each phase box: SHORT label (1-2 words max) + a representative ICON/CLIPART inside or beside it
-- Phase labels must be minimal: "Search", "Register", "Review", "Classify", "Insights", "Timeline", "Relation Network", "Validate", "HTML", "Deploy"
+- Phase labels must be minimal: "Search", "Register", "Review", "Classify", "Insights", "Timeline", "Network", "Validate", "HTML", "Deep Research", "Obsidian"
 - Icons/cliparts are the primary visual — text is secondary
-- Example icons: magnifying glass (Search), book stack (Register), quill pen (Review), tag/folder (Classify), lightbulb (Insights), clock/timeline bar (Timeline), web/graph nodes (Relation Network), checkmark (Validate), code brackets (HTML), rocket (Deploy)
+- Example icons: magnifying glass (Search), book stack (Register), quill pen (Review), tag/folder (Classify), lightbulb (Insights), clock/timeline bar (Timeline), web/graph nodes (Network), checkmark (Validate), code brackets (HTML), brain/sparkle (Deep Research), purple gem (Obsidian)
 - Decision diamonds for mode switches (--update, --category, --timeline) with minimal labels
 - Fan-out / fan-in arrows for parallel operations
 - Dashed lines for optional/skippable paths
@@ -112,6 +124,13 @@ VISUAL_RULES = """
 - NO verbose descriptions in boxes — icons speak louder than words
 - NO title text, NO watermarks, NO color name labels
 - English only
+- Show recognizable logos/icons for these tools near the stages they power:
+  * Claude Code (Anthropic terminal CLI icon) — central orchestrator
+  * Zotero (red Z logo) — paper source
+  * Claude (Anthropic logo) — LLM review/classify/insights/Deep Research
+  * PaperBanana (banana icon) — timeline diagram generation
+  * Obsidian (purple gem icon) — knowledge compounding destination
+  * OpenAI (OpenAI logo) — embedding for Deep Research index
 """
 
 # Script name → (keyword, color, cat description, fairy description)
@@ -131,7 +150,8 @@ _CHARACTER_DB = {
     "validate_papers":         ("Validate",  "yellow",  "Scottish Fold with a tiny clipboard and green checkmark stamp", "has a checklist and checkmark stamp, yellow wings"),
     "review_to_html":          ("HTML",      "lime",    "Munchkin cat typing on a tiny keyboard, HTML tags floating around", "types on a floating keyboard, lime wings"),
     "build_topic_index":       ("TopicIndex","indigo",  "Maine Coon arranging tiny paper cards into a neat grid, proud expression", "arranges tiny cards into a grid, indigo wings"),
-    "prepare_deploy":          ("Deploy",    "gray",    "black cat riding a tiny rocket, goggles on forehead, tail streaming behind", "rides a tiny rocket, silver wings"),
+    "build_search_index":      ("Deep Research", "indigo", "wise owl-eyed cat with glowing brain, surrounded by floating search queries and citation badges", "has a glowing brain aura, indigo wings"),
+    "obsidian_notes":          ("Obsidian",  "purple",  "mystical black cat holding a purple gem (Obsidian logo), wiki-link threads radiating from it, sitting on a stack of personal notes", "holds a purple gem, radiating wiki-link threads, purple wings"),
 }
 
 # Cat breeds cycle for unknown scripts
@@ -198,7 +218,7 @@ def build_style_text(phases, style):
 - Fairies are tiny (chibi/kawaii style), each with a distinct look matching their role:
 {char_list}
 - Fairies should be charming but not distract from the pipeline flow
-- Each fairy has a tiny speech bubble with one keyword (e.g., "Search!", "Review!", "Deploy!")
+- Each fairy has a tiny speech bubble with one keyword (e.g., "Search!", "Review!", "Research!")
 - Style: flat illustration, pastel colors, consistent size across all fairies
 """
     return ""
@@ -232,9 +252,10 @@ def main():
     log(f"Style: {args.style}")
     log(f"Generating {args.candidates} workflow candidates (21:9, PaperBanana)")
 
-    caption = ("Paper Curation Pipeline: end-to-end automated system with Zotero sync, "
-               "multi-source search, review generation, classification, validation, "
-               "timeline generation, and GitHub Pages deployment.")
+    caption = ("Paper Curation Pipeline: Claude Code orchestrates Zotero (paper source), "
+               "Claude (AI reviews, classification, insights, Deep Research), "
+               "PaperBanana (category trend timelines), OpenAI (embedding index), "
+               "and Obsidian (knowledge compounding with wiki-links and Graph View).")
 
     os.makedirs(WORKFLOW_DIR, exist_ok=True)
 
@@ -263,7 +284,7 @@ def main():
         time.sleep(2)
 
     if results:
-        log(f"\nDeploying #{results[0][0]} as workflow.png")
+        log(f"\nSelecting #{results[0][0]} as workflow.png")
         shutil.copy2(results[0][2], str(WORKFLOW_DIR / "workflow.png"))
 
     log(f"\nDone! {len(results)}/{args.candidates} successful")
