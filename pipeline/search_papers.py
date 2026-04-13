@@ -66,6 +66,9 @@ SEARCH_KEYWORDS = {
             "research funding",
             "open access",
             "reproducibility",
+            "research trend",
+            "international collaboration",
+            "science mapping",
         ],
     },
 }

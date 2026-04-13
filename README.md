@@ -126,7 +126,7 @@ cd docs
 python -m http.server 8000
 ```
 
-브라우저에서 `http://localhost:8000/{topic}/` 으로 접속. Deep Research의 API 키 모달은 **자동 스킵** (`_local_keys.json`이 빌드 시 자동 생성).
+브라우저에서 `http://localhost:8000/{topic}/` 으로 접속. Deep Research API 키는 빌드 시 환경변수(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)에서 읽어 HTML에 직접 주입.
 
 ### 실행 모드
 

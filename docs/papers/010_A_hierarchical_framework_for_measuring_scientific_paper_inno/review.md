@@ -1,102 +1,67 @@
----
-title: "010_A_hierarchical_framework_for_measuring_scientific_paper_inno"
-authors:
-  - "Hongming Tan"
-  - "Shaoxiong Zhan"
-  - "Fengwei Jia"
-  - "Hai-Tao Zheng"
-  - "Wai Kin (Victor) Chan"
-date: "2026.02"
-doi: "10.1016/j.ins.2025.122787"
-arxiv: ""
-score: 4.0
-essence: "대규모언어모델(LLM)을 활용하여 과학논문의 혁신성을 계층적으로 측정하는 HSPIM 프레임워크를 제안한다. 논문을 섹션으로 분해하고 질의응답(QA) 기반 가중치 점수화로 혁신성을 정량화한다."
-tags:
-  - "cat/Scientific_Document_Analysis_and_Retrieval"
-  - "sub/Publication_Concept_Extraction"
-  - "topic/ai4s"
-pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Kasneci et al._2025_A hierarchical framework for measuring scientific paper innovation via large language models.pdf"
----
+# A Hierarchical Framework for Humanoid Locomotion with Supernumerary Limbs
 
-# A hierarchical framework for measuring scientific paper innovation via large language models
-
-> **저자**: Hongming Tan, Shaoxiong Zhan, Fengwei Jia, Hai-Tao Zheng, Wai Kin (Victor) Chan | **날짜**: 02/2026 | **DOI**: [10.1016/j.ins.2025.122787](https://doi.org/10.1016/j.ins.2025.122787)
+> **저자**: Bowen Zhi | **날짜**: 2025-11-25 | **URL**: [https://arxiv.org/abs/2512.00077](https://arxiv.org/abs/2512.00077)
 
 ---
 
 ## Essence
 
-![Figure 2](figures/fig2.webp)
+![Figure 2](figures/fig2.png)
 
-*Figure 2: An example of hierarchical scientific paper innovation measurement (HSPIM) via large language models. We use z*
+*Figure 2.1: The composite robot model used in the simulation, illustrating (a) the Unitree H1*
 
-대규모언어모델(LLM)을 활용하여 과학논문의 혁신성을 계층적으로 측정하는 HSPIM 프레임워크를 제안한다. 논문을 섹션으로 분해하고 질의응답(QA) 기반 가중치 점수화로 혁신성을 정량화한다.
+초과 사지(Supernumerary Limbs)가 장착된 인형형 로봇의 안정적인 보행을 위해 학습 기반 저수준 보행 제어와 모델 기반 고수준 동적 평형 제어를 결합한 계층적 제어 아키텍처를 제시한다.
 
 ## Motivation
 
-- **Known**: 과학논문 평가에서 혁신성 측정이 중요하지만, 기존 내용 기반 방법들은 전체 맥락을 간과하고 특정 섹션만 분석하는 한계가 있다. 혁신성과 새로움(novelty)을 구분하는 개념적 정의가 부족하다.
-- **Gap**: 기존 방법은 장문 텍스트 처리의 어려움, 새로움만 측정하고 실용적 가치는 누락, 특정 분야/시기 논문으로만 학습되어 일반화 부족이라는 문제가 있다. 훈련 없이 다양한 논문에 적용 가능한 혁신성 측정 방법이 필요하다.
-- **Why**: 자동화된 혁신성 측정은 급증하는 논문 평가 수요를 충족하고, 블라인드 피어리뷰를 지원하며, 미발표 논문 평가에 활용될 수 있어 학술 커뮤니티에 필수적이다.
-- **Approach**: LLM 기반 제로샷 프롬프팅으로 논문을 IMRaD 형식의 섹션으로 분류하고, 각 섹션에 공통 및 섹션별 특화 질문을 생성하여 혁신성 점수화를 수행한다. 유전 알고리즘으로 질문-프롬프트 조합을 최적화하여 성능을 향상시킨다.
+- **Known**: Deep Reinforcement Learning은 복잡한 로봇 보행 제어에 효과적이며, 추가 사지를 정적 앵커나 각운동량 제어용으로 활용하는 연구가 존재한다.
+- **Gap**: 다목적 인형형 팔과 같은 무거운 초과 사지가 생성하는 연속적이고 큰 동적 간섭을 관리하면서 동시에 보행을 유지하는 일반화된 제어 전략이 부족하다.
+- **Why**: 초과 사지는 로봇의 조작 능력을 크게 향상시키지만, 동적 불안정성을 야기하므로, 이를 해결함으로써 단일 플랫폼에서 조작과 이동을 동시에 수행할 수 있는 다용도 휴머노이드 로봇 개발이 가능해진다.
+- **Approach**: Unitree H1 로봇에 대해 PPO와 모방 학습을 통한 DRL 기반 보행 정책을 학습하고, 초과 사지의 구성을 실시간 CoM 피드백에 따라 조정하는 독립적인 모델 기반 동적 평형 제어기를 개발하여 두 제어기를 계층적으로 통합한다.
 
 ## Achievement
 
-![Figure 4](figures/fig4.webp)
+![Figure 3](figures/fig3.png)
 
-*Figure 4: Comparison of section-based scientific paper innovation measurement (SSPIM), naive implement of hierarchical s*
+*Figure 3.1: Training performance of the PPO agent over 500 million environment steps. (a)*
 
-- **HSPIM 프레임워크**: 논문-섹션-QA 계층 구조로 장문 텍스트를 효과적으로 처리하고, 신뢰도 가중치 기반 집계로 섹션 수준 혁신성을 논문 수준으로 통합
-- **혁신성 개념 정의**: 경제학과 사회과학 이론을 바탕으로 혁신성을 새로움(novelty)과 실용적 가치(contribution, feasibility)의 결합으로 명확히 정의
-- **훈련 불필요한 일반화**: 제로샷 LLM 프롬프팅으로 어떤 분야/시기의 논문에도 적용 가능하며, 특정 데이터셋에 과적합되지 않음
-- **유전 알고리즘 최적화**: 다중 프롬프트 조합 최적화에 유전 알고리즘을 처음 적용하여 질문 프롬프트의 효과성을 체계적으로 개선
-- **HSPIM+ 확장**: 새로움, 기여도, 실현가능성을 각각 점수화하여 혁신성의 세밀한 분석 가능
+- **DRL 기반 저수준 보행 제어**: PPO 알고리즘과 커리큘럼 학습을 통해 Unitree H1용 안정적인 보행 정책을 개발하였다.
+- **모델 기반 고수준 동적 평형 제어기**: CoM과 CoS 피드백을 기반으로 초과 사지 구성을 능동적으로 조정하여 보행 중 동적 불안정성을 완화한다.
+- **계층적 제어 프레임워크 검증**: 세 가지 조건(기준선, 정적 페이로드, 동적 평형)에서 평가 결과, 동적 평형 제어기가 정적 페이로드 대비 CoM 궤적의 DTW 거리를 47% 감소시켰다.
+- **개선된 보행 패턴**: 동적 평형 제어가 기준선에 더 유사한 보행 패턴을 생성하고, 지면 반발력(GRF)의 조정된 anti-phase 패턴을 달성하였다.
 
 ## How
 
-![Figure 3](figures/fig3.webp)
+![Figure 2](figures/fig2.png)
 
-*Figure 3: An example of an individual (a question-prompt combination) for multi-prompt optimization. Within an individua*
+*Figure 2.1: The composite robot model used in the simulation, illustrating (a) the Unitree H1*
 
-- 논문을 섹션 제목 기준으로 텍스트 청크로 분할하고 LLM으로 IMRaD 섹션 유형 분류
-- 각 섹션에 대해 공통 질문 1개 + 섹션별 특화 질문 1개의 2층 질문 구조 설계
-- 제로샷 LLM 프롬프팅으로 각 청크에서 {novelty_score, reason, confidence_score} JSON 생성
-- 생성된 QA 쌍을 추가 컨텍스트로 활용하여 LLM 점수화 정확도 향상
-- 신뢰도 점수를 가중치로 가중 평균하여 논문 수준 혁신성 점수 계산
-- 유전 알고리즘으로 질문-프롬프트 조합 최적화 (population initialization → selection → crossover → mutation)
-- PeerRead(3개) 및 NLPeer(1개) 데이터셋의 피어리뷰 점수를 지표로 성능 평가 (RMSE, MAE)
+- **시스템 아키텍처**: 저수준 DRL 기반 보행 제어와 고수준 모델 기반 동적 평형 제어로 구성된 계층적 구조
+- **저수준 제어**: Proximal Policy Optimization(PPO) 알고리즘으로 모방 학습을 통해 보행 정책 학습, 커리큘럼 학습으로 초과 사지의 질량과 자세를 점진적으로 도입
+- **고수준 제어**: 실시간 상태 추정을 바탕으로 CoM 위치에 따라 초과 사지의 관절각을 조정하는 모델 기반 제어기
+- **제어 통합**: 저수준 보행 정책의 출력과 고수준 평형 제어기의 명령을 적절히 융합하여 최종 관절 토크 생성
+- **평가 메트릭**: Dynamic Time Warping(DTW) 거리, Center of Mass 궤적 분석, 보행 재안정화 성능, Ground Reaction Forces 패턴 분석
 
 ## Originality
 
-- **제로샷 LLM 기반 측정**: 훈련 데이터 없이 LLM의 내재적 지식으로 혁신성 평가 (기존 미세조정 방식과 차별화)
-- **계층적 분해 구조**: 문서→섹션→QA 다층 구조로 장문 처리와 세밀한 분석 동시 달성
-- **혁신성 정의의 명확화**: 새로움과 실용적 가치를 명시적으로 구분하고 신뢰도를 가중치로 활용하는 새로운 개념 정의
-- **2층 질문 구조**: 유전학의 구조유전자/조절유전자 개념에서 영감받아 공통 질문과 특화 질문을 설계
-- **다중 프롬프트 유전 알고리즘 최적화**: 복수의 질문 세트를 동시 최적화하는 첫 시도
+- 기존 초과 사지 연구는 정적 브레이싱 또는 특수화된 비인형형 부속물에 초점을 맞춘 반면, 본 연구는 다목적 인형형 팔을 보행 중 능동적 평형 보조에 활용하는 일반화된 접근법을 제시한다.
+- 학습 기반과 모델 기반 제어를 명확하게 분리하여 계층적으로 통합하는 방식은 복잡한 로봇 제어 문제에 대한 실용적인 해결책을 제공한다.
+- 커리큘럼 학습을 통한 점진적 초과 사지 도입 전략은 DRL 정책의 강건성을 향상시키는 효과적인 방법론이다.
 
 ## Limitation & Further Study
 
-- **LLM 의존성**: 특정 LLM 모델(예: GPT-4)에 기반하여 다른 모델의 성능 일관성 미검증
-- **섹션 분류 오류**: IMRaD 형식이 아닌 비표준 논문 구조에서 분류 정확도 저하 가능성
-- **평가 지표의 한계**: 피어리뷰 점수를 혁신성의 지표로 사용하나, 피어리뷰 자체의 편향성 미해결
-- **다언어 지원 부족**: 영어 논문 중심으로 타 언어 논문으로 확장 필요
-- **정성적 해석 검증**: 생성된 reason의 정성적 타당성 평가가 부족 (텍스트 유사도만 측정)
-- **후속 연구**: 다양한 LLM 모델 비교, 비표준 논문 구조 처리, 도메인별 특화 모델 개발, 사용자 피드백 기반 반복 개선
+- **시뮬레이션 기반 평가**: 물리 기반 시뮬레이션 환경(MuJoCo)에서만 검증되었으며, 실제 하드웨어 플랫폼에서의 성능 검증이 필요하다.
+- **환경 제한**: 평탄한 보행 환경에서만 평가되었으며, 불규칙한 지형이나 외부 외란에 대한 강건성 평가가 부족하다.
+- **초과 사지 구성**: 고정된 초과 사지 형태와 질량에 대해서만 평가되었으며, 다양한 초과 사지 구성에 대한 일반화 가능성이 불명확하다.
+- **제어 파라미터**: 모델 기반 평형 제어기의 게인 튜닝 과정과 최적화 과정이 상세히 기술되지 않았다.
+- **후속 연구**: 실제 로봇 플랫폼에서의 구현 및 검증, 다양한 지형과 동적 외란에 대한 성능 평가, 초과 사지 구성의 자동 최적화 방법 개발이 필요하다.
 
 ## Evaluation
 
 - Novelty: 4/5
-- Technical Soundness: 4/5
+- Technical Soundness: 3/5
 - Significance: 4/5
 - Clarity: 4/5
 - Overall: 4/5
 
-**총평**: 본 논문은 LLM 기반의 첫 훈련 불필요 과학논문 혁신성 측정 프레임워크를 제시하며, 계층적 분해, 명확한 개념 정의, 유전 알고리즘 최적화를 통해 일반화 가능성과 해석가능성을 크게 향상시켰다. 실증 검증과 기술적 창의성이 높으나, LLM 의존성과 평가 지표의 한계 개선이 필요하다.
-
-## Related Papers
-
-- 🔄 다른 접근: [[papers/434_Interesting_Scientific_Idea_Generation_using_Knowledge_Graph/review]] — 둘 다 LLM을 활용한 과학 논문 평가를 다루지만 하나는 혁신성 측정, 다른 하나는 연구 아이디어 생성에 중점을 둠
-- 🔗 후속 연구: [[papers/178_Can_ai_examine_novelty_of_patents_Novelty_evaluation_based_o/review]] — 특허의 신규성 평가를 과학 논문의 혁신성 측정으로 확장하여 더 포괄적인 지적 창작물 평가 방법을 제시함
-- 🏛 기반 연구: [[papers/320_Evaluating_Large_Language_Models_in_Scientific_Discovery/review]] — 코드 평가를 위한 LLM 활용 연구가 과학 논문의 혁신성을 측정하는 계층적 프레임워크 개발의 방법론적 기초를 제공함
-- 🧪 응용 사례: [[papers/777_Structuring_scientific_innovation_A_framework_for_modeling_a/review]] — 과학 논문 혁신도 측정을 위한 계층적 프레임워크가 파괴적 혁신 지수 평가의 실제적 도구로 활용될 수 있다.
-- 🔄 다른 접근: [[papers/779_Supporting_assessment_of_novelty_of_design_problems_using_co/review]] — 과학 논문의 혁신성 측정이라는 유사한 목표이지만 SAPPhIRE 모델과 계층적 프레임워크라는 다른 접근법을 사용한다.
-- 🔄 다른 접근: [[papers/313_Enabling_ai_scientists_to_recognize_innovation_A_domain-agno/review]] — 과학 논문 혁신 측정을 위한 계층적 프레임워크로 본 논문의 혁신성 평가와 다른 접근법을 제시한다.
+**총평**: 본 논문은 초과 사지가 장착된 인형형 로봇의 보행 안정성 문제를 해결하기 위해 계층적 제어 구조를 통해 학습 기반과 모델 기반 제어를 효과적으로 결합한 독창적인 접근법을 제시하며, 47% DTW 거리 감소 등 정량적 성과를 입증했다. 다만 실제 하드웨어 검증과 복잡한 환경에서의 평가가 필요하다.

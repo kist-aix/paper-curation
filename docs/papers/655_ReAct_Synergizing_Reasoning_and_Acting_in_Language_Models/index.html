@@ -63,129 +63,51 @@ a { color: #A62018; }
 </head>
 <body>
 <h1>ReAct: Synergizing Reasoning and Acting in Language Models</h1>
-<blockquote><p><strong>저자</strong>: Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran | <strong>날짜</strong>: 2022 | <strong>DOI</strong>: <a href="https://doi.org/10.48550/arXiv.2210.03629" target="_blank">10.48550/arXiv.2210.03629</a></p></blockquote>
+<blockquote><p><strong>저자</strong>: Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao | <strong>날짜</strong>: 2022-10-06 | <strong>URL</strong>: <a href="https://arxiv.org/abs/2210.03629" target="_blank">https://arxiv.org/abs/2210.03629</a></p></blockquote>
 <hr>
 <div class="essence-box"><h2>Essence</h2>
-<p>본 논문은 대규모 언어 모델(LLM)의 추론(reasoning)과 행동(acting)을 상호작용적으로 결합하여 복잡한 작업을 해결하는 ReAct 패러다임을 제시한다. 모델이 사고(thought)와 행동(action)을 번갈아 생성하면서 외부 환경과 상호작용하여 동적 추론을 수행하고 오류 전파 및 환각(hallucination)을 완화한다.</p></div>
+<p>ReAct는 대형 언어 모델이 reasoning trace와 task-specific action을 interleaved manner로 생성하도록 함으로써, 추론과 행동의 시너지를 통해 다양한 언어 이해 및 의사결정 태스크의 성능을 향상시키는 프레임워크이다.</p></div>
 <div class="section-box"><h2>Motivation</h2>
 <ul>
-<li><strong>Known</strong>:
-<ul>
-<li>LLM의 사고의 연쇄(Chain-of-Thought, CoT) 프롬프팅은 추론 능력을 보여주었으나, 내부 표현만 사용하여 외부 세계와 단절됨</li>
-<li>최근 연구는 LLM을 환경과 상호작용하는 에이전트로 활용하지만, 고수준의 목표에 대한 추상적 추론이 부족함</li>
-</ul>
-</li>
-<li><strong>Gap</strong>:
-<ul>
-<li>기존 방식들은 추론과 행동을 독립적으로 연구했으며, 두 능력이 상호 보강될 수 있다는 가정이 검증되지 않음</li>
-<li>CoT는 사실 확인이 불가능하고 오류 전파에 취약함</li>
-<li>행동만으로는 복잡한 논리적 계획을 수립하기 어려움</li>
-</ul>
-</li>
-<li><strong>Why</strong>:
-<ul>
-<li>인간 지능은 추론과 행동을 긴밀히 통합하여(요리 예시) 자기조절, 전략 수립, 작업기억 관리를 수행함</li>
-<li>이러한 통합이 불확실성 하에서 견고한 의사결정을 가능케 함</li>
-</ul>
-</li>
-<li><strong>Approach</strong>:
-<ul>
-<li>에이전트의 행동 공간을 Â = A ∪ L로 확장 (L은 언어 공간)</li>
-<li>사고(언어 행동)는 환경 피드백을 생성하지 않으면서도 문맥을 업데이트하여 향후 추론/행동을 지원</li>
-<li>고정된 PaLM-540B를 몇-샷(few-shot) 프롬프팅으로 사용하여 도메인 특화 행동과 자유형식 사고 동시 생성</li>
-</ul>
+<li><strong>Known</strong>: Chain-of-thought prompting은 LLM의 추론 능력을 향상시키지만 외부 정보와 단절되어 hallucination과 error propagation 문제를 야기한다. Action generation 기반 접근법은 상호작용 환경에서 효과적이나 high-level 추론 능력이 부족하다.</li>
+<li><strong>Gap</strong>: 기존 연구들은 reasoning과 acting을 분리하여 연구했으며, 두 능력을 synergistic하게 결합하여 일반적인 태스크 해결에 활용하는 방법이 부재했다.</li>
+<li><strong>Why</strong>: 인간의 인지는 verbal reasoning과 task-oriented action을 긴밀히 결합하여 self-regulation, strategy 수립, working memory 유지를 가능하게 하므로, 이를 LLM에 적용하면 해석 가능성, 신뢰성, 강건성이 향상될 수 있다.</li>
+<li><strong>Approach</strong>: ReAct 프레임워크는 LLM에 대하여 Thought(내부 추론), Action(외부 행동), Observation(환경 반응)을 순환적으로 생성하도록 프롬프트하여, 추론이 행동 계획을 유도·추적·갱신하고 행동이 외부 지식베이스나 환경과 상호작용하게 한다.</li>
 </ul></div>
 <div class="section-box"><h2>Achievement</h2>
-<ol>
-<li><strong>질의응답(QA) 및 사실검증 작업에서 우수한 성능</strong>:
 <ul>
-<li>HotpotQA: ReAct가 Wikipedia API 접근 권한 하에서 행동만 수행하는 기준선을 능가하고, CoT와 경쟁력 있는 성능 달성</li>
-<li>Fever: 사실검증 정확도에서 뚜렷한 개선으로 환각 문제 완화 실증</li>
-<li>ReAct + CoT 결합 방식이 최고 성능 달성 (내부 지식과 외부 정보 활용)</li>
-</ul>
-</li>
-<li><strong>대화형 의사결정 작업에서 기존 학습 방식 압도</strong>:
-<ul>
-<li>ALFWorld: 1-2샷 프롬프팅으로 103~105개 샘플로 학습한 모방학습(imitation learning)과 강화학습(RL) 방법을 34% 절대 성공률로 능가</li>
-<li>WebShop: 10% 절대 성공률 개선으로 RL 기반선 방법들을 초과 성능</li>
-</ul>
-</li>
-<li><strong>해석가능성과 신뢰성 향상</strong>:
-<ul>
-<li>모델의 내부 지식 vs. 외부 환경 정보 구분 명확</li>
-<li>추론 궤적(reasoning trace)을 통한 의사결정 근거 검사 가능</li>
-<li>진단 가능성(diagnosability) 증대로 신뢰성 강화</li>
-</ul>
-</ol></div>
+<li><strong>HotpotQA에서의 성능 향상</strong>: Wikipedia API와의 상호작용을 통해 hallucination과 error propagation을 극복하고 해석 가능한 task-solving trajectory 생성</li>
+<li><strong>Fever 사실 검증에서의 우수성</strong>: 외부 정보 접근을 통한 정확한 사실 검증 성능 달성</li>
+<li><strong>ALFWorld 벤치마크</strong>: 모방학습 및 강화학습 기반 방법 대비 34% 절대 성공률 향상 (1-2 shot prompting만으로)</li>
+<li><strong>WebShop 벤치마크</strong>: 웹 내비게이션 태스크에서 10% 절대 성공률 향상</li>
+<li><strong>해석 가능성 및 신뢰성 개선</strong>: 내부 추론과 외부 정보의 구분이 명확하여 모델의 의사결정 근거 추적 가능</li>
+</ul></div>
 <div class="section-box"><h2>How</h2>
-<p><strong>ReAct 프레임워크의 핵심 구성 요소</strong>:</p>
 <ul>
-<li><strong>확장된 행동 공간</strong>: 기존 도메인 행동(A)에 언어 기반 사고(L) 추가로 정책 π(âₜ|cₜ)의 암묵적 매핑 문제 완화</li>
-<li><strong>문맥 업데이트 메커니즘</strong>:
-<ul>
-<li>각 시간 단계 t에서 관찰 oₜ과 행동 aₜ으로 구성된 문맥 cₜ = (o₁, a₁, ..., oₜ)를 유지</li>
-<li>사고 âₜ ∈ L 생성으로 cₜ₊₁ = (cₜ, âₜ) 업데이트하되 환경 피드백 없음</li>
-</ul>
-</li>
-<li><strong>추론-행동 교대 생성</strong>:
-<ul>
-<li>추론 중심 작업(HotpotQA, Fever): 사고-행동-관찰(Thought-Action-Observation) 순환</li>
-<li>의사결정 중심 작업(ALFWorld, WebShop): 사고가 필요한 지점에 비동기적으로 삽입</li>
-</ul>
-</li>
-<li><strong>프롬프팅 전략</strong>:
-<ul>
-<li>각 문맥 내 예시(in-context example)는 인간 해결 궤적(action, thought, observation)으로 구성</li>
-<li>최소 샘플(1-2샷)로 목표 작업 해결 방향 제시</li>
-</ul>
-</li>
-<li><strong>환경 상호작용</strong>:
-<ul>
-<li>Wikipedia API 연동으로 외부 지식 검색 가능 (QA/사실검증)</li>
-<li>텍스트 기반 환경(시뮬레이터) 상호작용으로 행동 피드백 수집</li>
-</ul>
+<li>LLM에 in-context examples를 포함한 프롬프트로 Thought, Action, Observation의 반복적 생성 유도</li>
+<li>외부 인터페이스(Wikipedia API, 텍스트 환경 등)와의 상호작용을 통해 실시간 정보 수집</li>
+<li>Thought를 통해 현재 상태 추적, 예외 처리, 계획 갱신을 수행하는 동안 Action으로 외부 환경 쿼리</li>
+<li>Observation에 기반한 adaptive reasoning으로 초기 계획 수정 및 재평가</li>
+<li>CoT와 ReAct의 결합으로 내부 지식과 외부 정보의 균형적 활용</li>
 </ul></div>
 <div class="section-box"><h2>Originality</h2>
 <ul>
-<li><strong>새로운 프롬프팅 패러다임</strong>: 추론과 행동의 상호작용적 통합이라는 개념적 혁신으로, 기존의 분리된 접근(CoT vs. 행동 생성)을 통합</li>
-<li><strong>인간 인지에서 영감</strong>: Vygotsky의 내적 언어(inner speech) 이론과 작업기억(working memory) 개념을 LLM 에이전트에 구현</li>
-<li><strong>광범위한 작업 범위의 일관성</strong>: 언어 추론(HotpotQA, Fever)과 대화형 의사결정(ALFWorld, WebShop) 모두에 동일 패러다임 적용으로 범용성 입증</li>
-<li><strong>확장 가능한 설계</strong>: 특정 도메인에 맞춰 사고의 빈도와 유형을 조정 가능한 유연한 구조</li>
-<li><strong>해석가능성 기여</strong>: 기존 블랙박스형 LLM 추론에 명시적 추론 궤적을 추가하여 투명성 향상</li>
+<li>Reasoning과 acting을 prompt-based paradigm으로 처음 체계적으로 통합한 접근</li>
+<li>Interleaved manner의 Thought-Action-Observation 루프 구조로 동적 계획 및 적응적 추론 실현</li>
+<li>Chain-of-thought의 hallucination 문제를 external grounding으로 해결하는 혁신적 방식</li>
+<li>Few-shot prompting만으로 대규모 학습 기반 방법을 초과하는 성능 달성의 실증</li>
 </ul></div>
 <div class="section-box"><h2>Limitation &amp; Further Study</h2>
 <ul>
-<li><strong>프롬프팅 설정의 한계</strong>:
-<ul>
-<li>동결된(frozen) 모델에만 의존하여 도메인 특화 행동과 사고 능력의 향상에 한계</li>
-<li>문맥 길이 제약으로 장시간 작업에서 성능 저하 가능성</li>
-<li>프롬프트 설계에 따른 성능 민감도 미분석</li>
-</ul>
-</li>
-<li><strong>정량화되지 않은 사고의 질</strong>:
-<ul>
-<li>어떤 유형의 사고가 가장 효과적인지에 대한 체계적 분석 부족</li>
-<li>비합리적이거나 모순된 추론이 도입될 수 있는 위험성</li>
-</ul>
-</li>
-<li><strong>외부 도구 의존성</strong>:
-<ul>
-<li>Wikipedia API와 같은 고품질 외부 자원 접근 필요</li>
-<li>도메인별로 적절한 환경 인터페이스 구축 비용</li>
-</ul>
-</li>
-<li><strong>후속 연구 방향</strong>:
-<ul>
-<li>파인튜닝을 통한 ReAct 성능 극대화 (초기 실험에서 가능성 시현)</li>
-<li>강화학습과의 결합으로 정책 최적화</li>
-<li>더 많은 작업과 도메인에 대한 스케일링</li>
-<li>사고 생성의 동적 제어 메커니즘 개발</li>
-<li>오류 있는 외부 정보 처리 방안 연구</li>
-</ul>
+<li><strong>프롬프팅 기반 한계</strong>: 제한된 context window와 prompt 설계의 의존성으로 복잡한 추론과 행동 지원 제약</li>
+<li><strong>환경 인터페이스 의존성</strong>: Wikipedia API 같은 특정 외부 소스에 대한 높은 의존도</li>
+<li><strong>확장성 문제</strong>: 더 복잡한 멀티-스텝 태스크나 제약 조건이 많은 환경에서의 성능 미검증</li>
+<li><strong>오류 누적</strong>: Action 오류가 이후 추론에 영향을 주는 error propagation 여전히 존재 가능</li>
+<li><strong>후속 연구</strong>: Fine-tuning을 통한 성능 향상 가능성 제시 (초기 실험만 수행), RL과의 결합, 더 많은 태스크에 대한 확장 필요</li>
 </ul></div>
 <div class="section-box"><h2>Evaluation</h2>
-
-<p><strong>총평</strong>: ReAct는 대규모 언어 모델의 추론과 행동을 상호작용적으로 통합하여 복잡한 작업 해결 능력을 획기적으로 향상시킨 매우 영향력 있는 연구이다. 광범위한 벤치마크(HotpotQA, Fever, ALFWorld, WebShop)에서 기존 방식을 압도하는 성능을 보였으며, 특히 해석가능성과 신뢰성의 동시 개선이라는 부가 이점을 제공한다. 다만 동결된 모델에 대한 프롬프팅 의존, 외부 자원 필요성, 사고의 질적 분석 부족 등이 한계로 남으나, 파인튜닝 실험을 통해 개선 가능성을 시사하고 있다. LLM 기반 에이전트 개발의 실질적 표준이 될 수 있는 중요한 기여라고 평가된다.</p></div>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: ReAct는 LLM의 추론과 행동을 획기적으로 결합하여 hallucination을 줄이고 해석 가능성을 높이는 중요한 프레임워크이다. Few-shot prompting만으로 대규모 학습 기반 방법을 뛰어넘는 성능을 보여주며, 광범위한 벤치마크에서의 검증과 명확한 제시로 높은 영향력을 가질 것으로 예상된다.</p></div>
 <div class="connections-box"><h2>같이 보면 좋은 논문</h2><div class="conn-item foundation"><div class="conn-type">기반 연구</div><div class="conn-title"><a href="../655_ReAct_Synergizing_Reasoning_and_Acting_in_Language_Models/index.html">ReAct: Synergizing Reasoning and Acting in Language Models</a></div><div class="conn-reason">OpenHands가 채택한 핵심 아키텍처인 추론과 행동의 상호작용적 결합의 이론적 기반을 제공한다.</div></div>
 <div class="conn-item foundation"><div class="conn-type">기반 연구</div><div class="conn-title"><a href="../120_AutoGen_Enabling_Next-Gen_LLM_Applications_via_Multi-Agent_C/index.html">AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation</a></div><div class="conn-reason">ReAct의 추론-행동 결합 패러다임이 AutoGen의 에이전트 간 대화형 문제 해결 메커니즘의 기본적인 설계 원리를 제공한다.</div></div>
 <div class="conn-item foundation"><div class="conn-type">기반 연구</div><div class="conn-title"><a href="../310_Embodied_Science_Closing_the_Discovery_Loop_with_Agentic_Emb/index.html">Embodied Science: Closing the Discovery Loop with Agentic Embodied AI</a></div><div class="conn-reason">ReAct의 추론과 행동 통합 패러다임은 Embodied Science의 PLAD 프레임워크에서 언어-행동 통합의 기초가 된다.</div></div>

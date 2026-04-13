@@ -633,20 +633,7 @@ img.lazy.loaded {{ opacity: 1; }}
 .deep-fig-item {{ background: #fafafa; border: 1px solid #eee; border-radius: 6px; overflow: hidden; }}
 .deep-fig-item a {{ text-decoration: none; color: inherit; display: block; }}
 .deep-fig-item img {{ width: 100%; height: 115px; object-fit: cover; cursor: zoom-in; display: block; }}
-.deep-fig-item .fig-cap {{ padding: 0.35rem 0.6rem; font-size: 0.7rem; color: #666; line-height: 1.35; }}
-.modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 9999; align-items: center; justify-content: center; padding: 1rem; }}
-.modal.active {{ display: flex; }}
-.modal-content {{ background: white; border-radius: 12px; padding: 1.8rem 2rem; max-width: 520px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }}
-.modal-content h3 {{ font-size: 1.1rem; color: {accent_dark}; margin-bottom: 0.5rem; }}
-.modal-content p {{ font-size: 0.87rem; color: #555; line-height: 1.6; margin-bottom: 0.4rem; }}
-.modal-content .warn {{ font-size: 0.76rem; color: #a82727; padding: 0.55rem 0.75rem; background: #fef3f2; border-left: 3px solid #e74c3c; border-radius: 4px; margin: 0.8rem 0; line-height: 1.5; }}
-.modal-content label {{ display: block; font-size: 0.8rem; font-weight: 600; color: #333; margin: 0.75rem 0 0.3rem; }}
-.modal-content input {{ width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; font-family: ui-monospace, monospace; color: #222; }}
-.modal-content input:focus {{ border-color: {accent}; outline: none; }}
-.modal-actions {{ display: flex; gap: 0.55rem; justify-content: flex-end; margin-top: 1.2rem; }}
-.modal-actions button {{ padding: 0.5rem 1.1rem; border-radius: 6px; font-size: 0.85rem; cursor: pointer; border: 1px solid #ddd; background: white; color: #555; font-family: inherit; }}
-.modal-actions button.primary {{ background: {accent}; color: white; border-color: {accent}; }}
-.modal-actions button:hover {{ opacity: 0.88; }}"""
+.deep-fig-item .fig-cap {{ padding: 0.35rem 0.6rem; font-size: 0.7rem; color: #666; line-height: 1.35; }}"""
 
 JS = """function toggleTopic(id) {
   const body = document.getElementById(id);
@@ -880,8 +867,8 @@ function cosineSim(a, b) {
 }
 
 async function embedQuery(text) {
-  const key = localStorage.getItem('openai_key');
-  if (!key) throw new Error('OpenAI API key missing');
+  const key = _OPENAI_KEY;
+  if (!key) throw new Error('OpenAI API key missing — set OPENAI_API_KEY env var and rebuild');
   const resp = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + key },
@@ -1018,8 +1005,8 @@ const LENGTH_SPEC = {
 };
 
 async function callClaude(query, selected, lang, model, length, fullTexts) {
-  const apiKey = localStorage.getItem('anthropic_key');
-  if (!apiKey) throw new Error('Anthropic API key missing');
+  const apiKey = _ANTHROPIC_KEY;
+  if (!apiKey) throw new Error('Anthropic API key missing — set ANTHROPIC_API_KEY env var and rebuild');
   const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
   // Haiku 4.5 caps output at ~8192 tokens; Sonnet can go higher.
   let maxTokens = spec.max_tokens;
@@ -1172,11 +1159,11 @@ function finalizeDeepAnswer() {
 async function runDeepResearch(query) {
   query = (query || '').trim();
   if (!query) return;
-  if (!localStorage.getItem('anthropic_key') || !localStorage.getItem('openai_key')) {
-    openApiKeyModal();
+  deepShowPanel();
+  if (!_ANTHROPIC_KEY || !_OPENAI_KEY) {
+    deepSetStatus('API key missing — set ANTHROPIC_API_KEY & OPENAI_API_KEY env vars and rebuild.', true);
     return;
   }
-  deepShowPanel();
   clearEl(document.getElementById('deep-answer'));
   document.getElementById('deep-refs').style.display = 'none';
   document.getElementById('deep-figures').style.display = 'none';
@@ -1258,7 +1245,7 @@ function setSearchMode(mode) {
   if (db) db.classList.toggle('active', mode === 'deep');
   if (mode === 'deep') {
     if (input) input.placeholder = 'Deep Research: 자유롭게 질의하세요 (예: 2023년 이후 LLM agent 동향)';
-    if (hint) hint.textContent = 'Press Enter to run Deep Research. Uses your Anthropic + OpenAI keys (stored in localStorage, never sent to this site).';
+    if (hint) hint.textContent = 'Press Enter to run Deep Research (API keys built into this page at build time).';
   } else {
     if (input) input.placeholder = 'Search papers by title, DOI, keyword...';
     if (hint) hint.textContent = 'Enter title, DOI, author name, or keyword to filter';
@@ -1266,15 +1253,6 @@ function setSearchMode(mode) {
   }
 }
 
-function openApiKeyModal() {
-  const modal = document.getElementById('api-key-modal');
-  document.getElementById('anthropic-key').value = localStorage.getItem('anthropic_key') || '';
-  document.getElementById('openai-key').value = localStorage.getItem('openai_key') || '';
-  modal.classList.add('active');
-}
-function closeApiKeyModal() {
-  document.getElementById('api-key-modal').classList.remove('active');
-}
 
 function buildFullMarkdown() {
   const q = document.getElementById('search-input').value;
@@ -1404,21 +1382,6 @@ function openAnswerInNewTab() {
 document.addEventListener('DOMContentLoaded', function() {
   window._searchMode = 'classic';
 
-  // Localhost dev convenience: auto-inject API keys from _local_keys.json
-  // (git-ignored, only present in local builds). On Cloudflare the file
-  // does not exist, so fetch() fails silently and visitors see the normal
-  // BYO-key modal. Keys go directly into localStorage and never overwrite
-  // an existing localStorage value (so manual entry still wins).
-  fetch('../_local_keys.json').then(function(r) {
-    return r.ok ? r.json() : null;
-  }).then(function(keys) {
-    if (!keys) return;
-    if (keys.anthropic_key && !localStorage.getItem('anthropic_key'))
-      localStorage.setItem('anthropic_key', keys.anthropic_key);
-    if (keys.openai_key && !localStorage.getItem('openai_key'))
-      localStorage.setItem('openai_key', keys.openai_key);
-  }).catch(function() { /* no local keys; fine */ });
-
   // Same pattern for Zotero itemKey lookup. When present (local dev),
   // the Deep Research References list adds a one-click 'Open PDF'
   // button next to each citation. Git-ignored, so Cloudflare visitors
@@ -1457,20 +1420,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const q = document.getElementById('search-input').value;
     if (q && q.trim()) runDeepResearch(q);
   });
-  const save = document.getElementById('api-key-save');
-  if (save) save.addEventListener('click', function() {
-    const a = document.getElementById('anthropic-key').value.trim();
-    const o = document.getElementById('openai-key').value.trim();
-    if (a) localStorage.setItem('anthropic_key', a);
-    if (o) localStorage.setItem('openai_key', o);
-    closeApiKeyModal();
-    if (a && o && window._searchMode === 'deep') {
-      runDeepResearch(document.getElementById('search-input').value);
-    }
-  });
-  const cancel = document.getElementById('api-key-cancel');
-  if (cancel) cancel.addEventListener('click', closeApiKeyModal);
 });"""
+
+# --- Build-time: inject API keys from env vars into JS ---
+_cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+_cfg_keys = {}
+if _cfg_path.exists():
+    with open(_cfg_path, "r", encoding="utf-8") as _f:
+        _cfg_keys = json.load(_f)
+_ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or _cfg_keys.get("anthropic_api_key", "")
+_OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or _cfg_keys.get("openai_api_key", "")
+JS = ("const _ANTHROPIC_KEY = " + json.dumps(_ANTHROPIC_KEY) + ";\n"
+      "const _OPENAI_KEY = " + json.dumps(_OPENAI_KEY) + ";\n" + JS)
 
 
 def render_insights_section():
@@ -1755,21 +1716,6 @@ HTML = (
     '  </div>\n\n'
     '</div>\n\n'
     '<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>\n\n'
-    '<div id="api-key-modal" class="modal">\n'
-    '  <div class="modal-content">\n'
-    '    <h3>&#x1F511; API Keys Required</h3>\n'
-    '    <p>Deep Research uses your own Anthropic and OpenAI API keys. Keys are stored in your browser only (localStorage) and are never sent to this site\'s server.</p>\n'
-    '    <div class="warn">&#x26A0; Your keys are exposed to this page\'s JavaScript. Use a rate-limited key if possible.</div>\n'
-    '    <label for="anthropic-key">Anthropic API Key (sk-ant-...)</label>\n'
-    '    <input type="password" id="anthropic-key" placeholder="sk-ant-...">\n'
-    '    <label for="openai-key">OpenAI API Key (sk-...)</label>\n'
-    '    <input type="password" id="openai-key" placeholder="sk-...">\n'
-    '    <div class="modal-actions">\n'
-    '      <button id="api-key-cancel">Cancel</button>\n'
-    '      <button id="api-key-save" class="primary">Save &amp; continue</button>\n'
-    '    </div>\n'
-    '  </div>\n'
-    '</div>\n\n'
     f'<script>\n{JS}\n</script>\n\n'
     '<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">'
     'Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com'
@@ -1782,30 +1728,6 @@ with open(out_path, "w", encoding="utf-8") as f:
     f.write(HTML)
 print(f"Written: {out_path} ({len(HTML):,} chars)")
 
-# Operator convenience: write docs/_local_keys.json so localhost dev
-# automatically pre-fills Anthropic + OpenAI keys into localStorage
-# and skips the Deep Research modal. This file is git-ignored and
-# is never deployed, so visitors on Cloudflare still go through the
-# normal BYO-key flow.
-try:
-    _local_cfg_path = Path(__file__).resolve().parent.parent / "config.json"
-    _local_cfg = {}
-    if _local_cfg_path.exists():
-        with open(_local_cfg_path, "r", encoding="utf-8") as _lcf:
-            _local_cfg = json.load(_lcf)
-    _lk = {}
-    _anthropic = os.environ.get("ANTHROPIC_API_KEY") or _local_cfg.get("anthropic_api_key")
-    _openai = os.environ.get("OPENAI_API_KEY") or _local_cfg.get("openai_api_key")
-    if _anthropic:
-        _lk["anthropic_key"] = _anthropic
-    if _openai:
-        _lk["openai_key"] = _openai
-    if _lk:
-        _lk_path = Path(DOCS_DIR) / "_local_keys.json"
-        _lk_path.write_text(json.dumps(_lk), encoding="utf-8")
-        print(f"Local keys: {_lk_path} ({len(_lk)} keys, for localhost dev, git-ignored)")
-except Exception as _e:
-    print(f"Local keys skipped: {_e}")
 
 # Operator convenience: write docs/_zotero_keys.json (slug -> Zotero
 # itemKey). The Deep Research References list checks this on page load

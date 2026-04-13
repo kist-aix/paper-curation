@@ -32,7 +32,6 @@
 !docs/papers/*/figures/*.webp
 
 !docs/*/
-!docs/*/index.html
 !docs/*/network.html
 !docs/*/*.png
 !docs/*/*.webp

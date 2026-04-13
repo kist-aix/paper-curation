@@ -35,6 +35,11 @@ from config_loader import (
     get_topic_dir,
 )
 PAPERS_DIR = str(_PAPERS_DIR)
+PROJECT_ROOT = PIPELINE_DIR.parent
+
+# topic_modeling.py는 UMAP/sentence-transformers 의존 → .venv312 필요
+_VENV312_PYTHON = PROJECT_ROOT / ".venv312" / "Scripts" / "python.exe"
+TOPIC_MODELING_PYTHON = str(_VENV312_PYTHON) if _VENV312_PYTHON.exists() else "python"
 
 ZOTERO_DIR = get_zotero_dir()
 
@@ -982,13 +987,13 @@ def main():
             except Exception:
                 pass
             run_step("topic_modeling",
-                     ["python", "pipeline/topic_modeling.py", "--topic", topic], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 1200)
         elif is_update:
             run_step("topic_modeling (coords+connections)",
-                     ["python", "pipeline/topic_modeling.py", "--topic", topic, "--skip-classification"], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-classification"], 1200)
         else:
             run_step("topic_modeling",
-                     ["python", "pipeline/topic_modeling.py", "--topic", topic], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 1200)
 
         # Step 3: classify (always — new papers only in update mode without --category)
         run_step("classify_papers",
@@ -1119,7 +1124,7 @@ def main():
             if missing:
                 log(f"\n  [verify_umap] {len(missing)} papers missing UMAP coordinates — re-running topic_modeling...")
                 run_step("topic_modeling (umap fix)",
-                         ["python", "pipeline/topic_modeling.py", "--topic", topic, "--skip-connections"], 1200)
+                         [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-connections"], 1200)
                 run_step("generate_network (rebuild)",
                          ["python", "pipeline/generate_network.py", "--topic", topic], 600)
             else:

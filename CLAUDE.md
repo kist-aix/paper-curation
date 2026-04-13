@@ -206,7 +206,7 @@ PYTHONUTF8=1 python pipeline/cleanup.py --execute
 ## External Dependencies
 
 - **Zotero Web API**: Collection names and API key are configured in `config.json`
-- **Anthropic API**: Claude Haiku/Sonnet for classification, reviews, summaries, and insights (`ANTHROPIC_API_KEY` env var). Also consumed at runtime by the Deep Research UI — each visitor supplies their own key via the browser modal (`dangerouslyAllowBrowser`).
+- **Anthropic API**: Claude Haiku/Sonnet for classification, reviews, summaries, and insights (`ANTHROPIC_API_KEY` env var). Deep Research UI도 같은 키를 사용 — 빌드 시 환경변수에서 읽어 HTML에 주입.
 - **Google Gemini API**: Figure validation in `pipeline/run_update_force.py`
 - **OpenAI API**: `text-embedding-3-small` for the Deep Research search index (`pipeline/build_search_index.py`). Key is read from `OPENAI_API_KEY` env var or the `openai_api_key` field in `config.json` (written by `setup.py`).
 - **PyMuPDF (fitz)**: PDF text extraction and figure rendering
