@@ -1,3 +1,22 @@
+---
+title: "1613_PhysHSI_Towards_a_Real-World_Generalizable_and_Natural_Human"
+authors:
+  - "Huayi Wang"
+  - "Wentao Zhang"
+  - "Runyi Yu"
+  - "Tao Huang"
+  - "Junli Ren"
+date: "2025.10"
+doi: "10.48550/arXiv.2510.11072"
+arxiv: ""
+score: 4.0
+essence: "PhysHSI는 humanoid 로봇이 실제 환경에서 물체 운반, 앉기, 누우기 등 다양한 상호작용을 자연스럽고 일반화 가능하게 수행할 수 있도록 하는 통합 시스템으로, simulation 기반 AMP 정책 학습과 실시간 LiDAR-camera 기반 객체 인식 모듈을 결합한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wang et al._2025_PhysHSI Towards a Real-World Generalizable and Natural Humanoid-Scene Interaction System.pdf"
+---
+
 # PhysHSI: Towards a Real-World Generalizable and Natural Humanoid-Scene Interaction System
 
 > **저자**: Huayi Wang, Wentao Zhang, Runyi Yu, Tao Huang, Junli Ren, Feiyu Jia, Zirui Wang, Xiaojie Niu, Xiao Chen, Jiahe Chen, Qifeng Chen, Jingbo Wang, Jiangmiao Pang | **날짜**: 2025-10-13 | **DOI**: [10.48550/arXiv.2510.11072](https://doi.org/10.48550/arXiv.2510.11072)

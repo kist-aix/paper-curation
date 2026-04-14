@@ -1,3 +1,22 @@
+---
+title: "1692_StageACT_Stage-Conditioned_Imitation_for_Robust_Humanoid_Doo"
+authors:
+  - "Moonyoung Lee"
+  - "Dong Ki Kim"
+  - "Jai Krishna Bandi"
+  - "Max Smith"
+  - "Aileen Liao"
+date: "2025.09"
+doi: "10.48550/arXiv.2509.13200"
+arxiv: ""
+score: 4.0
+essence: "StageACT는 휴머노이드 로봇의 도어 오픈 작업을 위해 저수준 정책에 작업 단계(task stage) 정보를 조건으로 추가한 단계-조건부 모방 학습 프레임워크를 제안하며, 부분 관찰성 환경에서 강건성을 크게 향상시킨다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Lee et al._2025_StageACT Stage-Conditioned Imitation for Robust Humanoid Door Opening.pdf"
+---
+
 # StageACT: Stage-Conditioned Imitation for Robust Humanoid Door Opening
 
 > **저자**: Moonyoung Lee, Dong Ki Kim, Jai Krishna Bandi, Max Smith, Aileen Liao, Ali-akbar Agha-mohammadi, Shayegan Omidshafiei | **날짜**: 2025-09-18 | **DOI**: [10.48550/arXiv.2509.13200](https://doi.org/10.48550/arXiv.2509.13200)

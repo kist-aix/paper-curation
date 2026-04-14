@@ -1,3 +1,18 @@
+---
+title: "1634_Realistic_Lip_Motion_Generation_Based_on_3D_Dynamic_Viseme_a"
+authors:
+  - "| **날짜**: 2026-03-29"
+date: "2026.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간-로봇 상호작용을 위해 3D 동적 비셈(viseme)과 공명음현상(coarticulation) 모델링 기반의 입술 운동 생성 프레임워크를 제안하며, 고차원 공간 입술 운동을 14-DOF 로봇 입술 구동 시스템으로 변환한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2604.01756.pdf"
+---
+
 # Realistic Lip Motion Generation Based on 3D Dynamic Viseme and Coarticulation Modeling for Human-Robot Interaction
 
 > **저자**:  | **날짜**: 2026-03-29 | **URL**: [https://arxiv.org/abs/2604.01756](https://arxiv.org/abs/2604.01756)

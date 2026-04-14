@@ -1,3 +1,18 @@
+---
+title: "1718_Sumo_동적이고_일반화_가능한_전신_이동-조작_제어"
+authors:
+  - "| **날짜**: 2026-04-09"
+date: "2026.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "사전 학습된 전신 제어 정책과 테스트 시점 샘플 기반 MPC를 계층적으로 결합하여 로봇이 동적으로 대형 중량 물체를 조작할 수 있도록 하는 방법을 제안한다. 재학습 없이 다양한 물체와 작업에 일반화 가능하다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2604.08508.pdf"
+---
+
 # Sumo: 동적이고 일반화 가능한 전신 이동-조작 제어
 
 > **저자**:  | **날짜**: 2026-04-09 | **URL**: [https://arxiv.org/abs/2604.08508](https://arxiv.org/abs/2604.08508)

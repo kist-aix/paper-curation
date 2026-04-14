@@ -1,3 +1,21 @@
+---
+title: "1633_Real-Time_Polygonal_Semantic_Mapping_for_Humanoid_Robot_Stai"
+authors:
+  - "Teng Bin"
+  - "Jianming Yao"
+  - "Tin Lun Lam"
+  - "Tianwei Zhang"
+date: "2024.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인형로봇의 계단 등반을 위해 GPU 가속 anisotropic diffusion 필터링과 RANSAC 기반 평면 추출을 활용한 실시간 다각형 의미 맵핑 알고리즘을 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Bin et al._2024_Real-Time Polygonal Semantic Mapping for Humanoid Robot Stair Climbing.pdf"
+---
+
 # Real-Time Polygonal Semantic Mapping for Humanoid Robot Stair Climbing
 
 > **저자**: Teng Bin, Jianming Yao, Tin Lun Lam, Tianwei Zhang | **날짜**: 2024-11-04 | **URL**: [https://arxiv.org/abs/2411.01919](https://arxiv.org/abs/2411.01919)

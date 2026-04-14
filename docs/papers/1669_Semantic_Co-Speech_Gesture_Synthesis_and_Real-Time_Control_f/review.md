@@ -1,3 +1,18 @@
+---
+title: "1669_Semantic_Co-Speech_Gesture_Synthesis_and_Real-Time_Control_f"
+authors:
+  - "Gang Zhang"
+date: "2025.12"
+doi: "10.48550/arXiv.2512.17183"
+arxiv: ""
+score: 4.0
+essence: "이 연구는 음성 입력으로부터 의미론적으로 적절한 제스처를 생성하고 실시간으로 휴머노이드 로봇에 배포하는 end-to-end 프레임워크를 제시한다. LLM과 Motion-GPT를 활용한 제스처 생성과 imitation learning 기반의 MotionTracker 제어 정책을 통합하여 의미 있는 비언어적 소통을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang_2025_Semantic Co-Speech Gesture Synthesis and Real-Time Control for Humanoid Robots.pdf"
+---
+
 # Semantic Co-Speech Gesture Synthesis and Real-Time Control for Humanoid Robots
 
 > **저자**: Gang Zhang | **날짜**: 2025-12-19 | **DOI**: [10.48550/arXiv.2512.17183](https://doi.org/10.48550/arXiv.2512.17183)

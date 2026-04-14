@@ -1,3 +1,22 @@
+---
+title: "1757_Whole-Body_Dynamic_Throwing_with_Legged_Manipulators"
+authors:
+  - "Humphrey Munn"
+  - "Brendan Tidd"
+  - "Peter Böhm"
+  - "Marcus Gallagher"
+  - "David Howard"
+date: "2024.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "다리가 있는 로봇의 전신 동역학을 활용하여 강화학습 기반의 3D 목표지점으로의 정확한 투척을 학습하는 방법을 제시하고, 시뮬레이션에서 학습한 정책을 실제 휴머노이드 로봇으로 전이시켰다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Munn et al._2024_Whole-Body Dynamic Throwing with Legged Manipulators.pdf"
+---
+
 # Whole-Body Dynamic Throwing with Legged Manipulators
 
 > **저자**: Humphrey Munn, Brendan Tidd, Peter Böhm, Marcus Gallagher, David Howard | **날짜**: 2024-10-08 | **URL**: [https://arxiv.org/abs/2410.05681](https://arxiv.org/abs/2410.05681)

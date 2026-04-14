@@ -1,3 +1,22 @@
+---
+title: "1760_Whole-body_Multi-contact_Motion_Control_for_Humanoid_Robots"
+authors:
+  - "Masaki Murooka"
+  - "Kensuke Fukumitsu"
+  - "Marwan Hamze"
+  - "Mitsuharu Morisawa"
+  - "Hiroshi Kaminaga"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "분산 촉각 센서를 장착한 휴머노이드 로봇이 팔꿈치, 무릎 등 중간 부위에서도 접촉하는 전신 다중 접촉 운동을 실현하는 제어 방법을 개발했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Murooka et al._2025_Whole-body Multi-contact Motion Control for Humanoid Robots Based on Distributed Tactile Sensors.pdf"
+---
+
 # Whole-body Multi-contact Motion Control for Humanoid Robots Based on Distributed Tactile Sensors
 
 > **저자**: Masaki Murooka, Kensuke Fukumitsu, Marwan Hamze, Mitsuharu Morisawa, Hiroshi Kaminaga, Fumio Kanehiro, Eiichi Yoshida | **날짜**: 2025-05-26 | **URL**: [https://arxiv.org/abs/2505.19580](https://arxiv.org/abs/2505.19580)

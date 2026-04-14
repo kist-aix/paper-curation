@@ -1,3 +1,22 @@
+---
+title: "1615_Physics-Based_Motion_Imitation_with_Adversarial_Differential"
+authors:
+  - "Ziyu Zhang"
+  - "Sergey Bashkirov"
+  - "Dun Yang"
+  - "Yi Shi"
+  - "Michael Taylor"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Physics-based 캐릭터 애니메이션을 위해 Adversarial Differential Discriminator (ADD)를 통해 수동 보상 함수 설계 없이 다중 목표 최적화를 자동으로 수행하는 방법을 제시한다. 단일 positive sample(영점 벡터)만으로도 효과적으로 여러 목표를 동적으로 균형잡아 고난도 동작을 모방할 수 있다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2025_Physics-Based Motion Imitation with Adversarial Differential Discriminators.pdf"
+---
+
 # Physics-Based Motion Imitation with Adversarial Differential Discriminators
 
 > **저자**: Ziyu Zhang, Sergey Bashkirov, Dun Yang, Yi Shi, Michael Taylor, Xue Bin Peng | **날짜**: 2025-05-08 | **URL**: [https://arxiv.org/abs/2505.04961](https://arxiv.org/abs/2505.04961)

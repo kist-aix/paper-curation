@@ -1,3 +1,22 @@
+---
+title: "1661_SafeFall_Learning_Protective_Control_for_Humanoid_Robots"
+authors:
+  - "Ziyu Meng"
+  - "Tengyu Liu"
+  - "Le Ma"
+  - "Yingying Wu"
+  - "Ran Song"
+date: "2025.11"
+doi: "10.48550/arXiv.2511.18509"
+arxiv: ""
+score: 4.0
+essence: "SafeFall은 휴머노이드 로봇의 낙상을 예측하고 손상 최소화 제어를 학습하는 프레임워크로, GRU 기반 낙상 예측기와 강화학습 정책을 결합하여 로봇의 구조적 취약성을 고려한 보호 행동을 실행한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Meng et al._2025_SafeFall Learning Protective Control for Humanoid Robots.pdf"
+---
+
 # SafeFall: Learning Protective Control for Humanoid Robots
 
 > **저자**: Ziyu Meng, Tengyu Liu, Le Ma, Yingying Wu, Ran Song, Wei Zhang, Siyuan Huang | **날짜**: 2025-11-23 | **DOI**: [10.48550/arXiv.2511.18509](https://doi.org/10.48550/arXiv.2511.18509)

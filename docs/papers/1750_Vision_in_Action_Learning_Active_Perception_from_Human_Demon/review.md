@@ -1,3 +1,22 @@
+---
+title: "1750_Vision_in_Action_Learning_Active_Perception_from_Human_Demon"
+authors:
+  - "Haoyu Xiong"
+  - "Xiaomeng Xu"
+  - "Jimmy Wu"
+  - "Yifan Hou"
+  - "Jeannette Bohg"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "ViA는 6-DoF 로봇 넥과 VR 텔레오퍼레이션 인터페이스를 통해 인간의 능동적 지각 전략을 직접 학습하여 이중팔 조작 로봇의 성능을 향상시키는 시스템이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Xiong et al._2025_Vision in Action Learning Active Perception from Human Demonstrations.pdf"
+---
+
 # Vision in Action: Learning Active Perception from Human Demonstrations
 
 > **저자**: Haoyu Xiong, Xiaomeng Xu, Jimmy Wu, Yifan Hou, Jeannette Bohg, Shuran Song | **날짜**: 2025-06-18 | **URL**: [https://arxiv.org/abs/2506.15666](https://arxiv.org/abs/2506.15666)

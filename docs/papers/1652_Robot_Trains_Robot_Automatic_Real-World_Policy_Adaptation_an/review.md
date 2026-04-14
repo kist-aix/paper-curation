@@ -1,3 +1,22 @@
+---
+title: "1652_Robot_Trains_Robot_Automatic_Real-World_Policy_Adaptation_an"
+authors:
+  - "Kaizhe Hu"
+  - "Haochen Shi"
+  - "Yao He"
+  - "Weizhuo Wang"
+  - "C. Karen Liu"
+date: "2025.08"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "로봇 팔(teacher)이 휴머노이드 로봇(student)을 지원하고 가이드하는 Robot-Trains-Robot(RTR) 프레임워크를 제안하여, 안전하고 효율적인 실제 환경에서의 휴머노이드 학습을 가능하게 한다. Dynamics-encoded latent variable 최적화를 통한 sim-to-real 전이 방법을 함께 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Hu et al._2025_Robot Trains Robot Automatic Real-World Policy Adaptation and Learning for Humanoids.pdf"
+---
+
 # Robot Trains Robot: Automatic Real-World Policy Adaptation and Learning for Humanoids
 
 > **저자**: Kaizhe Hu, Haochen Shi, Yao He, Weizhuo Wang, C. Karen Liu, Shuran Song | **날짜**: 2025-08-17 | **URL**: [https://arxiv.org/abs/2508.12252](https://arxiv.org/abs/2508.12252)

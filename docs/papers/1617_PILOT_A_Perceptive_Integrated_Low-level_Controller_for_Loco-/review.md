@@ -1,3 +1,22 @@
+---
+title: "1617_PILOT_A_Perceptive_Integrated_Low-level_Controller_for_Loco-"
+authors:
+  - "Xinru Cui"
+  - "Linxi Feng"
+  - "Yixuan Zhou"
+  - "Haoqi Han"
+  - "Zhe Liu"
+date: "2026.01"
+doi: "10.48550/arXiv.2601.17440"
+arxiv: ""
+score: 4.0
+essence: "PILOT는 humanoid robot의 loco-manipulation을 위한 통합 단계 RL 프레임워크로, 지각 기반 locomotion과 전신 제어를 단일 policy로 통합하여 비정형 지형에서 안정적인 작업 실행을 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Cui et al._2026_PILOT A Perceptive Integrated Low-level Controller for Loco-manipulation over Unstructured Scenes.pdf"
+---
+
 # PILOT: A Perceptive Integrated Low-level Controller for Loco-manipulation over Unstructured Scenes
 
 > **저자**: Xinru Cui, Linxi Feng, Yixuan Zhou, Haoqi Han, Zhe Liu, Hesheng Wang | **날짜**: 2026-01-24 | **DOI**: [10.48550/arXiv.2601.17440](https://doi.org/10.48550/arXiv.2601.17440)

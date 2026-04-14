@@ -1,3 +1,22 @@
+---
+title: "1653_RobotDancing_Residual-Action_Reinforcement_Learning_Enables"
+authors:
+  - "Zhenguo Sun"
+  - "Yibo Peng"
+  - "Yuan Meng"
+  - "Xukun Li"
+  - "Bo-Sheng Huang"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RobotDancing은 잔차 동작(residual action) 강화학습을 통해 인간형 로봇이 장기간 고역동 춤 동작을 추적할 수 있도록 하는 프레임워크로, 모델-실제 간의 동역학 불일치를 명시적으로 보정한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Sun et al._2025_RobotDancing Residual-Action Reinforcement Learning Enables Robust Long-Horizon Humanoid Motion Tra.pdf"
+---
+
 # RobotDancing: Residual-Action Reinforcement Learning Enables Robust Long-Horizon Humanoid Motion Tracking
 
 > **저자**: Zhenguo Sun, Yibo Peng, Yuan Meng, Xukun Li, Bo-Sheng Huang, Zhenshan Bing, Xinlong Wang, Alois Knoll | **날짜**: 2025-09-25 | **URL**: [https://arxiv.org/abs/2509.20717](https://arxiv.org/abs/2509.20717)

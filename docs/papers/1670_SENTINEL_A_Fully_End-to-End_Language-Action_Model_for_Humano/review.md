@@ -1,3 +1,22 @@
+---
+title: "1670_SENTINEL_A_Fully_End-to-End_Language-Action_Model_for_Humano"
+authors:
+  - "Yuxuan Wang"
+  - "Haobin Jiang"
+  - "Shiqing Yao"
+  - "Ziluo Ding"
+  - "Zongqing Lu"
+date: "2025.11"
+doi: "10.48550/arXiv.2511.19236"
+arxiv: ""
+score: 4.0
+essence: "SENTINEL은 언어 명령을 휴머노이드 로봇의 저수준 제어 신호로 직접 변환하는 완전 end-to-end 언어-행동 모델로, flow matching을 통해 행동 청크를 생성하고 실제 배포를 위해 잔여 강화학습으로 정제한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wang et al._2025_SENTINEL A Fully End-to-End Language-Action Model for Humanoid Whole Body Control.pdf"
+---
+
 # SENTINEL: A Fully End-to-End Language-Action Model for Humanoid Whole Body Control
 
 > **저자**: Yuxuan Wang, Haobin Jiang, Shiqing Yao, Ziluo Ding, Zongqing Lu | **날짜**: 2025-11-24 | **DOI**: [10.48550/arXiv.2511.19236](https://doi.org/10.48550/arXiv.2511.19236)

@@ -1,3 +1,19 @@
+---
+title: "1710_The_invariant_extended_Kalman_filter_as_a_stable_observer"
+authors:
+  - "Axel Barrau"
+  - "Silvère Bonnabel"
+date: "2014.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Invariant Extended Kalman Filter (IEKF)를 Lie group 위의 결정론적 비선형 관찰자로 분석하여, 표준 선형 조건 하에서 임의의 궤적 주변에서의 국소 안정성을 증명한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Barrau and Bonnabel_2014_The invariant extended Kalman filter as a stable observer.pdf"
+---
+
 # The invariant extended Kalman filter as a stable observer
 
 > **저자**: Axel Barrau, Silvère Bonnabel | **날짜**: 2014-10-06 | **URL**: [https://arxiv.org/abs/1410.1465](https://arxiv.org/abs/1410.1465)

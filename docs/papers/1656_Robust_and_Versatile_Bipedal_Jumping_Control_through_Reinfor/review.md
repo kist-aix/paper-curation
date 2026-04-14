@@ -1,3 +1,22 @@
+---
+title: "1656_Robust_and_Versatile_Bipedal_Jumping_Control_through_Reinfor"
+authors:
+  - "Zhongyu Li"
+  - "Xue Bin Peng"
+  - "Pieter Abbeel"
+  - "Sergey Levine"
+  - "Glen Berseth"
+date: "2023.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Reinforcement learning과 새로운 정책 구조를 활용하여 이족 로봇 Cassie가 다양한 착지 위치와 방향으로 점프하는 강건하고 다목적인 동적 점프 제어를 실현했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2023_Robust and Versatile Bipedal Jumping Control through Reinforcement Learning.pdf"
+---
+
 # Robust and Versatile Bipedal Jumping Control through Reinforcement Learning
 
 > **저자**: Zhongyu Li, Xue Bin Peng, Pieter Abbeel, Sergey Levine, Glen Berseth, Koushil Sreenath | **날짜**: 2023-02-19 | **URL**: [https://arxiv.org/abs/2302.09450](https://arxiv.org/abs/2302.09450)

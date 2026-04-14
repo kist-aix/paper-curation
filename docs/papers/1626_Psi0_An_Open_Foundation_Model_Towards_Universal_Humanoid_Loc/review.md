@@ -1,3 +1,22 @@
+---
+title: "1626_Psi0_An_Open_Foundation_Model_Towards_Universal_Humanoid_Loc"
+authors:
+  - "Songlin Wei"
+  - "Hongyi Jing"
+  - "Boqian Li"
+  - "Zhenyu Zhao"
+  - "Jiageng Mao"
+date: "2026.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Ψ0는 인간 자기중심 비디오로 VLM을 사전학습한 후 실제 휴머노이드 데이터로 flow 기반 액션 전문가를 후학습하는 2단계 학습 패러다임을 통해 휴머노이드 전신 로코-조작 작업을 수행하는 오픈 파운데이션 모델이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wei et al._2026_Psi0 An Open Foundation Model Towards Universal Humanoid Loco-Manipulation.pdf"
+---
+
 # Psi0: An Open Foundation Model Towards Universal Humanoid Loco-Manipulation
 
 > **저자**: Songlin Wei, Hongyi Jing, Boqian Li, Zhenyu Zhao, Jiageng Mao, Zhenhao Ni, Sicheng He, Jie Liu, Xiawei Liu, Kaidi Kang, Sheng Zang, Weiduo Yuan, Marco Pavone, Di Huang, Yue Wang | **날짜**: 2026-03-12 | **URL**: [https://arxiv.org/abs/2603.12263](https://arxiv.org/abs/2603.12263)

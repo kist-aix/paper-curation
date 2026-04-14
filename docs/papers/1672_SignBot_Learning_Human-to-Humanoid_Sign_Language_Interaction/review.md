@@ -1,3 +1,22 @@
+---
+title: "1672_SignBot_Learning_Human-to-Humanoid_Sign_Language_Interaction"
+authors:
+  - "Guanren Qiao"
+  - "Sixu Lin"
+  - "Ronglai Zuo"
+  - "Zhizheng Wu"
+  - "Kui Jia"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SignBot은 수화 언어를 인식하고 생성할 수 있는 인간형 로봇을 위한 프레임워크로, motion retargeting, policy training, 그리고 generative interaction을 통합하여 청각장애인과의 자연스러운 상호작용을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Qiao et al._2025_SignBot Learning Human-to-Humanoid Sign Language Interaction.pdf"
+---
+
 # SignBot: Learning Human-to-Humanoid Sign Language Interaction
 
 > **저자**: Guanren Qiao, Sixu Lin, Ronglai Zuo, Zhizheng Wu, Kui Jia, Guiliang Liu | **날짜**: 2025-05-30 | **URL**: [https://arxiv.org/abs/2505.24266](https://arxiv.org/abs/2505.24266)

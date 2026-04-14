@@ -1,3 +1,22 @@
+---
+title: "1694_SteadyTray_Learning_Object_Balancing_Tasks_in_Humanoid_Tray"
+authors:
+  - "Anlun Huang"
+  - "Zhenyu Wu"
+  - "Soofiyan Atar"
+  - "Yuheng Zhi"
+  - "Michael Yip"
+date: "2026.03"
+doi: "10.48550/arXiv.2603.10306"
+arxiv: ""
+score: 4.0
+essence: "ReST-RL은 사전학습된 이족 보행 정책에 잔차 모듈을 추가하여 휴머노이드 로봇이 동적 보행 중 트레이 위의 불안정한 물체를 안정적으로 운반할 수 있도록 하는 계층적 강화학습 아키텍처이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Huang et al._2026_SteadyTray Learning Object Balancing Tasks in Humanoid Tray Transport via Residual Reinforcement Le.pdf"
+---
+
 # SteadyTray: Learning Object Balancing Tasks in Humanoid Tray Transport via Residual Reinforcement Learning
 
 > **저자**: Anlun Huang, Zhenyu Wu, Soofiyan Atar, Yuheng Zhi, Michael Yip | **날짜**: 2026-03-11 | **DOI**: [10.48550/arXiv.2603.10306](https://doi.org/10.48550/arXiv.2603.10306)

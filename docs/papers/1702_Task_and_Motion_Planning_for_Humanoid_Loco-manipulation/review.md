@@ -1,3 +1,20 @@
+---
+title: "1702_Task_and_Motion_Planning_for_Humanoid_Loco-manipulation"
+authors:
+  - "Michal Ciebielski"
+  - "Victor Dhédin"
+  - "Majid Khadiv"
+date: "2025.08"
+doi: "10.48550/arXiv.2508.14099"
+arxiv: ""
+score: 4.0
+essence: "본 논문은 접촉 모드의 통일된 표현을 통해 로봇 이동과 조작을 함께 계획하는 최적화 기반 TAMP 프레임워크를 제시하며, 인형로봇의 장시간 복잡한 로코-조작 행동 생성을 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ciebielski et al._2025_Task and Motion Planning for Humanoid Loco-manipulation.pdf"
+---
+
 # Task and Motion Planning for Humanoid Loco-manipulation
 
 > **저자**: Michal Ciebielski, Victor Dhédin, Majid Khadiv | **날짜**: 2025-08-16 | **DOI**: [10.48550/arXiv.2508.14099](https://doi.org/10.48550/arXiv.2508.14099)

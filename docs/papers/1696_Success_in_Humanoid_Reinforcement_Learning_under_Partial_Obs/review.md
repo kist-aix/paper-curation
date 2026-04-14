@@ -1,3 +1,19 @@
+---
+title: "1696_Success_in_Humanoid_Reinforcement_Learning_under_Partial_Obs"
+authors:
+  - "Wuhao Wang"
+  - "Zhiyong Chen"
+date: "2025.07"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "부분 관찰 환경에서 고정 길이 과거 관찰 시퀀스를 병렬로 처리하는 novel history encoder를 제안하여, Gymnasium Humanoid-v4 환경에서 부분 관찰 하에서의 안정적인 humanoid 정책 학습을 처음으로 성공시켰다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wang and Chen_2025_Success in Humanoid Reinforcement Learning under Partial Observation.pdf"
+---
+
 # Success in Humanoid Reinforcement Learning under Partial Observation
 
 > **저자**: Wuhao Wang, Zhiyong Chen | **날짜**: 2025-07-25 | **URL**: [https://arxiv.org/abs/2507.18883](https://arxiv.org/abs/2507.18883)

@@ -1,3 +1,22 @@
+---
+title: "1686_SPARK_Safe_Protective_and_Assistive_Robot_Kit"
+authors:
+  - "Yifan Sun"
+  - "Rui Chen"
+  - "Kai S. Yun"
+  - "Yikuan Fang"
+  - "Sebin Jung"
+date: "2025.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SPARK는 휴머노이드 로봇의 안전한 자율 제어와 원격 조종을 위한 포괄적인 벤치마크 프레임워크로, 모듈식 안전 제어 알고리즘과 시뮬레이션 환경을 제공하여 비전문가도 안전 컨트롤러를 효율적으로 설계하고 배포할 수 있도록 지원한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Sun et al._2025_SPARK Safe Protective and Assistive Robot Kit.pdf"
+---
+
 # SPARK: Safe Protective and Assistive Robot Kit
 
 > **저자**: Yifan Sun, Rui Chen, Kai S. Yun, Yikuan Fang, Sebin Jung, Feihan Li, Bowei Li, Weiye Zhao, Changliu Liu | **날짜**: 2025-02-05 | **URL**: [https://arxiv.org/abs/2502.03132](https://arxiv.org/abs/2502.03132)

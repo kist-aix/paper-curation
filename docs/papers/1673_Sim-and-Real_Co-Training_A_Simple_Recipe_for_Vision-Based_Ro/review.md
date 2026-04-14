@@ -1,3 +1,22 @@
+---
+title: "1673_Sim-and-Real_Co-Training_A_Simple_Recipe_for_Vision-Based_Ro"
+authors:
+  - "Abhiram Maddukuri"
+  - "Zhenyu Jiang"
+  - "Lawrence Yunliang Chen"
+  - "Soroush Nasiriany"
+  - "Yuqi Xie"
+date: "2025.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "시뮬레이션 데이터와 실제 로봇 데이터를 혼합하여 학습하는 sim-and-real co-training 전략을 체계적으로 연구하고, 비전 기반 로봇 조작 작업에서 실제 데이터만 사용하는 것 대비 평균 38% 성능 향상을 달성했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Maddukuri et al._2025_Sim-and-Real Co-Training A Simple Recipe for Vision-Based Robotic Manipulation.pdf"
+---
+
 # Sim-and-Real Co-Training: A Simple Recipe for Vision-Based Robotic Manipulation
 
 > **저자**: Abhiram Maddukuri, Zhenyu Jiang, Lawrence Yunliang Chen, Soroush Nasiriany, Yuqi Xie, Yu Fang, Wenqi Huang, Zu Wang, Zhenjia Xu, Nikita Chernyadev, Scott Reed, Ken Goldberg, Ajay Mandlekar, Linxi Fan, Yuke Zhu | **날짜**: 2025-03-31 | **URL**: [https://arxiv.org/abs/2503.24361](https://arxiv.org/abs/2503.24361)

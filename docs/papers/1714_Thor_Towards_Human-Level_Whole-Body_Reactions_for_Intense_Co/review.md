@@ -1,3 +1,22 @@
+---
+title: "1714_Thor_Towards_Human-Level_Whole-Body_Reactions_for_Intense_Co"
+authors:
+  - "Gangyang Li"
+  - "Qing Shi"
+  - "Youhao Hu"
+  - "Jincheng Hu"
+  - "Zhongyuan Wang"
+date: "2025.11"
+doi: "10.48550/arXiv.2510.26280"
+arxiv: ""
+score: 4.0
+essence: "Thor는 humanoid 로봇이 강한 접촉 상호작용 환경에서 인간 수준의 전신 반응을 생성하도록 하는 프레임워크로, force-adaptive torso-tilt (FAT2) 보상 함수와 decoupled reinforcement learning 아키텍처를 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_Thor Towards Human-Level Whole-Body Reactions for Intense Contact-Rich Environments.pdf"
+---
+
 # Thor: Towards Human-Level Whole-Body Reactions for Intense Contact-Rich Environments
 
 > **저자**: Gangyang Li, Qing Shi, Youhao Hu, Jincheng Hu, Zhongyuan Wang, Xinlong Wang, Shaqi Luo | **날짜**: 2025-11-05 | **DOI**: [10.48550/arXiv.2510.26280](https://doi.org/10.48550/arXiv.2510.26280)

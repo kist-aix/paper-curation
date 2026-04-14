@@ -1,3 +1,22 @@
+---
+title: "1644_RoboCasa_Large-Scale_Simulation_of_Everyday_Tasks_for_Genera"
+authors:
+  - "Soroush Nasiriany"
+  - "Abhiram Maddukuri"
+  - "Lance Zhang"
+  - "Adeet Parikh"
+  - "Aaron Lo"
+date: "2024.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RoboCasa는 kitchen 환경에 중점을 둔 대규모 로봇 시뮬레이션 프레임워크로, 생성형 AI를 활용하여 다양한 3D 자산과 task를 확보하고 100K 이상의 synthetic trajectory로 generalist robot 학습을 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Nasiriany et al._2024_RoboCasa Large-Scale Simulation of Everyday Tasks for Generalist Robots.pdf"
+---
+
 # RoboCasa: Large-Scale Simulation of Everyday Tasks for Generalist Robots
 
 > **저자**: Soroush Nasiriany, Abhiram Maddukuri, Lance Zhang, Adeet Parikh, Aaron Lo, Abhishek Joshi, Ajay Mandlekar, Yuke Zhu | **날짜**: 2024-06-04 | **URL**: [https://arxiv.org/abs/2406.02523](https://arxiv.org/abs/2406.02523)

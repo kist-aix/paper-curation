@@ -1,3 +1,22 @@
+---
+title: "1707_Teleoperation_of_Humanoid_Robots_A_Survey"
+authors:
+  - "Kourosh Darvish"
+  - "Luigi Penco"
+  - "Joao Ramos"
+  - "Rafael Cisneros"
+  - "Jerry Pratt"
+date: "2023.01"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "이 논문은 인간형 로봇의 원격 조종(teleoperation) 분야에 대한 포괄적인 서베이로, 시스템 아키텍처, 기술 및 방법론적 진전, 실제 응용 분야를 종합적으로 분석한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Darvish et al._2023_Teleoperation of Humanoid Robots A Survey.pdf"
+---
+
 # Teleoperation of Humanoid Robots: A Survey
 
 > **저자**: Kourosh Darvish, Luigi Penco, Joao Ramos, Rafael Cisneros, Jerry Pratt, Eiichi Yoshida, Serena Ivaldi, Daniele Pucci | **날짜**: 2023-01-11 | **URL**: [https://arxiv.org/abs/2301.04317](https://arxiv.org/abs/2301.04317)

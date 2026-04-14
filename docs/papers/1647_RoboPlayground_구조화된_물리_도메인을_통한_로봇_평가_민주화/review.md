@@ -1,3 +1,18 @@
+---
+title: "1647_RoboPlayground_구조화된_물리_도메인을_통한_로봇_평가_민주화"
+authors:
+  - "| **날짜**: 2026-04-06"
+date: "2026.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "자연어로 로봇 조작 작업을 정의하고 재현 가능한 작업 명세로 컴파일하는 RoboPlayground 프레임워크를 제안하며, 고정 벤치마크에서 드러나지 않는 일반화 실패를 언어 기반 작업 변형을 통해 발견한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2604.05226.pdf"
+---
+
 # RoboPlayground: 구조화된 물리 도메인을 통한 로봇 평가 민주화
 
 > **저자**:  | **날짜**: 2026-04-06 | **URL**: [https://arxiv.org/abs/2604.05226](https://arxiv.org/abs/2604.05226)

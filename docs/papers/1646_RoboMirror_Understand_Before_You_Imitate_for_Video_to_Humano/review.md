@@ -1,3 +1,22 @@
+---
+title: "1646_RoboMirror_Understand_Before_You_Imitate_for_Video_to_Humano"
+authors:
+  - "Zhe Li"
+  - "Cheng Chi"
+  - "Boan Zhu"
+  - "Yangyang Wei"
+  - "Shuanghao Bai"
+date: "2025.12"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RoboMirror는 VLM을 활용하여 비디오에서 visual motion intent를 추출하고 diffusion-based policy로 직접 인간형 로봇의 보행을 제어하는 retargeting-free 프레임워크이다. 기존의 pose estimation-retargeting 파이프라인을 우회하고 egocentric/third-person 비디오로부터 시맨틱하게 정렬된 보행을 생성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_RoboMirror Understand Before You Imitate for Video to Humanoid Locomotion.pdf"
+---
+
 # RoboMirror: Understand Before You Imitate for Video to Humanoid Locomotion
 
 > **저자**: Zhe Li, Cheng Chi, Boan Zhu, Yangyang Wei, Shuanghao Bai, Yuheng Ji, Yibo Peng, Tao Huang, Pengwei Wang, Zhongyuan Wang, S. -H. Gary Chan, Chang Xu, Shanghang Zhang | **날짜**: 2025-12-29 | **URL**: [https://arxiv.org/abs/2512.23649](https://arxiv.org/abs/2512.23649)

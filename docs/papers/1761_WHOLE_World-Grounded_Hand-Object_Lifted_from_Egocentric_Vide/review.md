@@ -1,3 +1,21 @@
+---
+title: "1761_WHOLE_World-Grounded_Hand-Object_Lifted_from_Egocentric_Vide"
+authors:
+  - "Yufei Ye"
+  - "Jiaman Li"
+  - "Ryan Rong"
+  - "C. Karen Liu"
+date: "2026.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 egocentric 비디오에서 손과 객체의 상호작용을 jointly하게 재구성하기 위해 diffusion-based generative motion prior를 학습하고, 테스트 시점에 visual observations와 VLM-기반 contact cues로 이를 guided generation하는 WHOLE 방법을 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ye et al._2026_WHOLE World-Grounded Hand-Object Lifted from Egocentric Videos.pdf"
+---
+
 # WHOLE: World-Grounded Hand-Object Lifted from Egocentric Videos
 
 > **저자**: Yufei Ye, Jiaman Li, Ryan Rong, C. Karen Liu | **날짜**: 2026-02-25 | **URL**: [https://arxiv.org/abs/2602.22209](https://arxiv.org/abs/2602.22209)

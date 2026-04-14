@@ -1,3 +1,22 @@
+---
+title: "1616_PICO_Reconstructing_3D_People_In_Contact_with_Objects"
+authors:
+  - "Alpár Cseke"
+  - "Shashank Tripathi"
+  - "Sai Kumar Dwivedi"
+  - "Arjun Lakshmipathy"
+  - "Agniv Chatterjee"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "단일 이미지에서 신체-물체 접촉 정보를 활용하여 3D 인간-물체 상호작용을 복원하는 PICO 프레임워크를 제시하며, 이를 위해 신체와 물체 모두에 밀집된 3D 접촉 주석이 있는 PICO-db 데이터셋을 수집했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Cseke et al._2025_PICO Reconstructing 3D People In Contact with Objects.pdf"
+---
+
 # PICO: Reconstructing 3D People In Contact with Objects
 
 > **저자**: Alpár Cseke, Shashank Tripathi, Sai Kumar Dwivedi, Arjun Lakshmipathy, Agniv Chatterjee, Michael J. Black, Dimitrios Tzionas | **날짜**: 2025-04-24 | **URL**: [https://arxiv.org/abs/2504.17695](https://arxiv.org/abs/2504.17695)

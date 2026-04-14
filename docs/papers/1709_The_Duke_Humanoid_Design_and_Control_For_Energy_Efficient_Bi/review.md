@@ -1,3 +1,22 @@
+---
+title: "1709_The_Duke_Humanoid_Design_and_Control_For_Energy_Efficient_Bi"
+authors:
+  - "Boxi Xia"
+  - "Bokuan Li"
+  - "Jacob Lee"
+  - "Michael Scutari"
+  - "Boyuan Chen"
+date: "2024.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Duke Humanoid은 동적 보행이 가능한 오픈소스 10-DoF 인형로봇으로, 패시브 다이내믹스를 활용하는 reinforcement learning 정책을 통해 에너지 효율적인 이족 보행을 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Xia et al._2024_The Duke Humanoid Design and Control For Energy Efficient Bipedal Locomotion Using Passive Dynamics.pdf"
+---
+
 # The Duke Humanoid: Design and Control For Energy Efficient Bipedal Locomotion Using Passive Dynamics
 
 > **저자**: Boxi Xia, Bokuan Li, Jacob Lee, Michael Scutari, Boyuan Chen | **날짜**: 2024-09-29 | **URL**: [https://arxiv.org/abs/2409.19795](https://arxiv.org/abs/2409.19795)

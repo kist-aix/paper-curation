@@ -1,3 +1,22 @@
+---
+title: "1664_Sampling-Based_System_Identification_with_Active_Exploration"
+authors:
+  - "Nikhil Sobanbabu"
+  - "Guanqi He"
+  - "Tairan He"
+  - "Yuxiang Yang"
+  - "Guanya Shi"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SPI-Active는 legged robot의 물리 파라미터를 샘플링 기반으로 식별하고 Fisher Information 최대화를 통한 active exploration으로 sim-to-real 갭을 최소화하는 two-stage 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Sobanbabu et al._2025_Sampling-Based System Identification with Active Exploration for Legged Robot Sim2Real Learning.pdf"
+---
+
 # Sampling-Based System Identification with Active Exploration for Legged Robot Sim2Real Learning
 
 > **저자**: Nikhil Sobanbabu, Guanqi He, Tairan He, Yuxiang Yang, Guanya Shi | **날짜**: 2025-05-20 | **URL**: [https://arxiv.org/abs/2505.14266](https://arxiv.org/abs/2505.14266)

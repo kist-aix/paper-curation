@@ -1,3 +1,22 @@
+---
+title: "1665_Scalable_and_General_Whole-Body_Control_for_Cross-Humanoid_L"
+authors:
+  - "Yufei Xue"
+  - "YunFeng Lin"
+  - "Wentao Dong"
+  - "Yang Tang"
+  - "Jingbo Wang"
+date: "2026.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "XHugWBC는 물리적으로 일관성 있는 형태학적 랜덤화, 의미론적으로 정렬된 관찰-행동 공간, 그래프 기반 정책 아키텍처를 통해 단일 정책으로 다양한 인간형 로봇에 대한 제로샷 제너럴화를 실현하는 교차-신체 전신 제어 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Xue et al._2026_Scalable and General Whole-Body Control for Cross-Humanoid Locomotion.pdf"
+---
+
 # Scalable and General Whole-Body Control for Cross-Humanoid Locomotion
 
 > **저자**: Yufei Xue, YunFeng Lin, Wentao Dong, Yang Tang, Jingbo Wang, Jiangmiao Pang, Ming Zhou, Minghuan Liu, Weinan Zhang | **날짜**: 2026-02-05 | **URL**: [https://arxiv.org/abs/2602.05791](https://arxiv.org/abs/2602.05791)

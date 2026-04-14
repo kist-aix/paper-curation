@@ -1,3 +1,22 @@
+---
+title: "1688_Spectral_Normalization_for_Lipschitz-Constrained_Policies_on"
+authors:
+  - "Jaeyong Shin"
+  - "Woohyun Cha"
+  - "Donghyeon Kim"
+  - "Junhyeok Cha"
+  - "Jaeheung Park"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 인간형 로봇의 보행 학습에서 Spectral Normalization (SN)을 사용하여 Lipschitz 연속성을 효율적으로 강제하고, 기존의 gradient penalty 기반 방법보다 GPU 메모리 오버헤드를 줄이면서도 유사한 성능을 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Shin et al._2025_Spectral Normalization for Lipschitz-Constrained Policies on Learning Humanoid Locomotion.pdf"
+---
+
 # Spectral Normalization for Lipschitz-Constrained Policies on Learning Humanoid Locomotion
 
 > **저자**: Jaeyong Shin, Woohyun Cha, Donghyeon Kim, Junhyeok Cha, Jaeheung Park | **날짜**: 2025-04-11 | **URL**: [https://arxiv.org/abs/2504.08246](https://arxiv.org/abs/2504.08246)

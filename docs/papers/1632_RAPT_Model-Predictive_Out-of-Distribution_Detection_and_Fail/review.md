@@ -1,3 +1,22 @@
+---
+title: "1632_RAPT_Model-Predictive_Out-of-Distribution_Detection_and_Fail"
+authors:
+  - "Humphrey Munn"
+  - "Brendan Tidd"
+  - "Peter Bohm"
+  - "Marcus Gallagher"
+  - "David Howard"
+date: "2026.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RAPT는 시뮬레이션 환경에서 학습한 인간형 로봇 제어 정책의 현실 배포 시 out-of-distribution(OOD) 상태를 감지하고 실패 원인을 진단하는 경량의 자기감독 모니터링 시스템이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Munn et al._2026_RAPT Model-Predictive Out-of-Distribution Detection and Failure Diagnosis for Sim-to-Real Humanoid.pdf"
+---
+
 # RAPT: Model-Predictive Out-of-Distribution Detection and Failure Diagnosis for Sim-to-Real Humanoid Robots
 
 > **저자**: Humphrey Munn, Brendan Tidd, Peter Bohm, Marcus Gallagher, David Howard | **날짜**: 2026-02-02 | **URL**: [https://arxiv.org/abs/2602.01515](https://arxiv.org/abs/2602.01515)

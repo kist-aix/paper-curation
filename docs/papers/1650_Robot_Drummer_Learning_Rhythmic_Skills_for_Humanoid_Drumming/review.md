@@ -1,3 +1,20 @@
+---
+title: "1650_Robot_Drummer_Learning_Rhythmic_Skills_for_Humanoid_Drumming"
+authors:
+  - "Asad Ali Shahid"
+  - "Francesco Braghin"
+  - "Loris Roveda"
+date: "2025.07"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 인문형 로봇이 MIDI 악보를 기반으로 드럼을 연주하는 기술을 제시하며, Rhythmic Contact Chain 표현과 temporal decomposition을 활용한 reinforcement learning 프레임워크를 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Shahid et al._2025_Robot Drummer Learning Rhythmic Skills for Humanoid Drumming.pdf"
+---
+
 # Robot Drummer: Learning Rhythmic Skills for Humanoid Drumming
 
 > **저자**: Asad Ali Shahid, Francesco Braghin, Loris Roveda | **날짜**: 2025-07-15 | **URL**: [https://arxiv.org/abs/2507.11498](https://arxiv.org/abs/2507.11498)

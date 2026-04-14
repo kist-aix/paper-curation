@@ -1,3 +1,21 @@
+---
+title: "1618_PIMBS_Efficient_Body_Schema_Learning_for_Musculoskeletal_Hum"
+authors:
+  - "Kento Kawaharazuka"
+  - "Takahiro Hattori"
+  - "Keita Yoneda"
+  - "Kei Okada"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Physics-Informed Neural Networks (PINNs) 개념을 적용하여 근골격 휴머노이드 로봇의 신체 스키마를 적은 데이터로 효율적으로 학습하는 PIMBS 방법을 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Kawaharazuka et al._2025_PIMBS Efficient Body Schema Learning for Musculoskeletal Humanoids with Physics-Informed Neural Net.pdf"
+---
+
 # PIMBS: Efficient Body Schema Learning for Musculoskeletal Humanoids with Physics-Informed Neural Networks
 
 > **저자**: Kento Kawaharazuka, Takahiro Hattori, Keita Yoneda, Kei Okada | **날짜**: 2025-06-25 | **URL**: [https://arxiv.org/abs/2506.20343](https://arxiv.org/abs/2506.20343)

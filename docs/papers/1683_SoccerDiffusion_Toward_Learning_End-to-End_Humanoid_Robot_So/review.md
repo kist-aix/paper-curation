@@ -1,3 +1,22 @@
+---
+title: "1683_SoccerDiffusion_Toward_Learning_End-to-End_Humanoid_Robot_So"
+authors:
+  - "Florian Vahl"
+  - "Jörn Griepenburg"
+  - "Jan Gutsche"
+  - "Jasper Güldenstein"
+  - "Jianwei Zhang"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SoccerDiffusion은 transformer 기반 diffusion model을 활용하여 RoboCup 경기 녹화 데이터로부터 휴머노이드 로봇 축구의 end-to-end 제어 정책을 학습하고, distillation 기법으로 실시간 추론을 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Vahl et al._2025_SoccerDiffusion Toward Learning End-to-End Humanoid Robot Soccer from Gameplay Recordings.pdf"
+---
+
 # SoccerDiffusion: Toward Learning End-to-End Humanoid Robot Soccer from Gameplay Recordings
 
 > **저자**: Florian Vahl, Jörn Griepenburg, Jan Gutsche, Jasper Güldenstein, Jianwei Zhang | **날짜**: 2025-04-29 | **URL**: [https://arxiv.org/abs/2504.20808](https://arxiv.org/abs/2504.20808)

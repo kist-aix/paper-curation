@@ -1,3 +1,22 @@
+---
+title: "1659_RUKA_Rethinking_the_Design_of_Humanoid_Hands_with_Learning"
+authors:
+  - "Anya Zorin"
+  - "Irmak Guzey"
+  - "Billy Yan"
+  - "Aadhithya Iyer"
+  - "Lisa Kondrich"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RUKA는 3D 프린팅과 저가 부품으로 제작한 tendon-driven humanoid hand로, learning-based control을 통해 정밀성, 컴팩트성, 강도, 저비용을 동시에 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zorin et al._2025_RUKA Rethinking the Design of Humanoid Hands with Learning.pdf"
+---
+
 # RUKA: Rethinking the Design of Humanoid Hands with Learning
 
 > **저자**: Anya Zorin, Irmak Guzey, Billy Yan, Aadhithya Iyer, Lisa Kondrich, Nikhil X. Bhattasali, Lerrel Pinto | **날짜**: 2025-04-17 | **URL**: [https://arxiv.org/abs/2504.13165](https://arxiv.org/abs/2504.13165)

@@ -1,3 +1,17 @@
+---
+title: "1252_ActiveUMI_Robotic_Manipulation_with_Active_Perception_from_R"
+authors:
+  - "| **날짜**:"
+date: ""
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 LLM의 affordance 추론 능력과 VLM의 시각적 접지 능력을 결합하여 3D value map을 구성하고, 이를 model-based planning에 활용해 자연언어 지시로부터 로봇 조작 궤적을 zero-shot으로 생성하는 VoxPoser를 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+---
+
 # ActiveUMI: Robotic Manipulation with Active Perception from Robot‑Free Human Demonstrations
 
 > **저자**:  | **날짜**:  | **URL**: [https://activeumi.github.io/](https://activeumi.github.io/)

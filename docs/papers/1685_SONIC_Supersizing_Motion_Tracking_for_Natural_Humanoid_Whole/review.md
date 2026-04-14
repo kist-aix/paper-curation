@@ -1,3 +1,22 @@
+---
+title: "1685_SONIC_Supersizing_Motion_Tracking_for_Natural_Humanoid_Whole"
+authors:
+  - "Zhengyi Luo"
+  - "Ye Yuan"
+  - "Tingwu Wang"
+  - "Chenran Li"
+  - "Sirui Chen"
+date: "2025.12"
+doi: "10.48550/arXiv.2511.07820"
+arxiv: ""
+score: 4.0
+essence: "인간의 모션 캡처 데이터를 활용한 motion tracking을 기반 작업으로 삼아 42M 파라미터의 대규모 humanoid controller를 학습하고, kinematic planner와 unified token space를 통해 다양한 제어 인터페이스를 지원하는 자연스러운 전신 움직임 제어 시스템을 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Luo et al._2025_SONIC Supersizing Motion Tracking for Natural Humanoid Whole-Body Control.pdf"
+---
+
 # SONIC: Supersizing Motion Tracking for Natural Humanoid Whole-Body Control
 
 > **저자**: Zhengyi Luo, Ye Yuan, Tingwu Wang, Chenran Li, Sirui Chen, Fernando Castañeda, Zi-Ang Cao, Jiefeng Li, David Minor, Qingwei Ben, Xingye Da, Runyu Ding, Cyrus Hogg, Lina Song, Edy Lim, Eugene Jeong, Tairan He, Haoru Xue, Wenli Xiao, Zi Wang, Simon Yuen, Jan Kautz, Yan Chang, Umar Iqbal, Linxi "Jim" Fan, Yuke Zhu | **날짜**: 2025-12-04 | **DOI**: [10.48550/arXiv.2511.07820](https://doi.org/10.48550/arXiv.2511.07820)

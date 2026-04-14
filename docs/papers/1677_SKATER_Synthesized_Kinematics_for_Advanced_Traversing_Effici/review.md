@@ -1,3 +1,22 @@
+---
+title: "1677_SKATER_Synthesized_Kinematics_for_Advanced_Traversing_Effici"
+authors:
+  - "Junchi Gu"
+  - "Feiyang Yuan"
+  - "Weize Shi"
+  - "Tianchen Huang"
+  - "Haopeng Zhang"
+date: "2026.01"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "휴머노이드 로봇의 발에 4개의 수동 바퀴를 장착하고 Deep Reinforcement Learning을 통해 롤러스케이팅 스위즐 보행을 학습시켜 전통적인 보행 대비 충격력 75.86%, 에너지 소비 63.34% 감소를 달성했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Gu et al._2026_SKATER Synthesized Kinematics for Advanced Traversing Efficiency on a Humanoid Robot via Roller Ska.pdf"
+---
+
 # SKATER: Synthesized Kinematics for Advanced Traversing Efficiency on a Humanoid Robot via Roller Skate Swizzles
 
 > **저자**: Junchi Gu, Feiyang Yuan, Weize Shi, Tianchen Huang, Haopeng Zhang, Xiaohu Zhang, Yu Wang, Wei Gao, Shiwu Zhang | **날짜**: 2026-01-08 | **URL**: [https://arxiv.org/abs/2601.04948](https://arxiv.org/abs/2601.04948)

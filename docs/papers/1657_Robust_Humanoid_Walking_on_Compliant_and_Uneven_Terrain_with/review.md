@@ -1,3 +1,22 @@
+---
+title: "1657_Robust_Humanoid_Walking_on_Compliant_and_Uneven_Terrain_with"
+authors:
+  - "Rohan P. Singh"
+  - "Mitsuharu Morisawa"
+  - "Mehdi Benallegue"
+  - "Zhaoming Xie"
+  - "Fumio Kanehiro"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Deep RL을 이용하여 humanoid robot HRP-5P가 시뮬레이션에서 terrain randomization으로 학습한 정책을 실제 환경의 compliant하고 uneven한 terrain에서도 robust하게 보행하도록 하는 연구이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Singh et al._2025_Robust Humanoid Walking on Compliant and Uneven Terrain with Deep Reinforcement Learning.pdf"
+---
+
 # Robust Humanoid Walking on Compliant and Uneven Terrain with Deep Reinforcement Learning
 
 > **저자**: Rohan P. Singh, Mitsuharu Morisawa, Mehdi Benallegue, Zhaoming Xie, Fumio Kanehiro | **날짜**: 2025-04-18 | **URL**: [https://arxiv.org/abs/2504.13619](https://arxiv.org/abs/2504.13619)

@@ -1,3 +1,22 @@
+---
+title: "1695_StyleLoco_Generative_Adversarial_Distillation_for_Natural_Hu"
+authors:
+  - "Le Ma"
+  - "Ziyu Meng"
+  - "Tengyu Liu"
+  - "Yuhan Li"
+  - "Ran Song"
+date: "2025.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "StyleLoco는 강화학습의 민첩성과 모션캡처 데이터의 자연스러움을 결합하기 위해 다중 discriminator를 활용한 Generative Adversarial Distillation (GAD) 프레임워크를 제안하여 인간형 로봇의 자연스러운 보행을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ma et al._2025_StyleLoco Generative Adversarial Distillation for Natural Humanoid Robot Locomotion.pdf"
+---
+
 # StyleLoco: Generative Adversarial Distillation for Natural Humanoid Robot Locomotion
 
 > **저자**: Le Ma, Ziyu Meng, Tengyu Liu, Yuhan Li, Ran Song, Wei Zhang, Siyuan Huang | **날짜**: 2025-03-19 | **URL**: [https://arxiv.org/abs/2503.15082](https://arxiv.org/abs/2503.15082)

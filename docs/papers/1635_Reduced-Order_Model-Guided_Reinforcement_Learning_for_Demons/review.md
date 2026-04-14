@@ -1,3 +1,19 @@
+---
+title: "1635_Reduced-Order_Model-Guided_Reinforcement_Learning_for_Demons"
+authors:
+  - "Shuai Liu"
+  - "Meng Cheng Lau"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "ROM-GRL은 모션캡처 데이터 없이 4-DOF reduced-order model로 생성한 gait template을 이용해 full-body humanoid 정책을 학습하는 2단계 강화학습 프레임워크이다. Adversarial discriminator를 통해 ROM의 5-dimensional gait feature 분포를 따르도록 유도하여 자연스러운 보행을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Liu and Lau_2025_Reduced-Order Model-Guided Reinforcement Learning for Demonstration-Free Humanoid Locomotion.pdf"
+---
+
 # Reduced-Order Model-Guided Reinforcement Learning for Demonstration-Free Humanoid Locomotion
 
 > **저자**: Shuai Liu, Meng Cheng Lau | **날짜**: 2025-09-23 | **URL**: [https://arxiv.org/abs/2509.19023](https://arxiv.org/abs/2509.19023)

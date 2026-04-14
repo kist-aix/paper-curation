@@ -1,3 +1,17 @@
+---
+title: "1754_VMP_Versatile_Motion_Priors_for_Robustly_Tracking_Motion_on"
+authors:
+  - "| **날짜**:"
+date: ""
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 인간의 동작 시연으로부터 학습하여 휴머노이드 로봇이 자연스럽고 민첩한 동작을 수행하고, diffusion model 기반의 온라인 최적화를 통해 학습 중 보지 못한 다양한 작업을 제로샷으로 해결할 수 있는 BeyondMimic 프레임워크를 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+---
+
 # VMP: Versatile Motion Priors for Robustly Tracking Motion on Physical Characters
 
 > **저자**:  | **날짜**:  | **URL**: [https://la.disneyresearch.com/publication/vmp-versatile-motion-priors-for-robustly-tracking-motion-on-physical-characters/](https://la.disneyresearch.com/publication/vmp-versatile-motion-priors-for-robustly-tracking-motion-on-physical-characters/)

@@ -1,3 +1,18 @@
+---
+title: "1716_BiCoord_장기간_시공간_협응_양팔_조작_벤치마크"
+authors:
+  - "| **날짜**: 2026-04-07"
+date: "2026.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "BiCoord는 장시간 시공간 협응이 필요한 양팔 조작 벤치마크를 제시하며, 연속적 팔 간 의존성과 동적 역할 교환을 포함한 다양한 작업을 정의하고 이를 평가할 메트릭을 개발했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2604.05831.pdf"
+---
+
 # BiCoord: 장기간 시공간 협응 양팔 조작 벤치마크
 
 > **저자**:  | **날짜**: 2026-04-07 | **URL**: [https://arxiv.org/abs/2604.05831](https://arxiv.org/abs/2604.05831)

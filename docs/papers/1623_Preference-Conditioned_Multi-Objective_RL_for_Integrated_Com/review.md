@@ -1,3 +1,22 @@
+---
+title: "1623_Preference-Conditioned_Multi-Objective_RL_for_Integrated_Com"
+authors:
+  - "Tingxuan Leng"
+  - "Yushi Wang"
+  - "Tinglong Zheng"
+  - "Changsheng Luo"
+  - "Mingguo Zhao"
+date: "2025.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간형 로봇의 명령 추적과 외력 순응을 동시에 달성하기 위해 선호도 조건부 MORL 프레임워크를 제안하며, 단일 정책으로 추적-순응 간의 연속적인 trade-off를 구현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Leng et al._2025_Preference-Conditioned Multi-Objective RL for Integrated Command Tracking and Force Compliance in Hu.pdf"
+---
+
 # Preference-Conditioned Multi-Objective RL for Integrated Command Tracking and Force Compliance in Humanoid Locomotion
 
 > **저자**: Tingxuan Leng, Yushi Wang, Tinglong Zheng, Changsheng Luo, Mingguo Zhao | **날짜**: 2025-10-12 | **URL**: [https://arxiv.org/abs/2510.10851](https://arxiv.org/abs/2510.10851)

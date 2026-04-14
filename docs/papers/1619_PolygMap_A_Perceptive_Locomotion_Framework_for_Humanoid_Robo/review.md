@@ -1,3 +1,22 @@
+---
+title: "1619_PolygMap_A_Perceptive_Locomotion_Framework_for_Humanoid_Robo"
+authors:
+  - "Bingquan Li"
+  - "Ning Wang"
+  - "Tianwei Zhang"
+  - "Zhicheng He"
+  - "Yucong Wu"
+date: "2025.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "PolygMap은 LiDAR, RGB-D 카메라, IMU를 융합하여 실시간 다각형 계단 평면 의미지도를 구축하고, 이를 기반으로 인간형 로봇의 계단 등반을 위한 발디딤 계획을 수행하는 지각 기반 보행 계획 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_PolygMap A Perceptive Locomotion Framework for Humanoid Robot Stair Climbing.pdf"
+---
+
 # PolygMap: A Perceptive Locomotion Framework for Humanoid Robot Stair Climbing
 
 > **저자**: Bingquan Li, Ning Wang, Tianwei Zhang, Zhicheng He, Yucong Wu | **날짜**: 2025-10-14 | **URL**: [https://arxiv.org/abs/2510.12346](https://arxiv.org/abs/2510.12346)

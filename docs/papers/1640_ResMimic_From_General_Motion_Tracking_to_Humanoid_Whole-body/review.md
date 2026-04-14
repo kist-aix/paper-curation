@@ -1,3 +1,22 @@
+---
+title: "1640_ResMimic_From_General_Motion_Tracking_to_Humanoid_Whole-body"
+authors:
+  - "Siheng Zhao"
+  - "Yanjie Ze"
+  - "Yue Wang"
+  - "C. Karen Liu"
+  - "Pieter Abbeel"
+date: "2025.10"
+doi: "10.48550/arXiv.2510.05070"
+arxiv: ""
+score: 4.0
+essence: "ResMimic는 일반 모션 추적(GMT) 정책을 기반으로 효율적인 잔차 정책(residual policy)을 학습하여 인간형 로봇의 정밀한 전신 이동-조작 능력을 실현하는 이단계 잔차학습 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhao et al._2025_ResMimic From General Motion Tracking to Humanoid Whole-body Loco-Manipulation via Residual Learnin.pdf"
+---
+
 # ResMimic: From General Motion Tracking to Humanoid Whole-body Loco-Manipulation via Residual Learning
 
 > **저자**: Siheng Zhao, Yanjie Ze, Yue Wang, C. Karen Liu, Pieter Abbeel, Guanya Shi, Rocky Duan | **날짜**: 2025-10-08 | **DOI**: [10.48550/arXiv.2510.05070](https://doi.org/10.48550/arXiv.2510.05070)

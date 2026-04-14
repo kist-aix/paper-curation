@@ -1,3 +1,22 @@
+---
+title: "1630_Quasi-Direct_Drive_for_Low-Cost_Compliant_Robotic_Manipulati"
+authors:
+  - "David V. Gealy"
+  - "Stephen McKinley"
+  - "Brent Yi"
+  - "Philipp Wu"
+  - "Phillip R. Downey"
+date: "2019.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Quasi-Direct Drive 구동방식을 기반으로 한 저비용 7-DOF 로봇 팔 Blue를 제안하여 인간 환경에서 안전하고 힘 제어 가능한 조작을 가능하게 함."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Gealy et al._2019_Quasi-Direct Drive for Low-Cost Compliant Robotic Manipulation.pdf"
+---
+
 # Quasi-Direct Drive for Low-Cost Compliant Robotic Manipulation
 
 > **저자**: David V. Gealy, Stephen McKinley, Brent Yi, Philipp Wu, Phillip R. Downey, Greg Balke, Allan Zhao, Menglong Guo, Rachel Thomasson, Anthony Sinclair, Peter Cuellar, Zoe McCarthy, Pieter Abbeel | **날짜**: 2019-04-08 | **URL**: [https://arxiv.org/abs/1904.03815](https://arxiv.org/abs/1904.03815)

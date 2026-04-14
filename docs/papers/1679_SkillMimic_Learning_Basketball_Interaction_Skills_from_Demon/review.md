@@ -1,3 +1,22 @@
+---
+title: "1679_SkillMimic_Learning_Basketball_Interaction_Skills_from_Demon"
+authors:
+  - "Yinhuai Wang"
+  - "Qihan Zhao"
+  - "Runyi Yu"
+  - "Hok Wai Tsui"
+  - "Ailing Zeng"
+date: "2024.08"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SkillMimic은 skill-specific reward 설계 없이 통합된 HOI imitation reward를 사용하여 단일 policy로 다양한 농구 상호작용 기술을 학습하고 합성할 수 있는 data-driven 프레임워크다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wang et al._2024_SkillMimic Learning Basketball Interaction Skills from Demonstrations.pdf"
+---
+
 # SkillMimic: Learning Basketball Interaction Skills from Demonstrations
 
 > **저자**: Yinhuai Wang, Qihan Zhao, Runyi Yu, Hok Wai Tsui, Ailing Zeng, Jing Lin, Zhengyi Luo, Jiwen Yu, Xiu Li, Qifeng Chen, Jian Zhang, Lei Zhang, Ping Tan | **날짜**: 2024-08-12 | **URL**: [https://arxiv.org/abs/2408.15270](https://arxiv.org/abs/2408.15270)

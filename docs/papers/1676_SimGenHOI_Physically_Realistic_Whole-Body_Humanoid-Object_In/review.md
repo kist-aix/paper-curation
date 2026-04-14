@@ -1,3 +1,22 @@
+---
+title: "1676_SimGenHOI_Physically_Realistic_Whole-Body_Humanoid-Object_In"
+authors:
+  - "Yuhang Lin"
+  - "Yijia Xie"
+  - "Jiahong Xie"
+  - "Yuehao Huang"
+  - "Ruoyu Wang"
+date: "2025.08"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SimGenHOI는 Diffusion Transformers 기반의 생성 모델과 강화학습 기반의 접촉-인식 제어 정책을 결합하여 물리적으로 현실적인 인간형 로봇-객체 상호작용을 생성하는 통합 프레임워크이다. 상호 미세조정 전략을 통해 생성 모델과 제어 정책이 반복적으로 서로를 개선하여 장기 조작 과제의 성공률을 높인다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Lin et al._2025_SimGenHOI Physically Realistic Whole-Body Humanoid-Object Interaction via Generative Modeling and R.pdf"
+---
+
 # SimGenHOI: Physically Realistic Whole-Body Humanoid-Object Interaction via Generative Modeling and Reinforcement Learning
 
 > **저자**: Yuhang Lin, Yijia Xie, Jiahong Xie, Yuehao Huang, Ruoyu Wang, Jiajun Lv, Yukai Ma, Xingxing Zuo | **날짜**: 2025-08-18 | **URL**: [https://arxiv.org/abs/2508.14120](https://arxiv.org/abs/2508.14120)

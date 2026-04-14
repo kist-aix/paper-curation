@@ -1,3 +1,21 @@
+---
+title: "1684_SoftMimic_Learning_Compliant_Whole-body_Control_from_Example"
+authors:
+  - "Gabriel B. Margolis"
+  - "Michelle Wang"
+  - "Nolan Fey"
+  - "Pulkit Agrawal"
+date: "2025.10"
+doi: "10.48550/arXiv.2510.17792"
+arxiv: ""
+score: 4.0
+essence: "SoftMimic은 역기구학 솔버를 이용해 순응적 동작 데이터셋을 생성하고 강화학습으로 학습하여, 인간형 로봇이 외부 힘에 순응하면서도 균형을 유지하는 제어 정책을 학습하는 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Margolis et al._2025_SoftMimic Learning Compliant Whole-body Control from Examples.pdf"
+---
+
 # SoftMimic: Learning Compliant Whole-body Control from Examples
 
 > **저자**: Gabriel B. Margolis, Michelle Wang, Nolan Fey, Pulkit Agrawal | **날짜**: 2025-10-20 | **DOI**: [10.48550/arXiv.2510.17792](https://doi.org/10.48550/arXiv.2510.17792)

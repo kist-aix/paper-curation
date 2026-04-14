@@ -1,3 +1,22 @@
+---
+title: "1612_PhysHMR_Learning_Humanoid_Control_Policies_from_Vision_for_P"
+authors:
+  - "Qiao Feng"
+  - "Yiming Huang"
+  - "Yufu Wang"
+  - "Jiatao Gu"
+  - "Lingjie Liu"
+date: "2025.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "PhysHMR은 모노큘러 비디오로부터 물리적으로 타당한 인간 동작 재구성을 위해 비전-기반 휴머노이드 제어 정책을 직접 학습하는 통합 프레임워크이다. 기존의 두 단계 방식(운동학 기반 추정 + 물리 후처리)과 달리, 시각 정보와 물리 제약을 단일 정책 네트워크에서 함께 추론한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Feng et al._2025_PhysHMR Learning Humanoid Control Policies from Vision for Physically Plausible Human Motion Recons.pdf"
+---
+
 # PhysHMR: Learning Humanoid Control Policies from Vision for Physically Plausible Human Motion Reconstruction
 
 > **저자**: Qiao Feng, Yiming Huang, Yufu Wang, Jiatao Gu, Lingjie Liu | **날짜**: 2025-10-02 | **URL**: [https://arxiv.org/abs/2510.02566](https://arxiv.org/abs/2510.02566)

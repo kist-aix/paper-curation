@@ -1,3 +1,22 @@
+---
+title: "1690_Stability-Aware_Retargeting_for_Humanoid_Multi-Contact_Teleo"
+authors:
+  - "Stephen McCrory"
+  - "Romeo Orsolino"
+  - "Dhruv Thanki"
+  - "Luigi Penco"
+  - "Robert Griffin"
+date: "2025.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "휴머노이드 로봇의 다중 접촉 텔레오퍼레이션 중 안정성을 향상시키기 위해 Centroidal stability 기반 retargeting을 제안하며, Linear Program 민감도 분석을 통해 효율적으로 안정성 여유 기울기를 계산한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/McCrory et al._2025_Stability-Aware Retargeting for Humanoid Multi-Contact Teleoperation.pdf"
+---
+
 # Stability-Aware Retargeting for Humanoid Multi-Contact Teleoperation
 
 > **저자**: Stephen McCrory, Romeo Orsolino, Dhruv Thanki, Luigi Penco, Robert Griffin | **날짜**: 2025-10-05 | **URL**: [https://arxiv.org/abs/2510.04353](https://arxiv.org/abs/2510.04353)

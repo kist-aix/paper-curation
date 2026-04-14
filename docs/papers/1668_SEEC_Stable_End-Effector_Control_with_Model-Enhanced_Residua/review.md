@@ -1,3 +1,22 @@
+---
+title: "1668_SEEC_Stable_End-Effector_Control_with_Model-Enhanced_Residua"
+authors:
+  - "Jaehwi Jang"
+  - "Zhuoheng Wang"
+  - "Ziyi Zhou"
+  - "Feiyang Wu"
+  - "Ye Zhao"
+date: "2025.09"
+doi: "10.48550/arXiv.2509.21231"
+arxiv: ""
+score: 4.0
+essence: "SEEC는 model-enhanced residual learning을 통해 휴머노이드 로봇의 보행 중 팔 end-effector를 안정적으로 제어하는 프레임워크로, 하지 유도 교란에 대해 모델 기반 보상 신호를 RL 정책에 통합한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Jang et al._2025_SEEC Stable End-Effector Control with Model-Enhanced Residual Learning for Humanoid Loco-Manipulati.pdf"
+---
+
 # SEEC: Stable End-Effector Control with Model-Enhanced Residual Learning for Humanoid Loco-Manipulation
 
 > **저자**: Jaehwi Jang, Zhuoheng Wang, Ziyi Zhou, Feiyang Wu, Ye Zhao | **날짜**: 2025-09-25 | **DOI**: [10.48550/arXiv.2509.21231](https://doi.org/10.48550/arXiv.2509.21231)

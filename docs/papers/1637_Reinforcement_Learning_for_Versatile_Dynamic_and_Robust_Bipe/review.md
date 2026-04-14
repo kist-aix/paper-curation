@@ -1,3 +1,22 @@
+---
+title: "1637_Reinforcement_Learning_for_Versatile_Dynamic_and_Robust_Bipe"
+authors:
+  - "Zhongyu Li"
+  - "Xue Bin Peng"
+  - "Pieter Abbeel"
+  - "Sergey Levine"
+  - "Glen Berseth"
+date: "2024.01"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "이족 로봇의 다양한 동적 보행 기술(걷기, 뛰기, 점프)을 통합적으로 제어하기 위해 dual-history 아키텍처를 갖춘 심화강화학습 프레임워크를 제시하고, 시뮬레이션에서 실제 로봇(Cassie)으로 무튜닝 전이 배포를 성공시켰다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2024_Reinforcement Learning for Versatile, Dynamic, and Robust Bipedal Locomotion Control.pdf"
+---
+
 # Reinforcement Learning for Versatile, Dynamic, and Robust Bipedal Locomotion Control
 
 > **저자**: Zhongyu Li, Xue Bin Peng, Pieter Abbeel, Sergey Levine, Glen Berseth, Koushil Sreenath | **날짜**: 2024-01-30 | **URL**: [https://arxiv.org/abs/2401.16889](https://arxiv.org/abs/2401.16889)

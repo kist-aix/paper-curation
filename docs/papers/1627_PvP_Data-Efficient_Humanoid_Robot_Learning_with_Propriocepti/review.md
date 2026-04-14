@@ -1,3 +1,22 @@
+---
+title: "1627_PvP_Data-Efficient_Humanoid_Robot_Learning_with_Propriocepti"
+authors:
+  - "Mingqi Yuan"
+  - "Tao Yu"
+  - "Haolin Song"
+  - "Bo Li"
+  - "Xin Jin"
+date: "2026.03"
+doi: "10.48550/arXiv.2512.13093"
+arxiv: ""
+score: 4.0
+essence: "PvP는 고유 감각(proprioceptive)과 특권 상태(privileged state) 사이의 대조 학습을 활용하여 휴머노이드 로봇의 전신 제어(WBC) 학습의 샘플 효율성을 크게 향상시킨다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yuan et al._2026_PvP Data-Efficient Humanoid Robot Learning with Proprioceptive-Privileged Contrastive Representatio.pdf"
+---
+
 # PvP: Data-Efficient Humanoid Robot Learning with Proprioceptive-Privileged Contrastive Representations
 
 > **저자**: Mingqi Yuan, Tao Yu, Haolin Song, Bo Li, Xin Jin, Hua Chen, Wenjun Zeng | **날짜**: 2026-03-11 | **DOI**: [10.48550/arXiv.2512.13093](https://doi.org/10.48550/arXiv.2512.13093)

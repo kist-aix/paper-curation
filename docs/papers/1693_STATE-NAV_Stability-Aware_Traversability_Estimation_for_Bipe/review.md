@@ -1,3 +1,22 @@
+---
+title: "1693_STATE-NAV_Stability-Aware_Traversability_Estimation_for_Bipe"
+authors:
+  - "Ziwon Yoon"
+  - "Lawrence Y. Zhu"
+  - "Jingxi Lu"
+  - "Lu Gan"
+  - "Ye Zhao"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "이족 로봇의 불안정성을 예측하는 TravFormer 신경망을 개발하고, 안정성 기반 명령 속도를 traversability로 정의하여 거친 지형에서의 안전하고 효율적인 네비게이션을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yoon et al._2025_STATE-NAV Stability-Aware Traversability Estimation for Bipedal Navigation on Rough Terrain.pdf"
+---
+
 # STATE-NAV: Stability-Aware Traversability Estimation for Bipedal Navigation on Rough Terrain
 
 > **저자**: Ziwon Yoon, Lawrence Y. Zhu, Jingxi Lu, Lu Gan, Ye Zhao | **날짜**: 2025-06-01 | **URL**: [https://arxiv.org/abs/2506.01046](https://arxiv.org/abs/2506.01046)

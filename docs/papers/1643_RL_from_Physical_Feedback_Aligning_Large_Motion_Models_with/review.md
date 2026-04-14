@@ -1,3 +1,22 @@
+---
+title: "1643_RL_from_Physical_Feedback_Aligning_Large_Motion_Models_with"
+authors:
+  - "Junpeng Yue"
+  - "Zepeng Wang"
+  - "Yuxuan Wang"
+  - "Weishuai Zeng"
+  - "Jiangxing Wang"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 텍스트 기반 인간 동작을 실제 휴머노이드 로봇에 실행 가능한 형태로 변환하는 문제를 해결하기 위해, 물리 시뮬레이터에서의 피드백을 기반으로 대규모 모션 생성 모델을 강화학습으로 미세조정하는 RLPF 프레임워크를 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yue et al._2025_RL from Physical Feedback Aligning Large Motion Models with Humanoid Control.pdf"
+---
+
 # RL from Physical Feedback: Aligning Large Motion Models with Humanoid Control
 
 > **저자**: Junpeng Yue, Zepeng Wang, Yuxuan Wang, Weishuai Zeng, Jiangxing Wang, Xinrun Xu, Yu Zhang, Sipeng Zheng, Ziluo Ding, Zongqing Lu | **날짜**: 2025-06-15 | **URL**: [https://arxiv.org/abs/2506.12769](https://arxiv.org/abs/2506.12769)

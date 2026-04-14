@@ -1,3 +1,21 @@
+---
+title: "1662_SafeFlow_Real-Time_Text-Driven_Humanoid_Whole-Body_Control_v"
+authors:
+  - "Hanbyel Cho"
+  - "Sang-Hun Kim"
+  - "Jeonguk Kang"
+  - "Donghan Koo"
+date: "2026.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SafeFlow는 physics-guided rectified flow matching과 3단계 안전 게이팅을 결합하여 텍스트 명령 기반 휴머노이드 전신 제어에서 물리적으로 실현 불가능한 동작 생성 문제를 해결한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Cho et al._2026_SafeFlow Real-Time Text-Driven Humanoid Whole-Body Control via Physics-Guided Rectified Flow and Se.pdf"
+---
+
 # SafeFlow: Real-Time Text-Driven Humanoid Whole-Body Control via Physics-Guided Rectified Flow and Selective Safety Gating
 
 > **저자**: Hanbyel Cho, Sang-Hun Kim, Jeonguk Kang, Donghan Koo | **날짜**: 2026-03-25 | **URL**: [https://arxiv.org/abs/2603.23983](https://arxiv.org/abs/2603.23983)

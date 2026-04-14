@@ -1,3 +1,22 @@
+---
+title: "1624_PRIMAL_Physically_Reactive_and_Interactive_Motor_Model_for_A"
+authors:
+  - "Yan Zhang"
+  - "Yao Feng"
+  - "Alpár Cseke"
+  - "Nitin Saini"
+  - "Nathan Bajandas"
+date: "2025.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "PRIMAL은 두 단계 학습 패러다임으로 아바타의 모터 시스템을 generative motion model로 구현하여, 물리적으로 반응성 있고 제어 가능하며 실시간 상호작용이 가능한 3D 캐릭터 애니메이션을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2025_PRIMAL Physically Reactive and Interactive Motor Model for Avatar Learning.pdf"
+---
+
 # PRIMAL: Physically Reactive and Interactive Motor Model for Avatar Learning
 
 > **저자**: Yan Zhang, Yao Feng, Alpár Cseke, Nitin Saini, Nathan Bajandas, Nicolas Heron, Michael J. Black | **날짜**: 2025-03-21 | **URL**: [https://arxiv.org/abs/2503.17544](https://arxiv.org/abs/2503.17544)

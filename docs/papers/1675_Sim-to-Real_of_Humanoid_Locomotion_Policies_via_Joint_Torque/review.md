@@ -1,3 +1,22 @@
+---
+title: "1675_Sim-to-Real_of_Humanoid_Locomotion_Policies_via_Joint_Torque"
+authors:
+  - "Junhyeok Rui Cha"
+  - "Woohyun Cha"
+  - "Jaeyong Shin"
+  - "Donghyeon Kim"
+  - "Jaeheung Park"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 기존 domain randomization의 한계를 극복하기 위해 상태 의존적인 joint torque space perturbation을 주입하여 humanoid 로봇의 sim-to-real 전이를 개선하는 방법을 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Cha et al._2025_Sim-to-Real of Humanoid Locomotion Policies via Joint Torque Space Perturbation Injection.pdf"
+---
+
 # Sim-to-Real of Humanoid Locomotion Policies via Joint Torque Space Perturbation Injection
 
 > **저자**: Junhyeok Rui Cha, Woohyun Cha, Jaeyong Shin, Donghyeon Kim, Jaeheung Park | **날짜**: 2025-04-09 | **URL**: [https://arxiv.org/abs/2504.06585](https://arxiv.org/abs/2504.06585)

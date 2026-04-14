@@ -1,3 +1,21 @@
+---
+title: "1715_ToddlerBot_Open-Source_ML-Compatible_Humanoid_Platform_for_L"
+authors:
+  - "Haochen Shi"
+  - "Weizhuo Wang"
+  - "Shuran Song"
+  - "C. Karen Liu"
+date: "2025.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "ToddlerBot은 머신러닝 기반 로봇 정책 학습을 위해 설계된 저비용, 오픈소스 미니어처 인형로봇으로, 시뮬레이션과 실제 환경 모두에서 고품질 데이터 수집을 가능하게 하며 zero-shot sim-to-real 정책 전이를 지원한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Shi et al._2025_ToddlerBot Open-Source ML-Compatible Humanoid Platform for Loco-Manipulation.pdf"
+---
+
 # ToddlerBot: Open-Source ML-Compatible Humanoid Platform for Loco-Manipulation
 
 > **저자**: Haochen Shi, Weizhuo Wang, Shuran Song, C. Karen Liu | **날짜**: 2025-02-02 | **URL**: [https://arxiv.org/abs/2502.00893](https://arxiv.org/abs/2502.00893)

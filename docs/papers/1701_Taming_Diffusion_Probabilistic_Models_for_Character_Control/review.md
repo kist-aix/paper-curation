@@ -1,3 +1,22 @@
+---
+title: "1701_Taming_Diffusion_Probabilistic_Models_for_Character_Control"
+authors:
+  - "Rui Chen"
+  - "Mingyi Shi"
+  - "Shaoli Huang"
+  - "Ping Tan"
+  - "Taku Komura"
+date: "2024.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Transformer 기반 Conditional Autoregressive Motion Diffusion Model (CAMDM)을 제안하여 사용자의 동적 제어 신호에 실시간으로 반응하면서 고품질의 다양한 캐릭터 애니메이션을 생성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Chen et al._2024_Taming Diffusion Probabilistic Models for Character Control.pdf"
+---
+
 # Taming Diffusion Probabilistic Models for Character Control
 
 > **저자**: Rui Chen, Mingyi Shi, Shaoli Huang, Ping Tan, Taku Komura, Xuelin Chen | **날짜**: 2024-04-23 | **URL**: [https://arxiv.org/abs/2404.15121](https://arxiv.org/abs/2404.15121)

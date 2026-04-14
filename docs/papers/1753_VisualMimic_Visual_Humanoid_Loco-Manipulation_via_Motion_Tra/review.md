@@ -1,3 +1,22 @@
+---
+title: "1753_VisualMimic_Visual_Humanoid_Loco-Manipulation_via_Motion_Tra"
+authors:
+  - "Shaofeng Yin"
+  - "Yanjie Ze"
+  - "Hong-Xing Yu"
+  - "C. Karen Liu"
+  - "Jiajun Wu"
+date: "2025.11"
+doi: "10.48550/arXiv.2509.20322"
+arxiv: ""
+score: 4.0
+essence: "VisualMimic은 egocentric vision과 hierarchical whole-body control을 결합한 sim-to-real 프레임워크로, 인간의 동작 데이터로 학습한 task-agnostic keypoint tracker와 task-specific visuomotor policy를 통해 humanoid robot의 loco-manipulation을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yin et al._2025_VisualMimic Visual Humanoid Loco-Manipulation via Motion Tracking and Generation.pdf"
+---
+
 # VisualMimic: Visual Humanoid Loco-Manipulation via Motion Tracking and Generation
 
 > **저자**: Shaofeng Yin, Yanjie Ze, Hong-Xing Yu, C. Karen Liu, Jiajun Wu | **날짜**: 2025-11-13 | **DOI**: [10.48550/arXiv.2509.20322](https://doi.org/10.48550/arXiv.2509.20322)

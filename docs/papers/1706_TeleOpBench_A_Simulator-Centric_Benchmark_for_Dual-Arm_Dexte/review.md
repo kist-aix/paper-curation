@@ -1,3 +1,22 @@
+---
+title: "1706_TeleOpBench_A_Simulator-Centric_Benchmark_for_Dual-Arm_Dexte"
+authors:
+  - "Hangyu Li"
+  - "Qin Zhao"
+  - "Haoran Xu"
+  - "Xinyu Jiang"
+  - "Qingwei Ben"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "TeleOpBench는 쌍팔 민첩한 텔레오퍼레이션을 위한 시뮬레이터 기반 벤치마크로, 30개의 고충실도 작업 환경과 4가지 대표적 텔레오퍼레이션 모달리티(MoCap, VR, 외골격, 비전)를 통합 프레임워크로 제공하며 시뮬레이션과 실제 하드웨어 간의 강한 상관관계를 검증한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_TeleOpBench A Simulator-Centric Benchmark for Dual-Arm Dexterous Teleoperation.pdf"
+---
+
 # TeleOpBench: A Simulator-Centric Benchmark for Dual-Arm Dexterous Teleoperation
 
 > **저자**: Hangyu Li, Qin Zhao, Haoran Xu, Xinyu Jiang, Qingwei Ben, Feiyu Jia, Haoyu Zhao, Liang Xu, Jia Zeng, Hanqing Wang, Bo Dai, Junting Dong, Jiangmiao Pang | **날짜**: 2025-05-19 | **URL**: [https://arxiv.org/abs/2505.12748](https://arxiv.org/abs/2505.12748)

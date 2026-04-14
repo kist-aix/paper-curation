@@ -1,3 +1,21 @@
+---
+title: "1762_WoCoCo_Learning_Whole-Body_Humanoid_Control_with_Sequential"
+authors:
+  - "Chong Zhang"
+  - "Wenli Xiao"
+  - "Tairan He"
+  - "Guanya Shi"
+date: "2024.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "WoCoCo는 순차적 접촉을 포함하는 휴머노이드 로봇의 전신 제어를 학습하기 위한 강화학습 프레임워크로, 작업을 접촉 단계로 자연스럽게 분해하여 task-agnostic한 보상과 sim-to-real 설계를 통해 복잡한 동작을 학습한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2024_WoCoCo Learning Whole-Body Humanoid Control with Sequential Contacts.pdf"
+---
+
 # WoCoCo: Learning Whole-Body Humanoid Control with Sequential Contacts
 
 > **저자**: Chong Zhang, Wenli Xiao, Tairan He, Guanya Shi | **날짜**: 2024-06-10 | **URL**: [https://arxiv.org/abs/2406.06005](https://arxiv.org/abs/2406.06005)

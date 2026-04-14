@@ -1,3 +1,22 @@
+---
+title: "1638_Reinforcement_Learning_with_Data_Bootstrapping_for_Dynamic_S"
+authors:
+  - "Chengyang Peng"
+  - "Zhihao Zhang"
+  - "Shiting Gong"
+  - "Sankalp Agrawal"
+  - "Keith A. Redmill"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Humanoid robot navigation을 위해 고수준 RL 기반 동적 subgoal 생성기와 저수준 MPC 기반 보행 제어기를 결합한 계층적 프레임워크를 제안하며, data bootstrapping 기법으로 학습을 안정화한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Peng et al._2025_Reinforcement Learning with Data Bootstrapping for Dynamic Subgoal Pursuit in Humanoid Robot Navigat.pdf"
+---
+
 # Reinforcement Learning with Data Bootstrapping for Dynamic Subgoal Pursuit in Humanoid Robot Navigation
 
 > **저자**: Chengyang Peng, Zhihao Zhang, Shiting Gong, Sankalp Agrawal, Keith A. Redmill, Ayonga Hereid | **날짜**: 2025-06-02 | **URL**: [https://arxiv.org/abs/2506.02206](https://arxiv.org/abs/2506.02206)

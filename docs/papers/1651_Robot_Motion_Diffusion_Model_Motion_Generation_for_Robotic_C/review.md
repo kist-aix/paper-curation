@@ -1,3 +1,17 @@
+---
+title: "1651_Robot_Motion_Diffusion_Model_Motion_Generation_for_Robotic_C"
+authors:
+  - "| **날짜**:"
+date: ""
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 diffusion model을 기반으로 한 Conditional Motion Diffusion In-betweening (CondMDI)를 제안하여, 텍스트 프롬프트와 희소한 키프레임 제약 조건을 유연하게 수용하면서 고품질의 다양한 모션을 생성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+---
+
 # Robot Motion Diffusion Model: Motion Generation for Robotic Characters
 
 > **저자**:  | **날짜**:  | **URL**: [https://la.disneyresearch.com/publication/robot-motion-diffusion-model-motion-generation-for-robotic-characters/](https://la.disneyresearch.com/publication/robot-motion-diffusion-model-motion-generation-for-robotic-characters/)

@@ -1,3 +1,22 @@
+---
+title: "1712_The_Role_of_Domain_Randomization_in_Training_Diffusion_Polic"
+authors:
+  - "Oleg Kaidanov"
+  - "Firas Al-Hafez"
+  - "Yusuf Suvari"
+  - "Boris Belousov"
+  - "Jan Peters"
+date: "2024.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 Humanoid 로봇의 전신 제어를 위해 Diffusion Policies를 훈련할 때 Domain Randomization의 역할을 조사하며, 조작 작업보다 보행 작업이 훨씬 더 큰 규모와 다양성의 데이터셋을 요구함을 보여준다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Kaidanov et al._2024_The Role of Domain Randomization in Training Diffusion Policies for Whole-Body Humanoid Control.pdf"
+---
+
 # The Role of Domain Randomization in Training Diffusion Policies for Whole-Body Humanoid Control
 
 > **저자**: Oleg Kaidanov, Firas Al-Hafez, Yusuf Suvari, Boris Belousov, Jan Peters | **날짜**: 2024-11-02 | **URL**: [https://arxiv.org/abs/2411.01349](https://arxiv.org/abs/2411.01349)

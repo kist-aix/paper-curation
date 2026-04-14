@@ -1,3 +1,22 @@
+---
+title: "1708_TextOp_Real-time_Interactive_Text-Driven_Humanoid_Robot_Moti"
+authors:
+  - "Weiji Xie"
+  - "Jiakun Zheng"
+  - "Jinrui Han"
+  - "Jiyuan Shi"
+  - "Weinan Zhang"
+date: "2026.02"
+doi: "10.48550/arXiv.2602.07439"
+arxiv: ""
+score: 4.0
+essence: "TextOp는 streaming 자연어 명령으로 인간형 로봇의 운동을 실시간으로 생성하고 제어하는 프레임워크로, 고수준의 autoregressive motion diffusion 모델과 저수준의 motion tracking policy를 결합하여 실행 중 동적으로 명령 수정을 지원한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Xie et al._2026_TextOp Real-time Interactive Text-Driven Humanoid Robot Motion Generation and Control.pdf"
+---
+
 # TextOp: Real-time Interactive Text-Driven Humanoid Robot Motion Generation and Control
 
 > **저자**: Weiji Xie, Jiakun Zheng, Jinrui Han, Jiyuan Shi, Weinan Zhang, Chenjia Bai, Xuelong Li | **날짜**: 2026-02-07 | **DOI**: [10.48550/arXiv.2602.07439](https://doi.org/10.48550/arXiv.2602.07439)

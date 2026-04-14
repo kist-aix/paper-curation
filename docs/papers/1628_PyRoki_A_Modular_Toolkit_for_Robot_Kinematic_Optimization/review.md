@@ -1,3 +1,22 @@
+---
+title: "1628_PyRoki_A_Modular_Toolkit_for_Robot_Kinematic_Optimization"
+authors:
+  - "Chung Min Kim"
+  - "Brent Yi"
+  - "Hongsuk Choi"
+  - "Yi Ma"
+  - "Ken Goldberg"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "PyRoki는 역기구학, 궤적 최적화, 모션 리타게팅 등 다양한 로봇 운동학 최적화 문제를 통합적으로 해결하는 모듈식, 확장 가능하며 CPU/GPU/TPU에서 실행되는 크로스 플랫폼 툴킷이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Kim et al._2025_PyRoki A Modular Toolkit for Robot Kinematic Optimization.pdf"
+---
+
 # PyRoki: A Modular Toolkit for Robot Kinematic Optimization
 
 > **저자**: Chung Min Kim, Brent Yi, Hongsuk Choi, Yi Ma, Ken Goldberg, Angjoo Kanazawa | **날짜**: 2025-05-06 | **URL**: [https://arxiv.org/abs/2505.03728](https://arxiv.org/abs/2505.03728)

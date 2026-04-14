@@ -1,3 +1,22 @@
+---
+title: "1691_Stabilizing_Humanoid_Robot_Trajectory_Generation_via_Physics"
+authors:
+  - "Evelyn D'Elia"
+  - "Paolo Maria Viceconte"
+  - "Lorenzo Rapetti"
+  - "Diego Ferigo"
+  - "Giulio Romualdi"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간형 로봇의 궤적 생성에 물리 기반 학습과 제어 기반 보정을 결합하여 모방학습의 안정성을 향상시키는 방법을 제안한다. Physics-informed loss와 PI 제어기를 통해 물리 법칙 위반을 줄이고 실제 로봇에서의 안정성을 개선한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/D'Elia et al._2025_Stabilizing Humanoid Robot Trajectory Generation via Physics-Informed Learning and Control-Informed.pdf"
+---
+
 # Stabilizing Humanoid Robot Trajectory Generation via Physics-Informed Learning and Control-Informed Steering
 
 > **저자**: Evelyn D'Elia, Paolo Maria Viceconte, Lorenzo Rapetti, Diego Ferigo, Giulio Romualdi, Giuseppe L'Erario, Raffaello Camoriano, Daniele Pucci | **날짜**: 2025-09-29 | **URL**: [https://arxiv.org/abs/2509.24697](https://arxiv.org/abs/2509.24697)

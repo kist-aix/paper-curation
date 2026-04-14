@@ -1,3 +1,18 @@
+---
+title: "1682_SMASH_Mastering_Scalable_Whole-Body_Skills_for_Humanoid_Ping"
+authors:
+  - "| **날짜**: 2026-04-01"
+date: "2026.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "휴머노이드 로봇의 탁구 게임을 위해 확장 가능한 전신 동작 학습과 자체 에고센트릭 비전을 통합한 SMASH 시스템을 제시하며, 외부 카메라나 모션 캡처 없이 실외에서 연속적인 탁구 스트라이킹을 처음으로 달성했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2026_SMASH Mastering Scalable Whole-Body Skills for Humanoid Ping-Pong with Egocentric Vision.pdf"
+---
+
 # SMASH: Mastering Scalable Whole-Body Skills for Humanoid Ping-Pong with Egocentric Vision
 
 > **저자**:  | **날짜**: 2026-04-01 | **URL**: [https://arxiv.org/abs/2604.01158](https://arxiv.org/abs/2604.01158)

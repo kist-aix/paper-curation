@@ -1,3 +1,22 @@
+---
+title: "1700_TACT_Humanoid_Whole-body_Contact_Manipulation_through_Deep_I"
+authors:
+  - "Masaki Murooka"
+  - "Takahiro Hoshi"
+  - "Kensuke Fukumitsu"
+  - "Shimpei Masuda"
+  - "Marwan Hamze"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간형 로봇이 촉각 센서를 활용한 모방 학습(imitation learning)을 통해 전신 접촉 조작을 수행할 수 있도록 하는 TACT(tactile-modality extended ACT) 제어 시스템을 제안하였다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Murooka et al._2025_TACT Humanoid Whole-body Contact Manipulation through Deep Imitation Learning with Tactile Modality.pdf"
+---
+
 # TACT: Humanoid Whole-body Contact Manipulation through Deep Imitation Learning with Tactile Modality
 
 > **저자**: Masaki Murooka, Takahiro Hoshi, Kensuke Fukumitsu, Shimpei Masuda, Marwan Hamze, Tomoya Sasaki, Mitsuharu Morisawa, Eiichi Yoshida | **날짜**: 2025-06-18 | **URL**: [https://arxiv.org/abs/2506.15146](https://arxiv.org/abs/2506.15146)

@@ -1,3 +1,22 @@
+---
+title: "1621_PPF_Pre-training_and_Preservative_Fine-tuning_of_Humanoid_Lo"
+authors:
+  - "Hyunyoung Jung"
+  - "Zhaoyuan Gu"
+  - "Ye Zhao"
+  - "Hae-Won Park"
+  - "Sehoon Ha"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 연구는 모델 기반 제어기의 모방학습(Pre-training)과 강화학습을 결합하되, 모델 가정이 성립하는 상태에서만 정규화하는 MAR(Model-Assumption-based Regularization)을 통해 인간형 로봇의 보행 정책을 학습하는 PPF 프레임워크를 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Jung et al._2025_PPF Pre-training and Preservative Fine-tuning of Humanoid Locomotion via Model-Assumption-based Reg.pdf"
+---
+
 # PPF: Pre-training and Preservative Fine-tuning of Humanoid Locomotion via Model-Assumption-based Regularization
 
 > **저자**: Hyunyoung Jung, Zhaoyuan Gu, Ye Zhao, Hae-Won Park, Sehoon Ha | **날짜**: 2025-04-14 | **URL**: [https://arxiv.org/abs/2504.09833](https://arxiv.org/abs/2504.09833)

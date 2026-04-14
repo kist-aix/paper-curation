@@ -1,3 +1,22 @@
+---
+title: "1671_SHIELD_Safety_on_Humanoids_via_CBFs_In_Expectation_on_Learne"
+authors:
+  - "Lizhi Yang"
+  - "Blake Werner"
+  - "Ryan K. Cosner"
+  - "David Fridovich-Keil"
+  - "Preston Culbertson"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SHIELD는 학습 기반 휴머노이드 로봇 컨트롤러에 안전 계층을 추가하여 실시간 제약 조건 명시와 확률적 안전 보장을 동시에 제공하는 프레임워크이다. 동적 잔차 모델과 확률적 이산 시간 제어 배리어 함수(S-DTCBF)를 통해 기존 블랙박스 RL 정책을 재학습 없이 안전화한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yang et al._2025_SHIELD Safety on Humanoids via CBFs In Expectation on Learned Dynamics.pdf"
+---
+
 # SHIELD: Safety on Humanoids via CBFs In Expectation on Learned Dynamics
 
 > **저자**: Lizhi Yang, Blake Werner, Ryan K. Cosner, David Fridovich-Keil, Preston Culbertson, Aaron D. Ames | **날짜**: 2025-05-16 | **URL**: [https://arxiv.org/abs/2505.11494](https://arxiv.org/abs/2505.11494)

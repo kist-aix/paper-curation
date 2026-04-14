@@ -1,3 +1,22 @@
+---
+title: "1678_SkillBlender_Towards_Versatile_Humanoid_Whole-Body_Loco-Mani"
+authors:
+  - "Yuxuan Kuang"
+  - "Haoran Geng"
+  - "Amine Elhafsi"
+  - "Tan-Dzung Do"
+  - "Pieter Abbeel"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SkillBlender는 사전학습된 목표조건부 원시 기술들을 동적으로 혼합하여 휴머노이드 로봇이 복잡한 전신 조작-이동 작업을 최소한의 보상 엔지니어링으로 수행할 수 있게 하는 계층적 강화학습 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Kuang et al._2025_SkillBlender Towards Versatile Humanoid Whole-Body Loco-Manipulation via Skill Blending.pdf"
+---
+
 # SkillBlender: Towards Versatile Humanoid Whole-Body Loco-Manipulation via Skill Blending
 
 > **저자**: Yuxuan Kuang, Haoran Geng, Amine Elhafsi, Tan-Dzung Do, Pieter Abbeel, Jitendra Malik, Marco Pavone, Yue Wang | **날짜**: 2025-06-11 | **URL**: [https://arxiv.org/abs/2506.09366](https://arxiv.org/abs/2506.09366)

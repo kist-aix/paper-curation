@@ -1,3 +1,20 @@
+---
+title: "1680_SLAC_Simulation-Pretrained_Latent_Action_Space_for_Whole-Bod"
+authors:
+  - "Jiaheng Hu"
+  - "Peter Stone"
+  - "Roberto Martín-Martín"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SLAC는 저충실도 시뮬레이터에서 학습한 task-agnostic 잠재 행동 공간을 사용하여 고자유도 모바일 매니퓨레이터가 실제 환경에서 효율적이고 안전하게 강화학습으로 접촉이 풍부한 전신 조작 작업을 학습할 수 있게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Hu et al._2025_SLAC Simulation-Pretrained Latent Action Space for Whole-Body Real-World RL.pdf"
+---
+
 # SLAC: Simulation-Pretrained Latent Action Space for Whole-Body Real-World RL
 
 > **저자**: Jiaheng Hu, Peter Stone, Roberto Martín-Martín | **날짜**: 2025-06-04 | **URL**: [https://arxiv.org/abs/2506.04147](https://arxiv.org/abs/2506.04147)

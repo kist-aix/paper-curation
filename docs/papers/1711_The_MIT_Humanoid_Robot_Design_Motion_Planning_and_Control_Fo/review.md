@@ -1,3 +1,21 @@
+---
+title: "1711_The_MIT_Humanoid_Robot_Design_Motion_Planning_and_Control_Fo"
+authors:
+  - "Matthew Chignoli"
+  - "Donghyun Kim"
+  - "Elijah Stanger-Jones"
+  - "Sangbae Kim"
+date: "2021.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "MIT 휴머노이드 로봇이 고도의 동역학 운동(백플립, 전플립, 회전 점프)을 수행하기 위해 맞춤형 액추에이터 설계, actuator-aware kino-dynamic 모션 플래닝, 그리고 MPC와 WBIC을 통합한 착지 제어 시스템을 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Chignoli et al._2021_The MIT Humanoid Robot Design, Motion Planning, and Control For Acrobatic Behaviors.pdf"
+---
+
 # The MIT Humanoid Robot: Design, Motion Planning, and Control For Acrobatic Behaviors
 
 > **저자**: Matthew Chignoli, Donghyun Kim, Elijah Stanger-Jones, Sangbae Kim | **날짜**: 2021-04-19 | **URL**: [https://arxiv.org/abs/2104.09025](https://arxiv.org/abs/2104.09025)

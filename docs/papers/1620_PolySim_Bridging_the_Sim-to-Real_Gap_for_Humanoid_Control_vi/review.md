@@ -1,3 +1,22 @@
+---
+title: "1620_PolySim_Bridging_the_Sim-to-Real_Gap_for_Humanoid_Control_vi"
+authors:
+  - "Zixing Lei"
+  - "Zibo Zhou"
+  - "Sheng Yin"
+  - "Yueru Chen"
+  - "Qingyao Xu"
+date: "2025.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "PolySim은 여러 이질적인 시뮬레이터를 병렬로 활용하여 훈련하는 플랫폼으로, 단일 시뮬레이터의 귀납적 편향을 완화하고 현실 세계로의 전이 갭을 줄인다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Lei et al._2025_PolySim Bridging the Sim-to-Real Gap for Humanoid Control via Multi-Simulator Dynamics Randomizatio.pdf"
+---
+
 # PolySim: Bridging the Sim-to-Real Gap for Humanoid Control via Multi-Simulator Dynamics Randomization
 
 > **저자**: Zixing Lei, Zibo Zhou, Sheng Yin, Yueru Chen, Qingyao Xu, Weixin Li, Yunhong Wang, Bowei Tang, Wei Jing, Siheng Chen | **날짜**: 2025-10-02 | **URL**: [https://arxiv.org/abs/2510.01708](https://arxiv.org/abs/2510.01708)

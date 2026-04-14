@@ -1,3 +1,22 @@
+---
+title: "1759_Whole-Body_Model-Predictive_Control_of_Legged_Robots_with_Mu"
+authors:
+  - "John Z. Zhang"
+  - "Taylor A. Howell"
+  - "Zeji Yi"
+  - "Chaoyi Pan"
+  - "Guanya Shi"
+date: "2025.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "MuJoCo 물리엔진과 iterative LQR (iLQR) 알고리즘을 결합하여 사족 및 인형로봇의 전신 모델예측제어(MPC)를 실시간으로 수행하고, 간단한 방법으로도 현실 세계에 효과적으로 적용 가능함을 입증하는 연구이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2025_Whole-Body Model-Predictive Control of Legged Robots with MuJoCo.pdf"
+---
+
 # Whole-Body Model-Predictive Control of Legged Robots with MuJoCo
 
 > **저자**: John Z. Zhang, Taylor A. Howell, Zeji Yi, Chaoyi Pan, Guanya Shi, Guannan Qu, Tom Erez, Yuval Tassa, Zachary Manchester | **날짜**: 2025-03-06 | **URL**: [https://arxiv.org/abs/2503.04613](https://arxiv.org/abs/2503.04613)

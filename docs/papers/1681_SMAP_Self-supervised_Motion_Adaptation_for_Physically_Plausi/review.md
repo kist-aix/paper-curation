@@ -1,3 +1,22 @@
+---
+title: "1681_SMAP_Self-supervised_Motion_Adaptation_for_Physically_Plausi"
+authors:
+  - "Haoyu Zhao"
+  - "Sixu Lin"
+  - "Qingwei Ben"
+  - "Minyue Dai"
+  - "Hao Fei"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 인간 모션과 휴머노이드 로봇의 이질적 행동 공간 간 차이를 해결하기 위해 Vector-Quantized Periodic Autoencoder 기반의 Humanoid-Adapter를 제안하여 인간 모션을 물리적으로 타당한 로봇 모션으로 적응시키고, Teacher-Student 증류 학습을 통해 안정적인 전신 제어 정책을 학습한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhao et al._2025_SMAP Self-supervised Motion Adaptation for Physically Plausible Humanoid Whole-body Control.pdf"
+---
+
 # SMAP: Self-supervised Motion Adaptation for Physically Plausible Humanoid Whole-body Control
 
 > **저자**: Haoyu Zhao, Sixu Lin, Qingwei Ben, Minyue Dai, Hao Fei, Jingbo Wang, Hua Zou, Junting Dong | **날짜**: 2025-05-26 | **URL**: [https://arxiv.org/abs/2505.19463](https://arxiv.org/abs/2505.19463)

@@ -1,3 +1,21 @@
+---
+title: "1629_Quantum_deep_reinforcement_learning_for_humanoid_robot_navig"
+authors:
+  - "Romerik Lokossou"
+  - "Birhanu Shimelis Girma"
+  - "Ozan K. Tonguz"
+  - "Ahmed Biyabani"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "이 논문은 Soft Actor-Critic(SAC) 알고리즘을 parameterized quantum circuit으로 구현한 quantum deep reinforcement learning(QDRL)을 humanoid robot navigation 작업에 적용하여, 고차원 상태-행동 공간에서 고전적 RL보다 92% 더 적은 스텝으로 8% 높은 성능을 달성했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Lokossou et al._2025_Quantum deep reinforcement learning for humanoid robot navigation task.pdf"
+---
+
 # Quantum deep reinforcement learning for humanoid robot navigation task
 
 > **저자**: Romerik Lokossou, Birhanu Shimelis Girma, Ozan K. Tonguz, Ahmed Biyabani | **날짜**: 2025-09-14 | **URL**: [https://arxiv.org/abs/2509.11388](https://arxiv.org/abs/2509.11388)

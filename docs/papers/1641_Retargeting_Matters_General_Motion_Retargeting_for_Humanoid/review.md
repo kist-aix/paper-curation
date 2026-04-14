@@ -1,3 +1,22 @@
+---
+title: "1641_Retargeting_Matters_General_Motion_Retargeting_for_Humanoid"
+authors:
+  - "Joao Pedro Araujo"
+  - "Yanjie Ze"
+  - "Pei Xu"
+  - "Jiajun Wu"
+  - "C. Karen Liu"
+date: "2025.10"
+doi: "10.48550/arXiv.2510.02252"
+arxiv: ""
+score: 4.0
+essence: "본 논문은 휴머노이드 로봇의 모션 추적 성능에 미치는 리타겟팅 품질의 영향을 체계적으로 평가하고, 기존 리타겟팅 방법의 문제점을 해결하는 General Motion Retargeting (GMR)을 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Araujo et al._2025_Retargeting Matters General Motion Retargeting for Humanoid Motion Tracking.pdf"
+---
+
 # Retargeting Matters: General Motion Retargeting for Humanoid Motion Tracking
 
 > **저자**: Joao Pedro Araujo, Yanjie Ze, Pei Xu, Jiajun Wu, C. Karen Liu | **날짜**: 2025-10-02 | **DOI**: [10.48550/arXiv.2510.02252](https://doi.org/10.48550/arXiv.2510.02252)

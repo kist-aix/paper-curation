@@ -1,3 +1,22 @@
+---
+title: "1713_Thinking_in_360_Humanoid_Visual_Search_in_the_Wild"
+authors:
+  - "Heyang Yu"
+  - "Yinan Han"
+  - "Xiangyu Zhang"
+  - "Baiqiao Yin"
+  - "Bowen Chang"
+date: "2025.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간처럼 360° 파노라마 환경에서 머리 회전을 통해 능동적으로 물체를 탐색하거나 경로를 찾는 embodied 시각 탐색 에이전트를 제안하고, 실내 장면을 넘어 지하철역·쇼핑몰·거리 등 복잡한 현실 환경을 대상으로 한 H*Bench 벤치마크를 구축했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yu et al._2025_Thinking in 360° Humanoid Visual Search in the Wild.pdf"
+---
+
 # Thinking in 360°: Humanoid Visual Search in the Wild
 
 > **저자**: Heyang Yu, Yinan Han, Xiangyu Zhang, Baiqiao Yin, Bowen Chang, Xiangyu Han, Xinhao Liu, Jing Zhang, Marco Pavone, Chen Feng, Saining Xie, Yiming Li | **날짜**: 2025-11-25 | **URL**: [https://arxiv.org/abs/2511.20351](https://arxiv.org/abs/2511.20351)

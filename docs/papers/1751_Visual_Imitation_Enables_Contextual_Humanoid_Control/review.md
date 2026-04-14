@@ -1,3 +1,22 @@
+---
+title: "1751_Visual_Imitation_Enables_Contextual_Humanoid_Control"
+authors:
+  - "Arthur Allshire"
+  - "Hongsuk Choi"
+  - "Junyi Zhang"
+  - "David McAllister"
+  - "Anthony Zhang"
+date: "2025.05"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "VIDEOMIMIC는 단순한 휴대폰 영상에서 인간-환경 4D 기하학을 공동 재구성하고, 이를 시뮬레이션에서 RL 정책으로 학습한 후 실제 휴머노이드 로봇에 배포하는 real-to-sim-to-real 파이프라인이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Allshire et al._2025_Visual Imitation Enables Contextual Humanoid Control.pdf"
+---
+
 # Visual Imitation Enables Contextual Humanoid Control
 
 > **저자**: Arthur Allshire, Hongsuk Choi, Junyi Zhang, David McAllister, Anthony Zhang, Chung Min Kim, Trevor Darrell, Pieter Abbeel, Jitendra Malik, Angjoo Kanazawa | **날짜**: 2025-05-06 | **URL**: [https://arxiv.org/abs/2505.03729](https://arxiv.org/abs/2505.03729)

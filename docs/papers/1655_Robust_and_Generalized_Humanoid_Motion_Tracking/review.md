@@ -1,3 +1,22 @@
+---
+title: "1655_Robust_and_Generalized_Humanoid_Motion_Tracking"
+authors:
+  - "Yubiao Ma"
+  - "Han Yu"
+  - "Jiayin Xie"
+  - "Changtai Lv"
+  - "Qiang Luo"
+date: "2026.01"
+doi: "10.48550/arXiv.2601.23080"
+arxiv: ""
+score: 4.0
+essence: "휴머노이드 로봇의 일반적인 전신 제어를 위해 dynamics-conditioned command aggregation 프레임워크를 제안하며, 인과적 temporal encoder와 multi-head cross-attention을 결합하여 노이즈가 있는 참조 동작에 강건하게 대응한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ma et al._2026_Robust and Generalized Humanoid Motion Tracking.pdf"
+---
+
 # Robust and Generalized Humanoid Motion Tracking
 
 > **저자**: Yubiao Ma, Han Yu, Jiayin Xie, Changtai Lv, Qiang Luo, Chi Zhang, Yunpeng Yin, Boyang Xing, Xuemei Ren, Dongdong Zheng | **날짜**: 2026-01-30 | **DOI**: [10.48550/arXiv.2601.23080](https://doi.org/10.48550/arXiv.2601.23080)

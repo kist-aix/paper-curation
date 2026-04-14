@@ -1,3 +1,20 @@
+---
+title: "1674_Sim-to-Real_Learning_for_Humanoid_Box_Loco-Manipulation"
+authors:
+  - "Jeremy Dao"
+  - "Helei Duan"
+  - "Alan Fern"
+date: "2023.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 연구는 인간형 로봇 Digit의 박스 집기 및 운반 작업을 위해 강화학습 기반의 sim-to-real 접근법을 제시하며, 5가지 분리된 정책(걷기, 서기, 집기, 박스 들고 걷기, 박스 들고 서기)을 학습하여 실제 하드웨어에서 성공적으로 전이했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Dao et al._2023_Sim-to-Real Learning for Humanoid Box Loco-Manipulation.pdf"
+---
+
 # Sim-to-Real Learning for Humanoid Box Loco-Manipulation
 
 > **저자**: Jeremy Dao, Helei Duan, Alan Fern | **날짜**: 2023-10-04 | **URL**: [https://arxiv.org/abs/2310.03191](https://arxiv.org/abs/2310.03191)

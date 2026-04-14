@@ -1,3 +1,22 @@
+---
+title: "1648_RoboStriker_Hierarchical_Decision-Making_for_Autonomous_Huma"
+authors:
+  - "Kangning Yin"
+  - "Zhe Cao"
+  - "Wentao Dong"
+  - "Weishuai Zeng"
+  - "Tianyi Zhang"
+date: "2026.01"
+doi: "10.48550/arXiv.2601.22517"
+arxiv: ""
+score: 4.0
+essence: "RoboStriker는 인간 수준의 경쟁력 있는 휴머노이드 권투를 위해 높은 수준의 전략 추론과 낮은 수준의 물리적 실행을 분리하는 3단계 계층적 프레임워크를 제안한다. Motion capture 데이터로부터 학습된 동작 라이브러리를 구조화된 잠재 공간으로 압축한 후, Latent-Space NFSP를 통해 다중 에이전트 경쟁 학습을 수행한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Yin et al._2026_RoboStriker Hierarchical Decision-Making for Autonomous Humanoid Boxing.pdf"
+---
+
 # RoboStriker: Hierarchical Decision-Making for Autonomous Humanoid Boxing
 
 > **저자**: Kangning Yin, Zhe Cao, Wentao Dong, Weishuai Zeng, Tianyi Zhang, Qiang Zhang, Jingbo Wang, Jiangmiao Pang, Ming Zhou, Weinan Zhang | **날짜**: 2026-01-30 | **DOI**: [10.48550/arXiv.2601.22517](https://doi.org/10.48550/arXiv.2601.22517)

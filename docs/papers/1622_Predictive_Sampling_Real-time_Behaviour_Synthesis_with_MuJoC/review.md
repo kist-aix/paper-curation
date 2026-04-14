@@ -1,3 +1,22 @@
+---
+title: "1622_Predictive_Sampling_Real-time_Behaviour_Synthesis_with_MuJoC"
+authors:
+  - "Taylor Howell"
+  - "Nimrod Gileadi"
+  - "Saran Tunyasuvunakool"
+  - "Kevin Zakka"
+  - "Tom Erez"
+date: "2022.12"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "MuJoCo 물리 엔진 기반의 실시간 예측 제어 프레임워크 MJPC를 소개하고, 간단한 샘플링 기반 알고리즘인 Predictive Sampling이 기존의 더 복잡한 알고리즘들과 경쟁력 있음을 보여준다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Howell et al._2022_Predictive Sampling Real-time Behaviour Synthesis with MuJoCo.pdf"
+---
+
 # Predictive Sampling: Real-time Behaviour Synthesis with MuJoCo
 
 > **저자**: Taylor Howell, Nimrod Gileadi, Saran Tunyasuvunakool, Kevin Zakka, Tom Erez, Yuval Tassa | **날짜**: 2022-12-01 | **URL**: [https://arxiv.org/abs/2212.00541](https://arxiv.org/abs/2212.00541)

@@ -1,3 +1,22 @@
+---
+title: "1649_Robot_Crash_Course_Learning_Soft_and_Stylized_Falling"
+authors:
+  - "Pascal Strauch"
+  - "David Müller"
+  - "Sammy Christen"
+  - "Agon Serifi"
+  - "Ruben Grandia"
+date: "2025.11"
+doi: "10.48550/arXiv.2511.10635"
+arxiv: ""
+score: 4.0
+essence: "이 논문은 양족 로봇의 낙하 현상 자체에 초점을 맞춰, 충격을 최소화하면서 사용자가 지정한 목표 자세에 도달하도록 하는 강화학습 기반 낙하 정책을 제안한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Strauch et al._2025_Robot Crash Course Learning Soft and Stylized Falling.pdf"
+---
+
 # Robot Crash Course: Learning Soft and Stylized Falling
 
 > **저자**: Pascal Strauch, David Müller, Sammy Christen, Agon Serifi, Ruben Grandia, Espen Knoop, Moritz Bächer | **날짜**: 2025-11-13 | **DOI**: [10.48550/arXiv.2511.10635](https://doi.org/10.48550/arXiv.2511.10635)

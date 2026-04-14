@@ -1,3 +1,21 @@
+---
+title: "1636_Reference-Free_Sampling-Based_Model_Predictive_Control"
+authors:
+  - "Fabian Schramm"
+  - "Pierre Fabre"
+  - "Nicolas Perrin-Gilbert"
+  - "Justin Carpentier"
+date: "2025.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 사전정의된 보행 패턴이나 접촉 시퀀스 없이 MPPI 기반의 샘플링 기반 MPC 프레임워크를 제안하여 emergent locomotion을 실현한다. Cubic Hermite spline 파라미터화를 통해 위치와 속도 제어점을 동시에 최적화하여 실시간 CPU 기반 제어를 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Schramm et al._2025_Reference-Free Sampling-Based Model Predictive Control.pdf"
+---
+
 # Reference-Free Sampling-Based Model Predictive Control
 
 > **저자**: Fabian Schramm, Pierre Fabre, Nicolas Perrin-Gilbert, Justin Carpentier | **날짜**: 2025-11-24 | **URL**: [https://arxiv.org/abs/2511.19204](https://arxiv.org/abs/2511.19204)

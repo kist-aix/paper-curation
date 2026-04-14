@@ -1,3 +1,22 @@
+---
+title: "1666_Scaling_Large_Motion_Models_with_Million-Level_Human_Motions"
+authors:
+  - "Ye Wang"
+  - "Sipeng Zheng"
+  - "Bin Cao"
+  - "Qianshan Wei"
+  - "Weishuai Zeng"
+date: "2024.10"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "LLM의 성공에 영감을 받아 백만 단위 규모의 대규모 모션 데이터셋 MotionLib를 구축하고, 이를 기반으로 Being-M0 모델을 훈련하여 대규모 모션 생성 모델의 확장성을 입증하는 연구이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wang et al._2024_Scaling Large Motion Models with Million-Level Human Motions.pdf"
+---
+
 # Scaling Large Motion Models with Million-Level Human Motions
 
 > **저자**: Ye Wang, Sipeng Zheng, Bin Cao, Qianshan Wei, Weishuai Zeng, Qin Jin, Zongqing Lu | **날짜**: 2024-10-04 | **URL**: [https://arxiv.org/abs/2410.03311](https://arxiv.org/abs/2410.03311)

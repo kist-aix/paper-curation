@@ -1,3 +1,22 @@
+---
+title: "1631_RAPID_Hand_A_Robust_Affordable_Perception-Integrated_Dextero"
+authors:
+  - "Zhaoliang Wan"
+  - "Zetong Bi"
+  - "Zida Zhou"
+  - "Hao Ren"
+  - "Yiming Zeng"
+date: "2025.06"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RAPID Hand는 저비용의 20-DoF 다지형 로봇 손으로, 시각, 촉각, 고유감각을 통합한 멀티모달 인지 시스템과 고-DoF 원격조종 인터페이스를 함께 설계하여 로봇 자율성을 위한 고품질 조작 데이터 수집을 가능하게 한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Wan et al._2025_RAPID Hand A Robust, Affordable, Perception-Integrated, Dexterous Manipulation Platform for General.pdf"
+---
+
 # RAPID Hand: A Robust, Affordable, Perception-Integrated, Dexterous Manipulation Platform for Generalist Robot Autonomy
 
 > **저자**: Zhaoliang Wan, Zetong Bi, Zida Zhou, Hao Ren, Yiming Zeng, Yihan Li, Lu Qi, Xu Yang, Ming-Hsuan Yang, Hui Cheng | **날짜**: 2025-06-09 | **URL**: [https://arxiv.org/abs/2506.07490](https://arxiv.org/abs/2506.07490)

@@ -1,3 +1,22 @@
+---
+title: "1758_Whole-body_Humanoid_Robot_Locomotion_with_Human_Reference"
+authors:
+  - "Qiang Zhang"
+  - "Peter Cui"
+  - "David Yan"
+  - "Jingkai Sun"
+  - "Yiqun Duan"
+date: "2024.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "인간의 보행 데이터를 활용한 모방 학습 프레임워크를 통해 풀사이즈 휴머노이드 로봇 Adam이 인간 수준의 보행 성능을 달성하는 방법을 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2024_Whole-body Humanoid Robot Locomotion with Human Reference.pdf"
+---
+
 # Whole-body Humanoid Robot Locomotion with Human Reference
 
 > **저자**: Qiang Zhang, Peter Cui, David Yan, Jingkai Sun, Yiqun Duan, Gang Han, Wen Zhao, Weining Zhang, Yijie Guo, Arthur Zhang, Renjing Xu | **날짜**: 2024-02-28 | **URL**: [https://arxiv.org/abs/2402.18294](https://arxiv.org/abs/2402.18294)

@@ -1,3 +1,22 @@
+---
+title: "1658_RPL_Learning_Robust_Humanoid_Perceptive_Locomotion_on_Challe"
+authors:
+  - "Yuanhang Zhang"
+  - "Younggyo Seo"
+  - "Juyue Chen"
+  - "Yifu Yuan"
+  - "Koushil Sreenath"
+date: "2026.02"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RPL은 두 단계 학습 프레임워크로 terrain-specific 전문가 정책을 depth 카메라 기반 transformer 정책으로 증류하여, 복잡한 지형에서 payload를 탑재한 상태의 견고한 다방향 인형로봇 보행을 실현한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Zhang et al._2026_RPL Learning Robust Humanoid Perceptive Locomotion on Challenging Terrains.pdf"
+---
+
 # RPL: Learning Robust Humanoid Perceptive Locomotion on Challenging Terrains
 
 > **저자**: Yuanhang Zhang, Younggyo Seo, Juyue Chen, Yifu Yuan, Koushil Sreenath, Pieter Abbeel, Carmelo Sferrazza, Karen Liu, Rocky Duan, Guanya Shi | **날짜**: 2026-02-03 | **URL**: [https://arxiv.org/abs/2602.03002](https://arxiv.org/abs/2602.03002)

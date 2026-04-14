@@ -1,3 +1,18 @@
+---
+title: "1717_GraspSense_언어_기반_인지와_힘_맵을_활용한_손재주_로봇_파지_계획"
+authors:
+  - "| **날짜**: 2026-04-07"
+date: "2026.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "오브젝트의 공간적으로 비균일한 기계적 성질을 고려한 force map 기반 파지 계획 파이프라인을 제안하여, 기하학적으로 동등한 파지 후보들 중 구조적으로 안전한 접촉 영역을 선택하고 손가락별 임피던스를 조절하는 접근법을 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/2604.05697.pdf"
+---
+
 # GraspSense: 언어 기반 인지와 힘 맵을 활용한 손재주 로봇 파지 계획
 
 > **저자**:  | **날짜**: 2026-04-07 | **URL**: [https://arxiv.org/abs/2604.05697](https://arxiv.org/abs/2604.05697)

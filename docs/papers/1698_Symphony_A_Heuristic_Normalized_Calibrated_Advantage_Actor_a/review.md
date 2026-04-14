@@ -1,3 +1,22 @@
+---
+title: "1698_Symphony_A_Heuristic_Normalized_Calibrated_Advantage_Actor_a"
+authors:
+  - "Timur Ishuov"
+  - "Michele Folgheraiter"
+  - "Madi Nurmanov"
+  - "Goncalo Gordo"
+  - "Richárd Farkas"
+date: "2025.12"
+doi: ""
+arxiv: ""
+score: 3.0
+essence: "Symphony는 휴머노이드 로봇을 안전하게 훈련하기 위해 Swaddling 정규화, Fading Replay Buffer, Temporal Advantage를 결합한 결정론적 Actor-Critic 알고리즘이다. 제한된 parametric noise와 action strength 조절을 통해 sample efficiency, safety, smooth motion을 동시에 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ishuov et al._2025_Symphony A Heuristic Normalized Calibrated Advantage Actor and Critic Algorithm in application for.pdf"
+---
+
 # Symphony: A Heuristic Normalized Calibrated Advantage Actor and Critic Algorithm in application for Humanoid Robots
 
 > **저자**: Timur Ishuov, Michele Folgheraiter, Madi Nurmanov, Goncalo Gordo, Richárd Farkas, József Dombi | **날짜**: 2025-12-11 | **URL**: [https://arxiv.org/abs/2512.10477](https://arxiv.org/abs/2512.10477)

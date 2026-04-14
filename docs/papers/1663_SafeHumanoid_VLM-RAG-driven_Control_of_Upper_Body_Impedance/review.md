@@ -1,3 +1,22 @@
+---
+title: "1663_SafeHumanoid_VLM-RAG-driven_Control_of_Upper_Body_Impedance"
+authors:
+  - "Yara Mahmoud"
+  - "Jeffrin Sam"
+  - "Nguyen Khang"
+  - "Marcelino Fernando"
+  - "Issatay Tokmurziyev"
+date: "2025.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "SafeHumanoid는 Vision Language Model(VLM)과 Retrieval-Augmented Generation(RAG)을 활용하여 휴머노이드 로봇의 임피던스와 속도를 동적으로 조정하는 시스템으로, 인간-로봇 상호작용 시 안전성과 작업 완료를 동시에 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Mahmoud et al._2025_SafeHumanoid VLM-RAG-driven Control of Upper Body Impedance for Humanoid Robot.pdf"
+---
+
 # SafeHumanoid: VLM-RAG-driven Control of Upper Body Impedance for Humanoid Robot
 
 > **저자**: Yara Mahmoud, Jeffrin Sam, Nguyen Khang, Marcelino Fernando, Issatay Tokmurziyev, Miguel Altamirano Cabrera, Muhammad Haris Khan, Artem Lykov, Dzmitry Tsetserukou | **날짜**: 2025-11-28 | **URL**: [https://arxiv.org/abs/2511.23300](https://arxiv.org/abs/2511.23300)

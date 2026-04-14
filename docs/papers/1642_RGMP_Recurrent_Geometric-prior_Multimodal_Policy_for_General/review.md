@@ -1,3 +1,22 @@
+---
+title: "1642_RGMP_Recurrent_Geometric-prior_Multimodal_Policy_for_General"
+authors:
+  - "Xuetao Li"
+  - "Wenke Huang"
+  - "Nengyuan Pan"
+  - "Kaiyan Zhao"
+  - "Songhua Yang"
+date: "2025.11"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "기하학적 추론과 데이터 효율성을 결합한 RGMP는 humanoid robot 조작을 위해 Geometric-prior Skill Selector와 Adaptive Recursive Gaussian Network를 통합하여 87% 성공률과 5배 데이터 효율을 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_RGMP Recurrent Geometric-prior Multimodal Policy for Generalizable Humanoid Robot Manipulation.pdf"
+---
+
 # RGMP: Recurrent Geometric-prior Multimodal Policy for Generalizable Humanoid Robot Manipulation
 
 > **저자**: Xuetao Li, Wenke Huang, Nengyuan Pan, Kaiyan Zhao, Songhua Yang, Yiming Wang, Mengde Li, Mang Ye, Jifeng Xuan, Miao Li | **날짜**: 2025-11-12 | **URL**: [https://arxiv.org/abs/2511.09141](https://arxiv.org/abs/2511.09141)

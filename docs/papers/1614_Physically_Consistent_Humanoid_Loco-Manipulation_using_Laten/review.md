@@ -1,3 +1,21 @@
+---
+title: "1614_Physically_Consistent_Humanoid_Loco-Manipulation_using_Laten"
+authors:
+  - "Ilyass Taouil"
+  - "Haizhou Zhao"
+  - "Angela Dai"
+  - "Majid Khadiv"
+date: "2025.04"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "본 논문은 Latent Diffusion Model(LDM)을 활용하여 인간-물체 상호작용 장면을 생성하고, 이로부터 추출한 접촉 위치와 로봇 구성을 whole-body trajectory optimization에 활용하여 인형로봇의 물리적으로 일관성 있는 장기 조작 계획을 수립한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Taouil et al._2025_Physically Consistent Humanoid Loco-Manipulation using Latent Diffusion Models.pdf"
+---
+
 # Physically Consistent Humanoid Loco-Manipulation using Latent Diffusion Models
 
 > **저자**: Ilyass Taouil, Haizhou Zhao, Angela Dai, Majid Khadiv | **날짜**: 2025-04-23 | **URL**: [https://arxiv.org/abs/2504.16843](https://arxiv.org/abs/2504.16843)

@@ -1,3 +1,22 @@
+---
+title: "1639_Residual_Off-Policy_RL_for_Finetuning_Behavior_Cloning_Polic"
+authors:
+  - "Lars Ankile"
+  - "Zhenyu Jiang"
+  - "Rocky Duan"
+  - "Guanya Shi"
+  - "Pieter Abbeel"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "Behavior Cloning(BC) 정책을 기반으로 Residual Off-Policy RL을 적용하여 샘플 효율적으로 조작 정책을 개선하며, 고자유도 이족 로봇에서의 첫 실시간 RL 학습을 달성했다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Ankile et al._2025_Residual Off-Policy RL for Finetuning Behavior Cloning Policies.pdf"
+---
+
 # Residual Off-Policy RL for Finetuning Behavior Cloning Policies
 
 > **저자**: Lars Ankile, Zhenyu Jiang, Rocky Duan, Guanya Shi, Pieter Abbeel, Anusha Nagabandi | **날짜**: 2025-09-23 | **URL**: [https://arxiv.org/abs/2509.19301](https://arxiv.org/abs/2509.19301)

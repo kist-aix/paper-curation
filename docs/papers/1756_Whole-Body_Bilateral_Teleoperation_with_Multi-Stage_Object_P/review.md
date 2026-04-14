@@ -1,3 +1,21 @@
+---
+title: "1756_Whole-Body_Bilateral_Teleoperation_with_Multi-Stage_Object_P"
+authors:
+  - "Donghoon Baek"
+  - "Amartya Purushottam"
+  - "Jason J. Choi"
+  - "Joao Ramos"
+date: "2025.08"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "휠 달린 인간형 로봇의 원격조종 시스템에 다단계 물체 관성 매개변수 온라인 추정을 통합하여, 무거운 물체의 들기·운반 작업을 동적으로 수행할 수 있는 프레임워크를 제시한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Baek et al._2025_Whole-Body Bilateral Teleoperation with Multi-Stage Object Parameter Estimation for Wheeled Humanoid.pdf"
+---
+
 # Whole-Body Bilateral Teleoperation with Multi-Stage Object Parameter Estimation for Wheeled Humanoid Locomanipulation
 
 > **저자**: Donghoon Baek, Amartya Purushottam, Jason J. Choi, Joao Ramos | **날짜**: 2025-08-13 | **URL**: [https://arxiv.org/abs/2508.09846](https://arxiv.org/abs/2508.09846)

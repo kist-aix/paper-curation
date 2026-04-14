@@ -1,3 +1,22 @@
+---
+title: "1755_Walk_the_PLANC_Physics-Guided_RL_for_Agile_Humanoid_Locomoti"
+authors:
+  - "Min Dai"
+  - "William D. Compton"
+  - "Junheng Li"
+  - "Lizhi Yang"
+  - "Aaron D. Ames"
+date: "2026.01"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "이 논문은 감소된 차수의 발판 계획기와 Control Lyapunov Function (CLF) 기반 보상을 통해 물리학 기반 구조로 강화학습을 안내하여, 제한된 발판에서 인간형 로봇의 정밀한 보행을 달성한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Dai et al._2026_Walk the PLANC Physics-Guided RL for Agile Humanoid Locomotion on Constrained Footholds.pdf"
+---
+
 # Walk the PLANC: Physics-Guided RL for Agile Humanoid Locomotion on Constrained Footholds
 
 > **저자**: Min Dai, William D. Compton, Junheng Li, Lizhi Yang, Aaron D. Ames | **날짜**: 2026-01-09 | **URL**: [https://arxiv.org/abs/2601.06286](https://arxiv.org/abs/2601.06286)

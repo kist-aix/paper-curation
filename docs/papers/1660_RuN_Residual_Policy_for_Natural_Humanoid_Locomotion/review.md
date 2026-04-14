@@ -1,3 +1,22 @@
+---
+title: "1660_RuN_Residual_Policy_for_Natural_Humanoid_Locomotion"
+authors:
+  - "Qingpeng Li"
+  - "Chengrui Zhu"
+  - "Yanming Wu"
+  - "Xin Yuan"
+  - "Zhen Zhang"
+date: "2025.09"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "RuN은 Conditional Motion Generator를 통한 운동학적 모션 프라이어와 강화학습 기반 residual policy를 분리하여, 인형로봇의 자연스러운 보행-달리기 전환을 실현하는 decoupled residual learning 프레임워크이다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Li et al._2025_RuN Residual Policy for Natural Humanoid Locomotion.pdf"
+---
+
 # RuN: Residual Policy for Natural Humanoid Locomotion
 
 > **저자**: Qingpeng Li, Chengrui Zhu, Yanming Wu, Xin Yuan, Zhen Zhang, Jian Yang, Yong Liu | **날짜**: 2025-09-25 | **URL**: [https://arxiv.org/abs/2509.20696](https://arxiv.org/abs/2509.20696)

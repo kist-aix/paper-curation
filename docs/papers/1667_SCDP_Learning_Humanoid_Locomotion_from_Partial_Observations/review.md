@@ -1,3 +1,22 @@
+---
+title: "1667_SCDP_Learning_Humanoid_Locomotion_from_Partial_Observations"
+authors:
+  - "Milo Carroll"
+  - "Tianhu Peng"
+  - "Lingfan Bao"
+  - "Chengxu Zhou"
+  - "Zhibin Li"
+date: "2026.03"
+doi: ""
+arxiv: ""
+score: 4.0
+essence: "온보드 센서만으로 휴머노이드 보행을 학습하기 위해 mixed-observation distillation을 사용하는 SCDP(Sensor-Conditioned Diffusion Policies)를 제안하며, diffusion model이 센서 이력에 조건화되면서 privileged 미래 상태-행동 궤적을 예측하도록 학습한다."
+tags:
+  - "cat/Other"
+  - "topic/humanoid"
+pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Carroll et al._2026_SCDP Learning Humanoid Locomotion from Partial Observations via Mixed-Observation Distillation.pdf"
+---
+
 # SCDP: Learning Humanoid Locomotion from Partial Observations via Mixed-Observation Distillation
 
 > **저자**: Milo Carroll, Tianhu Peng, Lingfan Bao, Chengxu Zhou, Zhibin Li | **날짜**: 2026-03-10 | **URL**: [https://arxiv.org/abs/2603.09574](https://arxiv.org/abs/2603.09574)
