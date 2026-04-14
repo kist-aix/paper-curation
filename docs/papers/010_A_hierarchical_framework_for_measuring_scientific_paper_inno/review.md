@@ -6,7 +6,7 @@
 
 ## Essence
 
-![Figure 2](figures/fig2.png)
+![Figure 2](figures/fig2.webp)
 
 *Figure 2.1: The composite robot model used in the simulation, illustrating (a) the Unitree H1*
 
@@ -21,7 +21,7 @@
 
 ## Achievement
 
-![Figure 3](figures/fig3.png)
+![Figure 3](figures/fig3.webp)
 
 *Figure 3.1: Training performance of the PPO agent over 500 million environment steps. (a)*
 
@@ -32,7 +32,7 @@
 
 ## How
 
-![Figure 2](figures/fig2.png)
+![Figure 2](figures/fig2.webp)
 
 *Figure 2.1: The composite robot model used in the simulation, illustrating (a) the Unitree H1*
 

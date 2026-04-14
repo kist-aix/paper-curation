@@ -1,117 +1,70 @@
----
-title: "621_Physics-informed_neural_network_for_multi-objective_design_o"
-authors:
-  - "Gwangwoo Han"
-  - "Jikyum Kim"
-  - "Joo Hyun Moon"
-  - "Young Jik Youn"
-date: "2026.06"
-doi: "10.1016/j.icheatmasstransfer.2026.111105"
-arxiv: ""
-score: 4.0
-essence: "본 논문은 물리정보신경망(Physics-Informed Neural Networks, PINNs)을 위킹리스 열지면(wickless thermal ground plane)의 다목적 설계 최적화에 적용한 연구이다. 전통적 수치해석 방법의 메시 생성 시간과 계산 복잡도를 해결하면서도 데이터 기반 학습을 통해 효율적인 열관리 장치 설계를 가능하게 한다."
-tags:
-  - "cat/AI-Driven_Materials_and_Drug_Discovery"
-  - "sub/Neural_Differential_Equations"
-  - "topic/ai4s"
-pdf: "C:/Users/jehyu/GoogleDrive/Zotero/Han et al._2026_Physics-informed neural network for multi-objective design optimization of wickless thermal ground p.pdf"
----
+# Physics-Informed Neural Networks with Unscented Kalman Filter for Sensorless Joint Torque Estimation in Humanoid Robots
 
-# Physics-informed neural network for multi-objective design optimization of wickless thermal ground planes
-
-> **저자**: Gwangwoo Han, Jikyum Kim, Joo Hyun Moon, Young Jik Youn | **날짜**: 06/2026 | **DOI**: [10.1016/j.icheatmasstransfer.2026.111105](https://doi.org/10.1016/j.icheatmasstransfer.2026.111105)
+> **저자**: Ines Sorrentino, Giulio Romualdi, Lorenzo Moretti, Silvio Traversaro, Daniele Pucci | **날짜**: 2025-07-14 | **URL**: [https://arxiv.org/abs/2507.10105](https://arxiv.org/abs/2507.10105)
 
 ---
 
 ## Essence
 
-본 논문은 물리정보신경망(Physics-Informed Neural Networks, PINNs)을 위킹리스 열지면(wickless thermal ground plane)의 다목적 설계 최적화에 적용한 연구이다. 전통적 수치해석 방법의 메시 생성 시간과 계산 복잡도를 해결하면서도 데이터 기반 학습을 통해 효율적인 열관리 장치 설계를 가능하게 한다.
+![Figure 2](figures/fig2.webp)
+
+*Fig. 2: Block diagram of the multi-layer torque control architecture implemented on the ergoCub humanoid robot. The*
+
+본 논문은 Physics-Informed Neural Networks (PINNs)와 Unscented Kalman Filter (UKF)를 결합하여 휴머노이드 로봇의 관절 토크 센서 없이 전신 토크 제어를 수행하는 프레임워크를 제시한다. 이 방식은 마찰 모델링과 토크 추정을 통합하여 실시간 토크 제어 아키텍처를 구현한다.
 
 ## Motivation
 
-- **Known**: 전자기기의 열 관리는 성능과 신뢰성을 위해 필수적이며, 위킹리스 열지면은 수동 냉각 솔루션으로 각광받고 있음. 기존 열전달 해석은 유한요소법(FEM) 등으로 계산 비용이 높음.
-
-- **Gap**: 전통적 수치해석은 메시 생성이 시간 소모적이고, 복잡한 기하학 및 다중 물리 현상 통합 시 비효율적. 최적화 과정에서 반복 계산으로 인한 막대한 비용.
-
-- **Why**: 신경망 기반 대체 모델(surrogate model)을 통해 빠른 성능 예측과 다목적 설계 최적화가 가능. PINNs는 물리법칙을 직접 손실함수에 포함시켜 적은 데이터로도 정확도 유지.
-
-- **Approach**: 열전달 지배방정식(Navier-Stokes, 열방정식)을 신경망에 내재화한 PINNs 모델을 구축하고, 열저항·온도분포·가열성능 등 다중 목적함수를 동시에 최적화.
+- **Known**: 기존 토크 제어는 직접 토크 측정에 의존하거나 Recursive Newton-Euler Algorithm (RNEA) 같은 모델 기반 방법을 사용하며, 마찰 추정은 Coulomb, viscous, LuGre, Stribeck 모델 등을 활용한다.
+- **Gap**: floating-base 휴머노이드 로봇에서 실시간 마찰 보상을 위한 PINNs 적용이 거의 미개척 상태이며, 기존 sensorless 토크 제어 방법들은 복잡한 마찰 동역학 및 고비율 감속기의 탄성 변형을 정확히 모델링하지 못한다.
+- **Why**: 센서 없는 토크 제어는 비용, 통합 복잡도, 센서 제약을 제거하면서도 동적 환경에서 안전하고 적응적인 인간-로봇 상호작용과 준수성(compliance)을 가능하게 한다.
+- **Approach**: PINNs는 모터 및 관절 속도 버퍼를 입력으로 사용하여 비선형 정적 및 동적 마찰을 추정하고, UKF는 PINN 기반 마찰 추정값을 직접 측정 입력으로 활용하여 floating-base 시스템의 관절 토크를 실시간으로 추정한다.
 
 ## Achievement
 
-![Fig. 2](figures/fig2.webp) *PINN 기반 열지면 시뮬레이터의 구조도*
+![Figure 4](figures/fig4.webp)
 
-1. **고속 성능 예측**: 기존 FEM 대비 수백 배 빠른 계산 속도로 실시간 최적화 가능 (메시 생성 불필요, 자동미분 활용)
+*Fig. 4: CoM tracking comparison: RNEA-PINN (left) vs. UKF-PINN (right). Green rectangles indicate external contacts.*
 
-2. **높은 정확도 유지**: 제한된 실험 데이터와 물리 제약조건을 결합하여 적은 학습 데이터로도 전통 수치해석 수준의 정확도 달성
-
-3. **다목적 최적화 성공**: 열저항(thermal resistance) 최소화, 온도균일성 확보, 제조 제약 만족을 동시에 달성하는 파레토 최적해 도출
+- **개선된 토크 추적 정확도**: RNEA 대비 토크 추적 RMSE가 감소하고 동적 밸런싱 실험에서 우수한 외란 거부 특성을 달성
+- **에너지 효율 향상**: RNEA 대비 향상된 에너지 효율을 달성
+- **확장성**: 서로 다른 마찰 특성을 가진 유사 하드웨어 플랫폼 간에 재식별 없이 일관된 성능 유지
+- **실시간 제어**: 전신 토크 제어 아키텍처 내에서 실시간 구현 가능
+- **비교 우위**: 위치 제어와의 비교 분석에서 제안된 토크 제어 접근법의 장점 입증
 
 ## How
 
-![Fig. 3](figures/fig3.webp) *다목적 최적화 결과의 레이더 맵 시각화*
+![Figure 2](figures/fig2.webp)
 
-- **신경망 구조**: U_NN(w,b)으로 온도장 U(x,t) 표현, 자동미분으로 편미분(∂U/∂t, ∇²U 등) 자동 계산
+*Fig. 2: Block diagram of the multi-layer torque control architecture implemented on the ergoCub humanoid robot. The*
 
-- **손실함수 구성**:
-  - 지배방정식 잔차(PDE residual): ∂T/∂t + ∇·(ρc_p T v) - ∇·(k∇T) = 0
-  - 경계조건 제약 (고정 열원, 대칭조건 등)
-  - 초기조건 일치
-  - 가중치 적응화(adaptive weights)로 각 항의 학습 우선순위 동적 조정
-
-- **최적화 전략**:
-  - 신경망 매개변수 학습: Adam 옵티마이저로 손실함수 최소화
-  - 설계변수(기하형상, 물성치 등)에 대한 그래디언트 기반 최적화
-  - 유전알고리즘(GA) 또는 다중목적 최적화(NSGA-II) 병행
-
-- **검증**: 실험 데이터와 기존 CFD 시뮬레이션 결과와 비교
+- 모터 및 관절 속도 버퍼를 입력으로 하는 PINN 아키텍처 설계로 정적 마찰 캡처
+- 관절 인코더 해상도 제약을 극복하기 위해 smoothing Kalman Filter를 활용한 속도 추정
+- PINN으로부터의 마찰 토크 추정값을 UKF의 직접 측정 입력으로 통합
+- UKF 공식화를 fixed-base에서 floating-base 시스템으로 확장
+- multi-layer 토크 제어 아키텍처 구현으로 전신 시스템 제어
+- ergoCub 휴머노이드 로봇에서의 동적 밸런싱 실험을 통한 검증
 
 ## Originality
 
-- **물리제약 신경망의 열전달 응용**: PINNs를 열관리 부품 설계에 처음 적용하여 과학적 머신러닝(Scientific ML)의 실무 활용 확대
-
-- **다목적 설계 최적화 프레임워크**: 열지면의 복합 성능지표(열저항, 온도분포, 제조성)를 일괄 처리하는 통합 최적화 플랫폼 구축
-
-- **데이터 효율성**: 제한된 실험/시뮬레이션 데이터로도 높은 정확도 달성 (기존 데이터 기반 머신러닝의 한계 극복)
-
-- **메시 프리 방식**: 격자 생성의 번거로움을 제거하여 복잡 기하학에 대한 적응성 향상
+- floating-base 휴머노이드 로봇의 실시간 마찰 보상을 위한 PINNs-UKF 통합 프레임워크는 기존 연구와 구별되는 것으로, 이전 연구들은 주로 오프라인 모델링이나 매개변수 식별에 중점
+- 모터 및 관절 속도 버퍼를 활용하여 정적 마찰 추정 능력 강화
+- PINN 기반 마찰 추정값을 UKF 측정 입력으로 직접 활용하는 혁신적 통합 방식
+- 고비율 감속기(high-ratio harmonic drives)가 있는 전기 모터 시스템을 위한 특화된 설계
 
 ## Limitation & Further Study
 
-- **신경망 일반화**: 학습 범위 밖의 설계 조건(극단적 매개변수)에서 예측 신뢰도 저하 가능성
-
-- **고차원 문제**: 설계변수가 크게 증가할 경우 신경망 훈련 복잡도 및 수렴 어려움
-
-- **물리법칙 완전성**: 열지면 내 상변화, 습도 영향 등 미모델링 현상에 대한 확장 필요
-
-- **후속 연구**:
-  - 강화학습(RL)과 결합한 실시간 적응형 설계
-  - 전자기 및 구조 해석과의 멀티피직스 통합
-  - 제조 편차를 고려한 확률론적 설계 로버스트화
-  - 실제 제품 제조 후 성능 검증 및 모델 재보정
+- 단일 로봇 플랫폼(ergoCub)에서의 검증이 주가 되어 다양한 로봇 형태에 대한 일반화 가능성 미확인
+- PINN 네트워크의 학습에 필요한 데이터 수집 및 라벨링 과정, 최적 네트워크 구조 결정 프로세스 상세 기술 부족
+- 외부 충격(external contacts) 상황에서의 성능 평가가 제한적이며, 극단적 동역학 환경에서의 견고성 검증 필요
+- UKF와 PINN의 매개변수 튜닝에 대한 민감도 분석 미시행
+- 후속 연구에서는 다양한 로봇 플랫폼, 극한 환경, 강화학습을 통한 적응적 제어 전략 탐색 필요
 
 ## Evaluation
 
-- **Novelty**: 4.5/5 - PINNs의 열전달 응용은 선도적이나, PINNs 자체는 기존 기법. 다목적 최적화 통합은 참신함.
+- Novelty: 4/5
+- Technical Soundness: 3/5
+- Significance: 4/5
+- Clarity: 4/5
+- Overall: 4/5
 
-- **Technical Soundness**: 4/5 - 물리방정식 포함, 자동미분, 손실함수 설계가 견고함. 다만 적응가중치 상세 및 수렴성 증명 부족.
-
-- **Significance**: 4.5/5 - 전자기기 열관리의 실제 설계 문제에 직접 적용 가능하며 산업적 파급력이 높음.
-
-- **Clarity**: 3.5/5 - 신경망 아키텍처, 초기조건/경계조건 설정 상세 기술 필요. 레이더 맵 해석 설명 부족.
-
-- **Overall**: 4/5
-
-**총평**: 본 논문은 PINNs를 위킹리스 열지면의 다목적 최적화에 효과적으로 적용하여 계산 속도와 정확도 양립을 실현했다. 메시 프리 방식과 물리제약 통합으로 산업적 가치가 높으나, 신경망 일반화 능력과 고차원 확장성에 대한 심화 분석이 요구된다.
-
-## Related Papers
-
-- 🔄 다른 접근: [[papers/622_Physics-Informed_Neural_Operator_for_Electromagnetic_Inverse/review]] — 물리 정보 신경망의 다목적 설계 최적화와 전자기 역산란 문제라는 서로 다른 공학적 응용을 보여준다.
-- 🏛 기반 연구: [[papers/618_Physical_formula_enhanced_multi-task_learning_for_pharmacoki/review]] — 물리 제약을 신경망에 통합하는 방법론이 열관리 장치 설계 최적화의 기술적 기반이 된다.
-- 🔗 후속 연구: [[papers/721_Scientific_Machine_Learning_through_Physics-Informed_Neural/review]] — 과학적 기계학습을 위한 물리 정보 신경망의 일반적 프레임워크를 열관리 설계에 구체적으로 적용한다.
-- 🔄 다른 접근: [[papers/576_Nonlinear_stochastic_and_quantum_motion_from_Coulomb_forces/review]] — 물리 정보를 신경망에 통합한다는 공통점이 있지만 쿨롱 상호작용의 비선형 효과와 열관리 설계라는 다른 물리 현상을 다룬다.
-- 🔄 다른 접근: [[papers/618_Physical_formula_enhanced_multi-task_learning_for_pharmacoki/review]] — 물리 정보를 신경망에 통합한다는 공통 접근법이지만 약동학 예측과 열관리 설계라는 다른 응용 분야를 다룬다.
-- 🔄 다른 접근: [[papers/622_Physics-Informed_Neural_Operator_for_Electromagnetic_Inverse/review]] — 물리 정보 신경 연산자를 전자기 역산란과 열관리 설계라는 서로 다른 물리 문제에 적용한 사례들이다.
-- 🧪 응용 사례: [[papers/758_Simulations_in_the_era_of_exascale_computing/review]] — 엑사스케일 컴퓨팅의 발전이 물리 정보 신경망을 활용한 대규모 다목적 설계 최적화를 가능하게 한다.
-- 🏛 기반 연구: [[papers/911_Resummation_of_the_C-Parameter_Sudakov_Shoulder_Using_Effect/review]] — 물리학 기반 신경망을 활용한 전자기 역문제 해결 기법이 유효장이론의 재합 계산에 활용될 수 있는 기초 방법론을 제공한다.
-- 🧪 응용 사례: [[papers/456_Lang-PINN_From_Language_to_Physics-Informed_Neural_Networks/review]] — 다목적 설계를 위한 물리 정보 신경망의 구체적 응용 사례를 보여준다.
+**총평**: 본 논문은 PINNs과 UKF의 혁신적 통합을 통해 센서 없는 토크 제어라는 실질적 문제를 해결하며, ergoCub에서의 엄밀한 실험 검증과 확장성 시연으로 휴머노이드 로봇의 실시간 준수 제어를 위한 강력한 기초를 제공한다.

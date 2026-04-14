@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GraspDreamer: 생성형 인간 시연 기반 기능적 파지 모방 학습</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; line-height: 1.7; color: #333; background: #f0f2f5; }
+h1 { font-size: 1.4rem; color: #1a1a2e; border-bottom: 3px solid #D63423; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+h2 { font-size: 1.1rem; color: #D63423; margin: 0 0 0.6rem; padding: 0; border: none; }
+h3 { font-size: 1rem; color: #333; margin: 0.8rem 0 0.4rem; }
+p { margin: 0.4rem 0; font-size: 0.93rem; }
+blockquote { border-left: 4px solid #D63423; margin: 0.8rem 0; padding: 0.6rem 1rem; background: #f0f4f8; border-radius: 0 8px 8px 0; font-size: 0.88rem; color: #555; }
+ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+li { margin: 0.2rem 0; font-size: 0.93rem; }
+.section-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; width: 100%; }
+th, td { border: 1px solid #e0e0e0; padding: 6px 12px; text-align: left; }
+th { background: #D63423; color: white; font-weight: 600; font-size: 0.82rem; }
+tr:nth-child(even) { background: #f8f9fa; }
+td:last-child { text-align: center; font-weight: 600; color: #D63423; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.eval-badge { background: #FEF0EF; color: #A62018; padding: 0.2rem 0.7rem; border-radius: 14px; font-size: 0.8rem; font-weight: 600; }
+.essence-box { border: 2px solid #8B1A1A; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: #FDF8F8; }
+.essence-box h2 { color: #8B1A1A; margin: 0 0 0.5rem; border: none; padding: 0; }
+code { background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+img { max-width: min(100%, 700px); border: 1px solid #e8e8e8; border-radius: 8px; margin: 0.8rem auto; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+hr { border: none; border-top: 1px solid #e0e0e0; margin: 0.5rem 0; }
+strong { color: #1a1a2e; }
+a { color: #A62018; }
+.back { margin-top: 1.5rem; padding: 0.8rem 0; border-top: 2px solid #e0e0e0; }
+.back a { font-weight: 600; text-decoration: none; }
+.back a:hover { text-decoration: underline; }
+.connections-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1.2rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.connections-box h2 { color: #D63423; margin: 0 0 0.8rem; border: none; padding: 0; font-size: 1.05rem; }
+.conn-item { border-left: 3px solid #ddd; padding: 0.6rem 0 0.6rem 1rem; margin-bottom: 0.6rem; }
+.conn-item.alternative { border-left-color: #3B82F6; }
+.conn-item.extension { border-left-color: #10B981; }
+.conn-item.foundation { border-left-color: #8B5CF6; }
+.conn-item.counterpoint { border-left-color: #F59E0B; }
+.conn-item.application { border-left-color: #EF4444; }
+.conn-type { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin-bottom: 0.15rem; }
+.conn-item.alternative .conn-type { color: #3B82F6; }
+.conn-item.extension .conn-type { color: #10B981; }
+.conn-item.foundation .conn-type { color: #8B5CF6; }
+.conn-item.counterpoint .conn-type { color: #F59E0B; }
+.conn-item.application .conn-type { color: #EF4444; }
+.conn-title { font-size: 0.9rem; font-weight: 600; }
+.conn-title a { color: #1a1a2e; text-decoration: none; }
+.conn-title a:hover { color: #D63423; text-decoration: underline; }
+.conn-reason { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+.review-fig { text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }
+.review-fig img { max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }
+.fig-caption { font-size: 0.85rem; color: #888; margin-top: 0.5rem; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>GraspDreamer: 생성형 인간 시연 기반 기능적 파지 모방 학습</h1>
+<blockquote><p><strong>저자</strong>:  | <strong>날짜</strong>: 2026-04-08 | <strong>URL</strong>: <a href="https://arxiv.org/abs/2604.07517" target="_blank">https://arxiv.org/abs/2604.07517</a></p></blockquote>
+<hr>
+<div class="essence-box"><h2>Essence</h2>
+<p>Visual Generative Model(VGM)으로 합성한 인간 시연 영상을 통해 실제 데이터 수집 없이 로봇의 기능적 파지를 학습하는 GraspDreamer 프레임워크를 제안한다. VLM 기반 작업 정보 추출, 손 궤적 최적화, 인간-로봇 기능적 재타겟팅의 3단계 파이프라인으로 구성된다.</p></div>
+<div class="section-box"><h2>Motivation</h2>
+<ul>
+<li><strong>Known</strong>: 기존 기능적 파지 학습은 시뮬레이션 기반 데이터 합성 또는 대규모 인간 시연 데이터 수집에 의존하고 있다. Foundation model을 활용한 최근 방법들도 여전히 sim2real gap 극복을 위해 상당한 규모의 실제 데이터를 필요로 한다.</li>
+<li><strong>Gap</strong>: 인터넷 규모의 데이터로 사전학습된 VGM이 인간 상호작용의 일반화된 선행지식을 암묵적으로 인코딩하고 있음에도 불구하고, 이를 로봇 파지에 직접 활용하는 방법이 부재하다. 또한 기존 연구들이 특정 로봇 손에만 제한되어 다양한 구현체(embodiment)로의 일반화가 미흡하다.</li>
+<li><strong>Why</strong>: 기능적 파지는 물체를 단순 들어올리는 것을 넘어 실제 사용 의도에 맞게 파지해야 하므로 일상의 다양한 환경과 물체에 대한 일반화 능력이 필수적이다. 대규모 데이터 수집 없이 효율적으로 학습할 수 있다면 로봇 시스템의 실용성과 확장성이 크게 향상된다.</li>
+<li><strong>Approach</strong>: VLM을 통해 자연언어 지시로부터 작업, 물체, 부분 정보를 명시적으로 추출한 후, 이를 VGM(Veo 등)에 입력하여 인간 시연 RGB-D 영상을 생성한다. 생성된 영상에서 손 궤적을 추출 및 최적화한 뒤, VLM 기반 손 affordance 추론, taxonomy 인식 kinematic retargeting, 손-물체 접촉 정제를 통해 다양한 로봇 손으로 재타겟팅한다.</li>
+</ul></div>
+<div class="section-box"><h2>Achievement</h2>
+<ul>
+<li><strong>데이터 효율성</strong>: 실제 functional grasping 데이터 수집 없이 VGM 합성 시연만으로 zero-shot 기능적 파지 성능 달성</li>
+<li><strong>우수한 일반화 성능</strong>: TaskGrasp(parallel-jaw gripper)와 DexGraspNet(Allegro, Shadow hand) 공개 벤치마크에서 기존 방법 대비 높은 성능과 일반화 능력 입증</li>
+<li><strong>다중 구현체 지원</strong>: 단일 통합 프레임워크로 다양한 로봇 손에 대한 인간-로봇 기능적 재타겟팅 가능</li>
+<li><strong>실제 로봇 검증</strong>: Allegro hand와 parallel-jaw gripper의 실제 로봇 평가를 통해 방법론의 실효성 확인</li>
+<li><strong>확장성</strong>: 다운스트림 조작 작업으로의 자연스러운 확장과 visuomotor policy 학습을 위한 데이터 생성 메커니즘으로도 활용 가능</li>
+</ul></div>
+<div class="section-box"><h2>How</h2>
+<ul>
+<li><strong>작업 관련 정보 추출</strong>: VLM에 RGB-D 관찰과 언어 지시를 입력하여 task label T, 관련 물체 O, 부분 분해 P를 순차적으로 추출하여 모호성 제거</li>
+<li><strong>인간 시연 생성</strong>: VGM(Veo)에 'A human hand grasps the P of O to T' 형식의 프롬프트를 입력하여 RGB-D 영상 시퀀스 생성, VLM 검증을 통한 폐루프 과정으로 hallucination 완화", '<strong>깊이 예측 및 스케일 보정</strong>: Video-Depth-Anything(VDA) 모델로 각 프레임의 metric depth 예측, 단일 이미지 깊이의 스케일 모호성을 인체 크기 정보로 정규화</li>
+<li><strong>손 궤적 최적화</strong>: 생성된 영상에서 추출한 손 궤적을 시간적 일관성과 물리적 타당성을 고려하여 최적화</li>
+<li><strong>VLM 기반 손 affordance 추론</strong>: affordance 영역과 기능적 접촉 정보를 VLM으로 추론하여 기능 의도 반영</li>
+<li><strong>Taxonomy 인식 Kinematic Retargeting</strong>: 인간과 로봇 손의 위상학적 차이를 고려한 체계적 kinematic 재타겟팅으로 물리적 실행 가능성 보장</li>
+<li><strong>손-물체 접촉 정제</strong>: 최종 파지 구성 생성 시 손-물체 접촉 제약을 추가 정제하여 안정성 향상</li>
+</ul></div>
+<div class="section-box"><h2>Originality</h2>
+<ul>
+<li><strong>VGM 활용의 혁신적 접근</strong>: 기존의 simulation-first 또는 human-first 데이터 수집 패러다임을 벗어나 internet-scale pre-trained VGM을 인간 시연의 무한 소스로 활용하는 새로운 관점</li>
+<li><strong>인간 시연을 통합 중간 표현으로 활용</strong>: 로봇 중심(robot-centric) 비디오 생성 대신 인간 중심(human-centric) 시연을 생성함으로써 다양한 로봇 구현체로의 유연한 재타겟팅 가능</li>
+<li><strong>기능성 중심의 통합 파이프라인</strong>: VLM 기반 affordance 추론, taxonomy 인식 재타겟팅, 접촉 정제를 통합하여 기능적 의도를 명시적으로 보존하는 구조</li>
+<li><strong>폐루프 검증 메커니즘</strong>: 생성된 시연의 consistency를 VLM으로 검증하는 폐루프 과정으로 생성 품질 보장</li>
+<li><strong>Zero-shot 기능적 파지</strong>: 실제 기능적 파지 데이터 학습 없이 합성 인간 시연만으로 다중 벤치마크에서 경쟁력 있는 성능 달성</li>
+</ul></div>
+<div class="section-box"><h2>Limitation &amp; Further Study</h2>
+<ul>
+<li><strong>VGM 생성 품질 의존성</strong>: 합성 인간 시연의 품질이 VGM의 성능에 크게 의존하며, 희귀하거나 특수한 파지 패턴에 대해서는 생성 실패 가능성</li>
+<li><strong>깊이 예측의 스케일 모호성</strong>: monocular depth estimation의 절대 스케일 모호성을 인체 크기 정보로만 보정하므로 특수한 환경(극단적 원거리, 비표준 물체)에서 오차 누적 가능</li>
+<li><strong>단순화된 손 모델</strong>: kinematic retargeting에서 hand taxonomy의 단순화로 인한 세밀한 손가락 관절 운동의 손실</li>
+<li><strong>작업 명시도 요구</strong>: 자연언어 지시가 작업 의도를 충분히 명시해야 하며, 암묵적인 기능적 의도는 포착 어려움</li>
+<li><strong>접촉 정제의 제한</strong>: 손-물체 접촉 정제가 기하학적 제약에만 기반하므로 미끄러짐, 변형 등 동역학적 요소 미반영</li>
+<li><strong>후속 연구 방향</strong>: (1) 더 강력한 video generation model 활용으로 생성 품질 향상, (2) 동역학 기반 접촉 최적화 통합, (3) 사용자 피드백을 통한 반복적 시연 개선 메커니즘 개발, (4) 다중모달 입력(촉각, 힘 정보) 통합</li>
+</ul></div>
+<div class="section-box"><h2>Evaluation</h2>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: GraspDreamer는 internet-scale pre-trained VGM을 기능적 파지 학습의 혁신적 데이터 소스로 활용하여 대규모 수집 없는 zero-shot 학습을 달성한 원창적 연구이다. 강력한 실험 검증과 실제 로봇 평가를 바탕으로 로봇 파지의 데이터 효율성 문제에 실질적인 해결책을 제시하는 높은 가치의 작업이다.</p></div>
+<div class="back"><a href="../../ai4s/index.html">&larr; 목록으로 돌아가기</a></div>
+<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+  document.addEventListener('click', function(e) {
+    const img = e.target.closest('.review-fig img');
+    if (img) { lbImg.src = img.src; lb.classList.add('active'); }
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+  });
+});
+</script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
+</footer>
+</body>
+</html>

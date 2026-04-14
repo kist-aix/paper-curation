@@ -6,7 +6,7 @@
 
 ## Essence
 
-![Figure 1](figures/fig1.png)
+![Figure 1](figures/fig1.webp)
 
 *Figure 1: (1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT,*
 
@@ -21,7 +21,7 @@ ReAct는 대형 언어 모델이 reasoning trace와 task-specific action을 inte
 
 ## Achievement
 
-![Figure 1](figures/fig1.png)
+![Figure 1](figures/fig1.webp)
 
 *Figure 1: (1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT,*
 
@@ -33,7 +33,7 @@ ReAct는 대형 언어 모델이 reasoning trace와 task-specific action을 inte
 
 ## How
 
-![Figure 1](figures/fig1.png)
+![Figure 1](figures/fig1.webp)
 
 *Figure 1: (1) Comparison of 4 prompting methods, (a) Standard, (b) Chain-of-thought (CoT,*
 

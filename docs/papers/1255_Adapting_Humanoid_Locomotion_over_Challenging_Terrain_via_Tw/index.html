@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Adapting Humanoid Locomotion over Challenging Terrain via Two-Phase Training</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; line-height: 1.7; color: #333; background: #f0f2f5; }
+h1 { font-size: 1.4rem; color: #1a1a2e; border-bottom: 3px solid #D63423; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+h2 { font-size: 1.1rem; color: #D63423; margin: 0 0 0.6rem; padding: 0; border: none; }
+h3 { font-size: 1rem; color: #333; margin: 0.8rem 0 0.4rem; }
+p { margin: 0.4rem 0; font-size: 0.93rem; }
+blockquote { border-left: 4px solid #D63423; margin: 0.8rem 0; padding: 0.6rem 1rem; background: #f0f4f8; border-radius: 0 8px 8px 0; font-size: 0.88rem; color: #555; }
+ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+li { margin: 0.2rem 0; font-size: 0.93rem; }
+.section-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; width: 100%; }
+th, td { border: 1px solid #e0e0e0; padding: 6px 12px; text-align: left; }
+th { background: #D63423; color: white; font-weight: 600; font-size: 0.82rem; }
+tr:nth-child(even) { background: #f8f9fa; }
+td:last-child { text-align: center; font-weight: 600; color: #D63423; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.eval-badge { background: #FEF0EF; color: #A62018; padding: 0.2rem 0.7rem; border-radius: 14px; font-size: 0.8rem; font-weight: 600; }
+.essence-box { border: 2px solid #8B1A1A; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: #FDF8F8; }
+.essence-box h2 { color: #8B1A1A; margin: 0 0 0.5rem; border: none; padding: 0; }
+code { background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+img { max-width: min(100%, 700px); border: 1px solid #e8e8e8; border-radius: 8px; margin: 0.8rem auto; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+hr { border: none; border-top: 1px solid #e0e0e0; margin: 0.5rem 0; }
+strong { color: #1a1a2e; }
+a { color: #A62018; }
+.back { margin-top: 1.5rem; padding: 0.8rem 0; border-top: 2px solid #e0e0e0; }
+.back a { font-weight: 600; text-decoration: none; }
+.back a:hover { text-decoration: underline; }
+.connections-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1.2rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.connections-box h2 { color: #D63423; margin: 0 0 0.8rem; border: none; padding: 0; font-size: 1.05rem; }
+.conn-item { border-left: 3px solid #ddd; padding: 0.6rem 0 0.6rem 1rem; margin-bottom: 0.6rem; }
+.conn-item.alternative { border-left-color: #3B82F6; }
+.conn-item.extension { border-left-color: #10B981; }
+.conn-item.foundation { border-left-color: #8B5CF6; }
+.conn-item.counterpoint { border-left-color: #F59E0B; }
+.conn-item.application { border-left-color: #EF4444; }
+.conn-type { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin-bottom: 0.15rem; }
+.conn-item.alternative .conn-type { color: #3B82F6; }
+.conn-item.extension .conn-type { color: #10B981; }
+.conn-item.foundation .conn-type { color: #8B5CF6; }
+.conn-item.counterpoint .conn-type { color: #F59E0B; }
+.conn-item.application .conn-type { color: #EF4444; }
+.conn-title { font-size: 0.9rem; font-weight: 600; }
+.conn-title a { color: #1a1a2e; text-decoration: none; }
+.conn-title a:hover { color: #D63423; text-decoration: underline; }
+.conn-reason { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+.review-fig { text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }
+.review-fig img { max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }
+.fig-caption { font-size: 0.85rem; color: #888; margin-top: 0.5rem; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Adapting Humanoid Locomotion over Challenging Terrain via Two-Phase Training</h1>
+<blockquote><p><strong>저자</strong>:  | <strong>날짜</strong>:  | <strong>URL</strong>: <a href="https://sites.google.com/view/adapting-humanoid-locomotion/two-phase-training" target="_blank">https://sites.google.com/view/adapting-humanoid-locomotion/two-phase-training</a></p></blockquote>
+<hr>
+<div class="essence-box"><h2>Essence</h2>
+<p>Humanoid 로봇의 도전적인 지형 주행을 위해 flat ground에서 sequence modeling으로 사전학습한 후 RL로 미세조정하는 두 단계 학습 방법을 제시하며, 실제 Digit 로봇으로 4마일 이상의 산악 지형과 31% 이상의 가파른 도시 거리 주행을 성공했다.</p></div>
+<div class="section-box"><h2>Motivation</h2>
+<ul>
+<li><strong>Known</strong>: Humanoid locomotion은 사지 로봇보다 복잡하며, 기존 고전 제어기는 일반화가 어렵고 학습 기반 방법들은 주로 완만한 지형에 초점을 맞춰왔다. Transformer 기반의 learning-based humanoid controller는 제한적인 성과만 이루었다.</li>
+<li><strong>Gap</strong>: Challenging terrain으로의 확장은 시뮬레이션 학습의 계산 복잡도 증가, 환경 설계의 어려움, sim-to-real transfer의 과제 등으로 인해 직접적이지 않다. 효율적인 학습 방법과 실세계 일반화 능력이 필요하다.</li>
+<li><strong>Why</strong>: Humanoid 로봇이 자연과 도시 환경의 다양한 지형을 자율적으로 주행할 수 있다면 재난 구조, 건설, 탐사 등 실제 응용 가능성이 대폭 확대되며, 범용 로봇의 실현에 중요한 단계가 된다.</li>
+<li><strong>Approach</strong>: Transformer 기반 controller를 두 단계로 학습하되, 먼저 flat ground 궤적 데이터셋으로 sequence modeling 사전학습을 수행하여 기본 보행 능력을 확보한 후, RL로 도전적 지형에 맞게 미세조정함으로써 샘플 효율성을 높인다.</li>
+</ul></div>
+<div class="section-box"><h2>Achievement</h2>
+<ul>
+<li><strong>실세계 주행 성과</strong>: 실제 Digit 로봇이 Berkeley 지역 5개 등산로에서 4마일 이상 성공적으로 주행 및 San Francisco의 31% 이상 경사 도시 거리 통과</li>
+<li><strong>다양한 지형 일반화</strong>: 단일 신경망으로 가파른, 거친, 바위가 많은, 젖은, 진흙, 모래 등 훈련 중 미노출된 지형도 포함하여 다양한 지형 정복</li>
+<li><strong>샘플 효율성 증대</strong>: Pre-training을 통해 처음부터 학습하는 것 대비 훨씬 적은 샘플로 challenging terrain 학습 가능</li>
+<li><strong>긴급 적응 능력</strong>: 지형 기울기에 따른 kinematic adaptation과 지표면 재질에 따른 dynamic adaptation이 프로그래밍되지 않았음에도 자동으로 나타남</li>
+<li><strong>의미있는 표현 학습</strong>: 모델의 latent representation이 지형 유형별로 자동으로 clustering되어 emergent terrain representation 형성</li>
+</ul></div>
+<div class="section-box"><h2>How</h2>
+<ul>
+<li>Transformer 신경망 사용하여 과거의 proprioceptive observations와 actions 이력을 입력으로 다음 action 예측</li>
+<li>Flat ground 궤적 데이터셋 (prior policy, model-based controller, human sequence 활용)으로 sequence modeling 사전학습</li>
+<li>미세조정 단계에서 RL(reinforcement learning)을 사용하여 uneven terrain 적응 학습</li>
+<li>Proprioceptive-only controller로 vision 미사용, omni-directional walking 지원</li>
+<li>50 Hz 신경망 제어로 desired joint positions와 PD gains 산출, 2000 Hz PD controller로 실제 토크 변환</li>
+<li>Digit humanoid robot (1.6m, 45kg, 36 DoF) 플랫폼에서 실험</li>
+</ul></div>
+<div class="section-box"><h2>Originality</h2>
+<ul>
+<li>NLP의 generative pre-training 원리를 humanoid locomotion에 창의적으로 적용하여 flat ground pre-training 후 challenging terrain fine-tuning 방식 제시</li>
+<li>Sequence modeling을 humanoid 보행 학습에 도입하여 RL 단독 학습 대비 훨씬 안정적이고 효율적인 학습 방식 구현</li>
+<li>Proprioceptive-only blind controller로 지형 인지 및 적응하는 방식 (vision 미사용)은 센서 의존도를 낮인 실용적 접근</li>
+<li>실제 4마일 산악 지형 및 31% 이상 도시 경사에서의 검증으로 학습 기반 humanoid locomotion의 현실적 가능성 입증</li>
+</ul></div>
+<div class="section-box"><h2>Limitation &amp; Further Study</h2>
+<ul>
+<li>Pre-training에 사용된 flat ground 데이터셋의 구성이 명확히 정의되지 않았으며, 데이터 규모 및 다양성의 정량적 분석 부족</li>
+<li>Challenging terrain에서의 실패 사례, 안정성 한계, 최대 통과 가능 경사도 등에 대한 명확한 정량적 경계 정의 부족</li>
+<li>RL fine-tuning에 필요한 시간, 계산량, 실제 로봇 테스트 시간 등의 구체적 비용 분석 미흡</li>
+<li>단일 로봇(Digit) 플랫폼에서만 검증되었으므로 다른 humanoid 형태(다리 구조, 질량 분포 등)로의 일반화 가능성 미지수</li>
+<li>사람 같은 복합 작업 (팔 사용, 장애물 회피, 객체 조작)과의 통합 가능성 미탐색</li>
+<li><strong>후속 연구</strong>: 더 큰 규모의 pre-training 데이터셋 구축, 다중 로봇 플랫폼 검증, vision-proprioception 통합, 실시간 경로 계획 및 장애물 회피 기능 추가, 온라인 적응 능력 강화</li>
+</ul></div>
+<div class="section-box"><h2>Evaluation</h2>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: NLP의 사전학습-미세조정 원리를 humanoid locomotion에 효과적으로 적용하여 실제 4마일 산악 지형과 급경사 도시 거리 주행을 성공시킨 강력한 실증 논문으로, 샘플 효율성과 일반화 능력 면에서 significant contribution을 제시한다. 다만 일반화 범위와 실패 경계에 대한 더 명확한 분석이 필요하다.</p></div>
+<div class="back"><a href="../../ai4s/index.html">&larr; 목록으로 돌아가기</a></div>
+<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+  document.addEventListener('click', function(e) {
+    const img = e.target.closest('.review-fig img');
+    if (img) { lbImg.src = img.src; lb.classList.add('active'); }
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+  });
+});
+</script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
+</footer>
+</body>
+</html>

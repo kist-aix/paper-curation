@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ego-Vision World Model for Humanoid Contact Planning</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; line-height: 1.7; color: #333; background: #f0f2f5; }
+h1 { font-size: 1.4rem; color: #1a1a2e; border-bottom: 3px solid #D63423; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+h2 { font-size: 1.1rem; color: #D63423; margin: 0 0 0.6rem; padding: 0; border: none; }
+h3 { font-size: 1rem; color: #333; margin: 0.8rem 0 0.4rem; }
+p { margin: 0.4rem 0; font-size: 0.93rem; }
+blockquote { border-left: 4px solid #D63423; margin: 0.8rem 0; padding: 0.6rem 1rem; background: #f0f4f8; border-radius: 0 8px 8px 0; font-size: 0.88rem; color: #555; }
+ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+li { margin: 0.2rem 0; font-size: 0.93rem; }
+.section-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; width: 100%; }
+th, td { border: 1px solid #e0e0e0; padding: 6px 12px; text-align: left; }
+th { background: #D63423; color: white; font-weight: 600; font-size: 0.82rem; }
+tr:nth-child(even) { background: #f8f9fa; }
+td:last-child { text-align: center; font-weight: 600; color: #D63423; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.eval-badge { background: #FEF0EF; color: #A62018; padding: 0.2rem 0.7rem; border-radius: 14px; font-size: 0.8rem; font-weight: 600; }
+.essence-box { border: 2px solid #8B1A1A; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: #FDF8F8; }
+.essence-box h2 { color: #8B1A1A; margin: 0 0 0.5rem; border: none; padding: 0; }
+code { background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+img { max-width: min(100%, 700px); border: 1px solid #e8e8e8; border-radius: 8px; margin: 0.8rem auto; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+hr { border: none; border-top: 1px solid #e0e0e0; margin: 0.5rem 0; }
+strong { color: #1a1a2e; }
+a { color: #A62018; }
+.back { margin-top: 1.5rem; padding: 0.8rem 0; border-top: 2px solid #e0e0e0; }
+.back a { font-weight: 600; text-decoration: none; }
+.back a:hover { text-decoration: underline; }
+.connections-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1.2rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.connections-box h2 { color: #D63423; margin: 0 0 0.8rem; border: none; padding: 0; font-size: 1.05rem; }
+.conn-item { border-left: 3px solid #ddd; padding: 0.6rem 0 0.6rem 1rem; margin-bottom: 0.6rem; }
+.conn-item.alternative { border-left-color: #3B82F6; }
+.conn-item.extension { border-left-color: #10B981; }
+.conn-item.foundation { border-left-color: #8B5CF6; }
+.conn-item.counterpoint { border-left-color: #F59E0B; }
+.conn-item.application { border-left-color: #EF4444; }
+.conn-type { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin-bottom: 0.15rem; }
+.conn-item.alternative .conn-type { color: #3B82F6; }
+.conn-item.extension .conn-type { color: #10B981; }
+.conn-item.foundation .conn-type { color: #8B5CF6; }
+.conn-item.counterpoint .conn-type { color: #F59E0B; }
+.conn-item.application .conn-type { color: #EF4444; }
+.conn-title { font-size: 0.9rem; font-weight: 600; }
+.conn-title a { color: #1a1a2e; text-decoration: none; }
+.conn-title a:hover { color: #D63423; text-decoration: underline; }
+.conn-reason { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+.review-fig { text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }
+.review-fig img { max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }
+.fig-caption { font-size: 0.85rem; color: #888; margin-top: 0.5rem; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Ego-Vision World Model for Humanoid Contact Planning</h1>
+<blockquote><p><strong>저자</strong>: Hang Liu, Yuman Gao, Sangli Teng, Yufeng Chi, Yakun Sophia Shao, Zhongyu Li, Maani Ghaffari, Koushil Sreenath | <strong>날짜</strong>: 2026-03-08 | <strong>DOI</strong>: <a href="https://doi.org/10.48550/arXiv.2510.11682" target="_blank">10.48550/arXiv.2510.11682</a></p></blockquote>
+<hr>
+<div class="essence-box"><h2>Essence</h2>
+<p>휴머노이드 로봇이 학습된 world model과 sampling-based MPC를 결합하여 접촉 기반 작업을 효율적으로 수행할 수 있는 프레임워크를 제안한다. 오프라인 데이터셋에서 훈련된 단일 모델이 다양한 접촉 작업을 지원하며 실시간 시각 기반 계획을 실현한다.</p></div>
+<div class="section-box"><h2>Motivation</h2>
+<ul>
+<li><strong>Known</strong>: 전통적인 최적화 기반 플래너는 접촉 복잡성으로 인해 어려움을 겪고, on-policy RL은 샘플 효율성이 낮고 멀티태스크 능력이 제한적이다. World model을 이용한 모델 기반 계획은 유망하지만 부분적이고 노이즈가 많은 센서 데이터에서 접촉 상태 예측이 어렵다.</li>
+<li><strong>Gap</strong>: 휴머노이드 로봇이 고차원 시각 입력에서 효율적으로 학습하면서도 다양한 접촉 작업을 멀티태스크로 수행할 수 있는 방법이 부족하다. 특히 sparse contact reward와 센서 노이즈를 처리하면서 실시간 성능을 유지하는 것이 과제다.</li>
+<li><strong>Why</strong>: 휴머노이드 로봇이 미구조화된 환경에서 자율성을 달성하려면 접촉을 회피하기보다는 활용해야 하며, 이는 벽 지지, 물체 차단, 장애물 통과 등 실제 작업에 필수적이다.</li>
+<li><strong>Approach</strong>: Demonstration-free 오프라인 데이터셋에서 압축된 latent space에서 예측하는 visual world model을 학습하고, 학습된 surrogate value function으로 MPC를 안내하여 sparse reward와 센서 노이즈를 처리한다.</li>
+</ul></div>
+<div class="section-box"><h2>Achievement</h2>
+<ul>
+<li><strong>스케일 가능한 시각 world model</strong>: 다양한 접촉 작업을 capture하는 단일 모델을 demonstration-free 오프라인 데이터셋만으로 훈련</li>
+<li><strong>값 가이드 샘플링 MPC</strong>: 학습된 surrogate value function으로 MPC를 안내하여 효율적인 action sequence 평가 가능</li>
+<li><strong>실시간 물리적 접촉 계획</strong>: 물리적 휴머노이드에서 ego-centric depth image와 proprioception만으로 벽 지지, 물체 차단, 높이 제한 아치 통과 등 여러 접촉 작업 실현</li>
+<li><strong>샘플 효율성 및 멀티태스크 능력</strong>: on-policy RL 대비 향상된 샘플 효율성과 단일 모델로 다양한 작업 수행</li>
+</ul></div>
+<div class="section-box"><h2>How</h2>
+<ul>
+<li>Low-level controller: PPO로 훈련된 컨트롤러가 [v, p_ee, h_body] 명령을 추적하며 proprioceptive 입력만 사용</li>
+<li>Data collection: 시뮬레이션에서 랜덤하게 샘플된 고수준 액션으로 ball, wall, arch 세 가지 객체와의 상호작용 데이터 수집</li>
+<li>World model architecture: 관찰을 latent space로 인코딩하고, recurrent network이 동역학을 학습하며 관찰 latent, 종료 확률, surrogate value를 예측</li>
+<li>Value-guided sampling MPC: 1024개의 후보 action sequence를 4-step planning horizon에서 샘플링하고, surrogate value와 종료 신호로 평가한 후 Cross-Entropy Method로 최적화</li>
+<li>Training objective: 관찰 재구성, 동역학 예측, surrogate value 예측을 모두 최적화</li>
+</ul></div>
+<div class="section-box"><h2>Originality</h2>
+<ul>
+<li>Demonstration-free 오프라인 학습으로 비용이 많이 드는 휴머노이드 whole-body command 데모 제거</li>
+<li>Ego-centric depth image와 proprioception만으로 3D 접촉 기반 작업을 수행하는 방식</li>
+<li>Latent space에서의 world model 학습으로 고차원 시각 입력의 효율적 처리</li>
+<li>Surrogate value function을 MPC에 통합하여 sparse contact reward 문제 해결</li>
+<li>단일 world model로 여러 다양한 접촉 작업(벽 지지, 물체 차단, 아치 통과)을 수행하는 멀티태스크 능력</li>
+</ul></div>
+<div class="section-box"><h2>Limitation &amp; Further Study</h2>
+<ul>
+<li>Planning horizon이 4 steps로 제한적이므로 더 장기적인 계획이 필요한 복잡한 접촉 시퀀스에 어려움이 있을 수 있음</li>
+<li>Offline 데이터 품질과 다양성에 크게 의존하며, 학습 데이터에 없는 새로운 객체나 환경에서의 일반화 능력 미검증</li>
+<li>64×48 저해상도 depth image만 사용하여 세밀한 tactile 접촉 정보 활용 부족</li>
+<li>Surrogate value function의 정확도가 planning 성능에 크게 영향을 미치지만 그 검증 기준이 불명확함</li>
+<li>후속 연구: 더 긴 planning horizon과 hierarchical planning 방식 탐색, tactile sensor 통합, sim-to-real transfer 강화, 새로운 객체/환경에 대한 적응 메커니즘 개발</li>
+</ul></div>
+<div class="section-box"><h2>Evaluation</h2>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: 이 논문은 world model과 MPC를 결합한 기존 접근법에 surrogate value function을 통합하여 sparse contact reward 문제를 창의적으로 해결하고, demonstration-free 학습으로 실용성을 높였다. 물리적 휴머노이드에서 다양한 접촉 작업을 성공적으로 실현한 점은 로봇 접촉 계획 분야에 의미 있는 기여를 한다.</p></div>
+<div class="back"><a href="../../ai4s/index.html">&larr; 목록으로 돌아가기</a></div>
+<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+  document.addEventListener('click', function(e) {
+    const img = e.target.closest('.review-fig img');
+    if (img) { lbImg.src = img.src; lb.classList.add('active'); }
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+  });
+});
+</script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
+</footer>
+</body>
+</html>

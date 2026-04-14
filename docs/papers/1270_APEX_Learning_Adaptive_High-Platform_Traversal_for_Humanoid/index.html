@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>APEX: Learning Adaptive High-Platform Traversal for Humanoid Robots</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; line-height: 1.7; color: #333; background: #f0f2f5; }
+h1 { font-size: 1.4rem; color: #1a1a2e; border-bottom: 3px solid #D63423; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+h2 { font-size: 1.1rem; color: #D63423; margin: 0 0 0.6rem; padding: 0; border: none; }
+h3 { font-size: 1rem; color: #333; margin: 0.8rem 0 0.4rem; }
+p { margin: 0.4rem 0; font-size: 0.93rem; }
+blockquote { border-left: 4px solid #D63423; margin: 0.8rem 0; padding: 0.6rem 1rem; background: #f0f4f8; border-radius: 0 8px 8px 0; font-size: 0.88rem; color: #555; }
+ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+li { margin: 0.2rem 0; font-size: 0.93rem; }
+.section-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; width: 100%; }
+th, td { border: 1px solid #e0e0e0; padding: 6px 12px; text-align: left; }
+th { background: #D63423; color: white; font-weight: 600; font-size: 0.82rem; }
+tr:nth-child(even) { background: #f8f9fa; }
+td:last-child { text-align: center; font-weight: 600; color: #D63423; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.eval-badge { background: #FEF0EF; color: #A62018; padding: 0.2rem 0.7rem; border-radius: 14px; font-size: 0.8rem; font-weight: 600; }
+.essence-box { border: 2px solid #8B1A1A; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: #FDF8F8; }
+.essence-box h2 { color: #8B1A1A; margin: 0 0 0.5rem; border: none; padding: 0; }
+code { background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+img { max-width: min(100%, 700px); border: 1px solid #e8e8e8; border-radius: 8px; margin: 0.8rem auto; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+hr { border: none; border-top: 1px solid #e0e0e0; margin: 0.5rem 0; }
+strong { color: #1a1a2e; }
+a { color: #A62018; }
+.back { margin-top: 1.5rem; padding: 0.8rem 0; border-top: 2px solid #e0e0e0; }
+.back a { font-weight: 600; text-decoration: none; }
+.back a:hover { text-decoration: underline; }
+.connections-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1.2rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.connections-box h2 { color: #D63423; margin: 0 0 0.8rem; border: none; padding: 0; font-size: 1.05rem; }
+.conn-item { border-left: 3px solid #ddd; padding: 0.6rem 0 0.6rem 1rem; margin-bottom: 0.6rem; }
+.conn-item.alternative { border-left-color: #3B82F6; }
+.conn-item.extension { border-left-color: #10B981; }
+.conn-item.foundation { border-left-color: #8B5CF6; }
+.conn-item.counterpoint { border-left-color: #F59E0B; }
+.conn-item.application { border-left-color: #EF4444; }
+.conn-type { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin-bottom: 0.15rem; }
+.conn-item.alternative .conn-type { color: #3B82F6; }
+.conn-item.extension .conn-type { color: #10B981; }
+.conn-item.foundation .conn-type { color: #8B5CF6; }
+.conn-item.counterpoint .conn-type { color: #F59E0B; }
+.conn-item.application .conn-type { color: #EF4444; }
+.conn-title { font-size: 0.9rem; font-weight: 600; }
+.conn-title a { color: #1a1a2e; text-decoration: none; }
+.conn-title a:hover { color: #D63423; text-decoration: underline; }
+.conn-reason { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+.review-fig { text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }
+.review-fig img { max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }
+.fig-caption { font-size: 0.85rem; color: #888; margin-top: 0.5rem; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>APEX: Learning Adaptive High-Platform Traversal for Humanoid Robots</h1>
+<blockquote><p><strong>저자</strong>: Yikai Wang, Tingxuan Leng, Changyi Lin, Shiqi Liu, Shir Simon, Bingqing Chen, Jonathan Francis, Ding Zhao | <strong>날짜</strong>: 2026-02-11 | <strong>URL</strong>: <a href="https://arxiv.org/abs/2602.11143" target="_blank">https://arxiv.org/abs/2602.11143</a></p></blockquote>
+<hr>
+<div class="essence-box"><h2>Essence</h2>
+<p>APEX는 deep reinforcement learning으로 humanoid 로봇이 다리 길이의 114%에 달하는 고플랫폼을 climbing 기반의 다중 스킬로 자율적으로 횡단하는 시스템이다. generalized ratchet progress reward와 LiDAR 기반 perception, 정책 증류를 결합하여 안전하고 적응적인 고플랫폼 순회를 실현한다.</p></div>
+<div class="section-box"><h2>Motivation</h2>
+<ul>
+<li><strong>Known</strong>: Deep reinforcement learning으로 uneven terrain의 발 기반 보행은 가능해졌으나, jumping 기반 방식은 높이가 제한적(63% 이하)이고 높은 충격 토크로 인해 실제 배포에 부적합하다. Humanoid의 full-body maneuver 학습은 연구되었으나 대부분 단순 행동에 국한되어 있다.</li>
+<li><strong>Gap</strong>: 다리 길이 이상의 극단적으로 높은 플랫폼(>100%)에 대해 안전하고 견고한 현실 적용이 가능한 통합 다중 스킬 정책이 부재하며, contact-rich goal-reaching maneuver를 DRL로 효과적으로 학습하기 위한 reward formulation이 명확하지 않다.</li>
+<li><strong>Why</strong>: Humanoid 로봇의 실제 환경 적응성과 활용성을 크게 확장할 수 있으며, 높은 장애물 극복 능력은 탐사, 구조, 엔터테인먼트 등 다양한 응용 분야에서 핵심 역량이 된다. 안전한 실시간 정책 학습과 배포는 로봇 제어의 중요한 난제이다.</li>
+<li><strong>Approach</strong>: Ratchet progress reward로 6개의 teacher 정책(climb-up, climb-down, stand-up, lie-down, walking, crawling)을 개별 학습한 후, DAgger 스타일 데이터 샘플링과 distillation으로 하나의 unified student 정책으로 통합하고, LiDAR elevation mapping의 training-time artifact 모델링과 deployment-time filtering/inpainting으로 sim-to-real 갭을 해소한다.</li>
+</ul></div>
+<div class="section-box"><h2>Achievement</h2>
+<ul>
+<li><strong>extreme height 극복</strong>: 29-DoF Unitree G1에서 0.8m(다리 길이의 114%) 플랫폼을 zero-shot sim-to-real로 횡단 성공</li>
+<li><strong>generalized ratchet progress reward</strong>: velocity-free하면서도 dense한 감독신호로 safety regularization 하에서 contact-rich maneuver 학습을 단일 단계에서 달성</li>
+<li><strong>자율적 스킬 선택 및 전환</strong>: 6개 heterogeneous 스킬을 통합 정책으로 관리하고 local geometry 및 user command에 따라 context-aware하게 선택·전환</li>
+<li><strong>강건한 적응성</strong>: 플랫폼 높이와 초기 자세 변화에 robust하게 대응하는 terrain-conditioned 전략 학습</li>
+<li><strong>smooth multi-skill transition</strong>: predecessor와 successor 간 상태 분포 매칭으로 안정적인 행동 전환 실현</li>
+</ul></div>
+<div class="section-box"><h2>How</h2>
+<ul>
+<li><strong>Ratchet progress reward</strong>: 최고 달성한 task progress를 추적하는 'best-so-far' reference를 유지하고, 이를 엄격히 초과하는 상태만 보상하여 non-improving step 제약", '<strong>LiDAR-based elevation mapping</strong>: training 중 mapping artifact를 시뮬레이션에서 모델링하고, deployment 중 filtering과 inpainting으로 perception gap 감소</li>
+<li><strong>Teacher policy training</strong>: 각 maneuver와 locomotion에 대해 개별 DRL 훈련으로 task-specialized expertise 확보</li>
+<li><strong>Policy distillation</strong>: 'divide-and-conquer' data sampling rule로 분산 환경에서 maneuver와 transition을 모두 커버하는 데이터 혼합", '<strong>Unified policy synthesis</strong>: 6개 teacher의 행동을 single student policy로 통합하여 autonomous skill selection과 seamless transition 가능하게 함</li>
+<li><strong>Safety regularization</strong>: strong regularization 하에서도 dense reward 제공으로 exploration 효율화</li>
+</ul></div>
+<div class="section-box"><h2>Originality</h2>
+<ul>
+<li><strong>Ratchet progress reward의 generalization</strong>: 기존 stand-up 등 단순 maneuver를 넘어 다양한 contact-rich, goal-reaching 행동에 일관되게 적용 가능한 unified reward 설계</li>
+<li><strong>극단 높이 극복</strong>: humanoid의 jumping 기반 방식(63% 이하)을 climbing 기반(114%)으로 완전히 전환하여 새로운 능력 대역 개척</li>
+<li><strong>Heterogeneous multi-skill distillation</strong>: quadruped 중심의 기존 연구와 달리 humanoid의 극도로 다른 full-body maneuver들(upright ↔ prone)과 locomotion을 통합</li>
+<li><strong>Dual sim-to-real strategy</strong>: training-time modeling + deployment-time inpainting으로 perception gap을 systematic하게 해결</li>
+<li><strong>Reference-free, terrain-conditioned learning</strong>: 기존 motion tracking 방식과 달리 prerecorded trajectory 없이 terrain geometry에 적응하는 정책 학습</li>
+</ul></div>
+<div class="section-box"><h2>Limitation &amp; Further Study</h2>
+<ul>
+<li><strong>플랫폼 높이 한계</strong>: 0.8m이 최대이며, 더 극단적 높이에 대한 확장성은 미지수</li>
+<li><strong>LiDAR 의존성</strong>: LiDAR 기반 elevation mapping에 의존하므로 GPS-denied 또는 센서 성능 저하 환경에서의 견고성 미검증</li>
+<li><strong>Sim-to-real gap의 잔존</strong>: artifact 모델링과 filtering에도 불구하고 완전한 perception gap 해소인지 불명확하며, 현실 환경의 다양한 재질/조건에 대한 일반화 정도 제한적</li>
+<li><strong>계산 비용</strong>: teacher 6개 + distillation으로 인한 training 복잡도 높음</li>
+<li><strong>스킬 조합 제약</strong>: 사전 정의된 6가지 스킬의 조합만 가능하므로, 예상 밖 환경에서의 새로운 행동 창발 어려움</li>
+<li><strong>후속 연구</strong>: (1) 더 높은 플랫폼과 복합 장애물 극복 능력 확장, (2) end-to-end vision-based policy로 LiDAR 의존성 제거, (3) 새로운 스킬 자동 학습 메커니즘 통합</li>
+</ul></div>
+<div class="section-box"><h2>Evaluation</h2>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: APEX는 humanoid 로봇의 고플랫폼 횡단이라는 오랫동안 미해결 문제를 generalized ratchet progress reward, systematic sim-to-real 전략, 효과적인 정책 증류로 우아하게 해결한 seminal work이다. zero-shot 현실 배포와 114% 극단 높이 달성은 humanoid 로봇의 실제 능력 경계를 명확히 확장했으며, 방법론의 일반성과 명확한 설명은 후속 연구의 강력한 기초가 될 것으로 판단된다.</p></div>
+<div class="back"><a href="../../ai4s/index.html">&larr; 목록으로 돌아가기</a></div>
+<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+  document.addEventListener('click', function(e) {
+    const img = e.target.closest('.review-fig img');
+    if (img) { lbImg.src = img.src; lb.classList.add('active'); }
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+  });
+});
+</script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
+</footer>
+</body>
+</html>
