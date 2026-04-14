@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Unleashing Humanoid Reaching Potential via Real-world-Ready Skill Space</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem; line-height: 1.7; color: #333; background: #f0f2f5; }
+h1 { font-size: 1.4rem; color: #1a1a2e; border-bottom: 3px solid #D63423; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+h2 { font-size: 1.1rem; color: #D63423; margin: 0 0 0.6rem; padding: 0; border: none; }
+h3 { font-size: 1rem; color: #333; margin: 0.8rem 0 0.4rem; }
+p { margin: 0.4rem 0; font-size: 0.93rem; }
+blockquote { border-left: 4px solid #D63423; margin: 0.8rem 0; padding: 0.6rem 1rem; background: #f0f4f8; border-radius: 0 8px 8px 0; font-size: 0.88rem; color: #555; }
+ul, ol { margin: 0.4rem 0 0.4rem 1.5rem; }
+li { margin: 0.2rem 0; font-size: 0.93rem; }
+.section-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; width: 100%; }
+th, td { border: 1px solid #e0e0e0; padding: 6px 12px; text-align: left; }
+th { background: #D63423; color: white; font-weight: 600; font-size: 0.82rem; }
+tr:nth-child(even) { background: #f8f9fa; }
+td:last-child { text-align: center; font-weight: 600; color: #D63423; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.eval-badge { background: #FEF0EF; color: #A62018; padding: 0.2rem 0.7rem; border-radius: 14px; font-size: 0.8rem; font-weight: 600; }
+.essence-box { border: 2px solid #8B1A1A; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: #FDF8F8; }
+.essence-box h2 { color: #8B1A1A; margin: 0 0 0.5rem; border: none; padding: 0; }
+code { background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+img { max-width: min(100%, 700px); border: 1px solid #e8e8e8; border-radius: 8px; margin: 0.8rem auto; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+hr { border: none; border-top: 1px solid #e0e0e0; margin: 0.5rem 0; }
+strong { color: #1a1a2e; }
+a { color: #A62018; }
+.back { margin-top: 1.5rem; padding: 0.8rem 0; border-top: 2px solid #e0e0e0; }
+.back a { font-weight: 600; text-decoration: none; }
+.back a:hover { text-decoration: underline; }
+.connections-box { background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin: 1.2rem 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.connections-box h2 { color: #D63423; margin: 0 0 0.8rem; border: none; padding: 0; font-size: 1.05rem; }
+.conn-item { border-left: 3px solid #ddd; padding: 0.6rem 0 0.6rem 1rem; margin-bottom: 0.6rem; }
+.conn-item.alternative { border-left-color: #3B82F6; }
+.conn-item.extension { border-left-color: #10B981; }
+.conn-item.foundation { border-left-color: #8B5CF6; }
+.conn-item.counterpoint { border-left-color: #F59E0B; }
+.conn-item.application { border-left-color: #EF4444; }
+.conn-type { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin-bottom: 0.15rem; }
+.conn-item.alternative .conn-type { color: #3B82F6; }
+.conn-item.extension .conn-type { color: #10B981; }
+.conn-item.foundation .conn-type { color: #8B5CF6; }
+.conn-item.counterpoint .conn-type { color: #F59E0B; }
+.conn-item.application .conn-type { color: #EF4444; }
+.conn-title { font-size: 0.9rem; font-weight: 600; }
+.conn-title a { color: #1a1a2e; text-decoration: none; }
+.conn-title a:hover { color: #D63423; text-decoration: underline; }
+.conn-reason { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+.review-fig { text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }
+.review-fig img { max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }
+.lightbox { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }
+.fig-caption { font-size: 0.85rem; color: #888; margin-top: 0.5rem; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Unleashing Humanoid Reaching Potential via Real-world-Ready Skill Space</h1>
+<blockquote><p><strong>저자</strong>: Zhikai Zhang, Chao Chen, Han Xue, Jilong Wang, Sikai Liang, Yun Liu, Zongzhang Zhang, He Wang, Li Yi | <strong>날짜</strong>: 2025-05-16 | <strong>URL</strong>: <a href="https://arxiv.org/abs/2505.10918" target="_blank">https://arxiv.org/abs/2505.10918</a></p></blockquote>
+<hr>
+<div class="essence-box"><h2>Essence</h2>
+<p>본 논문은 휴머노이드 로봇의 대규모 도달 공간을 활용한 전신 제어(WBC) 문제를 해결하기 위해 Real-world-Ready Skill Space (R2S2)를 제안한다. 실제 환경 적용 가능한 기본 스킬들을 라이브러리로 구성하고 이를 통합 잠재 공간으로 앙상블하여 효율적이고 sim2real 전이 가능한 구조적 스킬 사전을 제공한다.</p></div>
+<div class="section-box"><h2>Motivation</h2>
+<ul>
+<li><strong>Known</strong>: 최근 강화학습 기반 휴머노이드 전신 제어 연구(AMO, HOMIE)가 진행되었으나, 이들은 복잡한 보상 공학 또는 궤적 최적화에 의존하여 최적화 어려움과 시뮬레이션-실제 환경 간 전이 문제가 발생한다.</li>
+<li><strong>Gap</strong>: 기존 접근법들은 다양한 스킬을 동시에 학습할 때 스킬 간 조정 및 전이가 불충분하며, 서로 다른 커맨드 공간의 불일치로 인해 통합 표현이 부족하다.</li>
+<li><strong>Why</strong>: 휴머노이드가 인간 수준의 대규모 도달 공간을 활용하여 높이와 거리가 다양한 객체와 상호작용할 수 있어야 일상 작업 보조가 가능하며, 이는 기저 위치 조정, 신체 자세 변화, 끝단 포즈 제어 등 복합적 스킬을 요구한다.</li>
+<li><strong>Approach</strong>: 실제 환경 적용 가능한 기본 스킬 라이브러리를 먼저 구성한 후, heterogeneous skill ensembling을 통해 CVAE 기반 학생 정책이 사전 학습된 교사 정책들의 지식을 상속받으면서 새로운 스킬 조정을 탐색하도록 한다. 이후 R2S2에서 샘플링하는 고수준 플래너를 학습하여 실제 목표 도달 과제를 수행한다.</li>
+</ul></div>
+<div class="section-box"><h2>Achievement</h2>
+<ul>
+<li><strong>구조적 스킬 사전 설계</strong>: 실제 환경 적용 가능한 기본 스킬들로부터 구성된 R2S2가 최소한의 보상 공학으로 복잡한 전신 제어 과제 실행을 지원</li>
+<li><strong>Heterogeneous skill ensembling 제안</strong>: IL과 RL을 동적으로 결합하여 독립적으로 훈련된 스킬들의 지식을 상속받으면서 스킬 간 조정 및 전이 능력을 확장하는 CVAE 기반 통합 신경 스킬 표현 개발</li>
+<li><strong>실제 배포 달성</strong>: Unitree G1(29 DOF)과 Unitree H1(1.8m) 플랫폼에서 다양한 자율 목표 도달 과제에 대해 zero-shot sim2real 전이 성공</li>
+<li><strong>전신 텔레오퍼레이션 시스템</strong>: 부수적 효과로 대규모 도달 공간을 활용한 휴머노이드 전신 텔레오퍼레이션 시스템 구현</li>
+</ul></div>
+<div class="section-box"><h2>How</h2>
+<ul>
+<li>기본 스킬 라이브러리 구성: 로코모션, 신체 자세 조정 등 과제 불가지론적(task-agnostic) 기본 스킬들을 개별적으로 훈련하고 sim2real 평가를 통해 실제 환경 적용 가능성 보장</li>
+<li>Heterogeneous skill training 환경 구성: 서로 다른 커맨드 공간을 가진 기본 스킬들을 통합하기 위한 환경 설계</li>
+<li>CVAE 기반 학생 정책 훈련: Imitation Learning과 Reinforcement Learning을 동적으로 결합하여 고유 상태에 대한 모터 스킬 분포를 신경망으로 모델링</li>
+<li>고수준 플래너 학습: R2S2에서 스킬을 샘플링하도록 훈련된 플래너가 자율적으로 복잡한 전신 제어 과제 수행</li>
+<li>다중 플랫폼 검증: 서로 다른 DOF와 크기의 휴머노이드에서 일반화 가능성 평가</li>
+</ul></div>
+<div class="section-box"><h2>Originality</h2>
+<ul>
+<li>실제 환경 적용 가능한 기본 스킬들로부터 스킬 공간 구성하는 새로운 접근으로, 기존 인간 모션 캡처 기반 스킬 공간과 차별화</li>
+<li>Heterogeneous skill ensembling의 개념 도입으로, 독립적으로 훈련된 이질적 스킬들을 통합하면서 각 스킬의 실제 환경 적용 가능성 보장</li>
+<li>CVAE를 사용한 신경 스킬 표현이 기존 계층적 제어 프레임워크의 주 커맨드 공간 기반 계획보다 효율적임을 입증</li>
+<li>IL과 RL을 동적으로 결합하는 훈련 전략으로 기존 고정된 학습 방식 개선</li>
+</ul></div>
+<div class="section-box"><h2>Limitation &amp; Further Study</h2>
+<ul>
+<li>현재 방법은 주로 대규모 도달 공간이 필요한 과제에 초점을 두어 다른 유형의 복잡한 전신 제어 과제로의 확장 가능성 미검증</li>
+<li>Heterogeneous skill training 환경 구성이 여전히 특정 과제에 맞게 설계되어야 하므로, 완전히 자동화된 환경 구성 방법 부재</li>
+<li>기본 스킬 라이브러리의 스킬 수와 다양성이 최종 성능에 미치는 영향에 대한 상세 분석 부족</li>
+<li>실제 환경에서의 배포 시 환경 변화(예: 다양한 지표면, 동적 장애물)에 대한 강건성 평가 제한적</li>
+<li>후속 연구로는 다양한 과제 유형으로의 확장, 자동화된 스킬 라이브러리 구성 방법 개발, 더 복잡한 조작 과제로의 적용 필요</li>
+</ul></div>
+<div class="section-box"><h2>Evaluation</h2>
+<div class="eval-badges"><span class="eval-badge">Novelty: 4/5</span> <span class="eval-badge">Technical Soundness: 3/5</span> <span class="eval-badge">Significance: 4/5</span> <span class="eval-badge">Clarity: 4/5</span> <span class="eval-badge">Overall: 4/5</span></div>
+<p><strong>총평</strong>: 본 논문은 실제 환경 적용 가능한 기본 스킬들로부터 통합 스킬 공간을 구성하는 새로운 접근으로, 복잡한 휴머노이드 전신 제어 문제에서 보상 공학의 부담을 줄이면서 효과적인 sim2real 전이를 달성했다는 점에서 상당한 기여가 있다. 다만 방법의 일반화 범위와 자동화 수준에 대한 추가 검증이 필요하다.</p></div>
+<div class="back"><a href="../../ai4s/index.html">&larr; 목록으로 돌아가기</a></div>
+<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lightbox-img');
+  document.addEventListener('click', function(e) {
+    const img = e.target.closest('.review-fig img');
+    if (img) { lbImg.src = img.src; lb.classList.add('active'); }
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+  });
+});
+</script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
+</footer>
+</body>
+</html>
