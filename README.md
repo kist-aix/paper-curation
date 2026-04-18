@@ -109,16 +109,32 @@ python pipeline/setup.py
 
 ### 배포 (선택)
 
-로컬 사용이 기본입니다. 외부 공유가 필요하면:
+로컬 사용이 기본입니다. 외부 공유가 필요하면 **3-계층 split-host** 구조로 자동 배포됩니다:
+
+| 계층 | 역할 | 내용 |
+|------|------|------|
+| **Cloudflare Workers (Static Assets)** | 사용자 콘텐츠 서빙 | `docs/` 전체 업로드 (`docs/.assetsignore`로 로컬 전용 토픽 제외) |
+| **GitHub `gh-pages` 브랜치** | 진입 URL → Cloudflare 리다이렉트 | 토픽별 리다이렉트 스텁 (1KB 미만), `jehyunlee.github.io/paper-curation/{topic}/` → `workers.dev/{topic}/` |
+| **GitHub `master` 브랜치** | 코드·설정·README | 대용량 `docs/papers/`, `docs/{topic}/` 콘텐츠는 `.gitignore`로 제외 |
 
 ```bash
-# Cloudflare Pages / GitHub Pages 등 정적 호스팅에 배포
-PYTHONUTF8=1 python pipeline/prepare_deploy.py --topic my_topic --topics my_topic --push
+# 배포 (환경변수 필요: CF_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
 ```
 
-- PNG -> WebP 자동 변환 (용량 ~60% 절감)
-- API 키 자동 제거 (보안)
-- `--topics`로 특정 토픽만 선택 배포 가능
+자동 처리:
+- PNG → WebP 변환 (용량 ~60% 절감)
+- 배포용 HTML에서 API 키 제거 후 로컬 working tree 자동 복원
+- `npx wrangler deploy` → Cloudflare 업로드 (해시 기반 증분 업로드)
+- gh-pages 리다이렉트 스텁 idempotent 동기화 (새 토픽 자동 감지, 변경 없으면 푸시 스킵)
+- Cloudflare 200 OK 검증 (최대 5분 폴링)
+- master에는 **코드·설정 변경만** commit + push (대용량 콘텐츠는 `.gitignore`)
+
+환경변수 발급: Cloudflare Dashboard → My Profile → API Tokens → "Edit Cloudflare Workers" 템플릿.
+```cmd
+setx CF_API_TOKEN "..."
+setx CLOUDFLARE_ACCOUNT_ID "..."
+```
 
 ---
 
@@ -192,7 +208,7 @@ cd docs && python -m http.server 8000
 | `dedup_zotero.py` | Zotero 컬렉션 중복 탐지/삭제 (제목 60자 + DOI + arXiv + PDF 공유). `run_update_force` preflight 자동 통합 |
 | `validate_papers.py --strict` | 카테고리↔timeline 이미지 매치, duplicate text.md 탐지. 배포 게이트 |
 | `cleanup.py` | stale 카테고리 timeline/캐시 삭제 + narrative JSON 내 stale 엔트리 pruning. 후처리 단계에 자동 통합 |
-| `prepare_deploy.py` | API 키 메모리 제거 후 push, 로컬 원복. diff 요약 출력 |
+| `prepare_deploy.py` | split-host 배포 자동화: `wrangler deploy` → Cloudflare, gh-pages 리다이렉트 스텁 idempotent 동기화, Cloudflare 200 OK 폴링, master에 코드 변경만 push. API 키 메모리 제거 후 로컬 원복 |
 | 21600s timeout | `generate_timelines` 후처리 호출 타임아웃 1h → 6h (PaperBanana 다중 카테고리 완주) |
 
 **오매칭 감사·복구 워크플로우**:
@@ -358,33 +374,73 @@ python pipeline/setup.py
 
 ### Deployment (Optional)
 
-Local use is the default. For sharing:
+Local use is the default. For sharing, a **3-tier split-host** architecture deploys automatically:
+
+| Tier | Role | Contents |
+|------|------|----------|
+| **Cloudflare Workers (Static Assets)** | Serves user-facing content | Full `docs/` uploaded (local-only topics excluded via `docs/.assetsignore`) |
+| **GitHub `gh-pages` branch** | Entry-URL → Cloudflare redirect | Per-topic redirect stubs (<1KB), `jehyunlee.github.io/paper-curation/{topic}/` → `workers.dev/{topic}/` |
+| **GitHub `master` branch** | Code / config / README only | Large `docs/papers/`, `docs/{topic}/` content is `.gitignore`'d |
 
 ```bash
-PYTHONUTF8=1 python pipeline/prepare_deploy.py --topic my_topic --topics my_topic --push
+# Deploy (requires env: CF_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
 ```
 
-- Auto PNG -> WebP conversion (~60% size reduction)
-- API keys auto-stripped for security
-- `--topics` selectively deploys specific topics only
+Automatic:
+- PNG → WebP conversion (~60% size reduction)
+- API keys stripped from deployed HTML, local working tree restored after push
+- `npx wrangler deploy` → Cloudflare (hash-based incremental upload)
+- gh-pages redirect stub idempotent sync (auto-discovers new topics; no-op when unchanged)
+- Cloudflare 200 OK verification (polls up to 5 min)
+- Only code/config changes pushed to master (content is gitignored)
+
+Token setup: Cloudflare Dashboard → My Profile → API Tokens → "Edit Cloudflare Workers" template.
+```cmd
+setx CF_API_TOKEN "..."
+setx CLOUDFLARE_ACCOUNT_ID "..."
+```
 
 ---
 
-## Usage Modes
+## Usage Modes — Single Orchestrator `run_full.py`
+
+Three axes (`--mode` / `--source` / `--images`) replace the legacy Recipe A–H. `--source web` auto-chains search → register → sync.
 
 ```bash
-# Full pipeline (Zotero PDFs -> reviews -> classification -> index)
-PYTHONUTF8=1 python pipeline/run_update_force.py --topic my_topic
+# Weekly — search → register to Zotero → sync → review new papers
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source web --days 7
 
-# Update (new papers only, preserves existing reviews/categories)
-PYTHONUTF8=1 python pipeline/run_update_force.py --topic my_topic --resume
+# Local update — skip search, sync only, then review new papers
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source zotero
 
-# Reclassify all papers
-PYTHONUTF8=1 python pipeline/run_update_force.py --topic my_topic --category
+# Re-review specific slugs (audit/recovery)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode rebuild --slugs 088,1093 --strict-pdf
+
+# Reclassify only (Phase 3 node-based Hybrid C, no LLM calls)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode reclassify
+
+# Regenerate timelines (narratives + images)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode retime --images all
+
+# Deploy only (requires CF_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
+
+# Dry run — show execution plan
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source web --dry-run
 
 # Local server
 cd docs && python -m http.server 8000
 ```
+
+`--mode` meanings:
+- **curate** — review new papers only, preserve existing (most common)
+- **rebuild** — regenerate all review.md. Requires `--yes` or `--slugs`
+- **reclassify** — keep reviews, reassign categories (node-based)
+- **retime** — regenerate narratives + timeline images
+- **deploy** — run `prepare_deploy.py` only (split-host: Cloudflare + gh-pages stubs + master code push)
+
+Safety flags: `--strict-pdf` (block fuzzy PDF match), `--slugs A,B,C`, `--dry-run`, `--skip-dedup`, `--dedup-execute`, `--yes`.
 
 ---
 
