@@ -520,4 +520,4 @@ Deep Research query -> Obsidian note -> re-index -> your notes cited in next que
 
 ---
 
-*Built with Claude Code*
+*Built with Claude Code*.
