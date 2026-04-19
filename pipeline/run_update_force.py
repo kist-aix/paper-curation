@@ -1526,27 +1526,37 @@ def main():
         run_step("build_search_index",
                  ["python", "pipeline/build_search_index.py", "--topic", topic], 900)
 
-        # Deploy if GitHub config exists
-        from config_loader import get_github_repo
-        if get_github_repo():
-            log("\n  [prepare_deploy] GitHub config found, deploying...")
+        # Deploy via wrangler (Cloudflare Workers with Static Assets) +
+        # idempotent gh-pages stub sync. Requires:
+        #   CLOUDFLARE_API_TOKEN (or CF_API_TOKEN), CLOUDFLARE_ACCOUNT_ID.
+        has_cf_token = bool(
+            os.environ.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CF_API_TOKEN")
+        )
+        has_account_id = bool(os.environ.get("CLOUDFLARE_ACCOUNT_ID"))
+        if has_cf_token and has_account_id:
+            log("\n  [prepare_deploy] Cloudflare env vars found, deploying...")
             try:
                 result = subprocess.run(
                     ["python", "pipeline/prepare_deploy.py", "--topic", topic, "--push"],
                     cwd=str(PIPELINE_DIR.parent),
-                    capture_output=True, text=True, timeout=600,
+                    capture_output=True, text=True, timeout=1800,
                     env={**os.environ, "PYTHONUTF8": "1"},
                 )
                 if result.returncode == 0:
-                    log(f"  [prepare_deploy] OK: deployed to gh-pages")
+                    log(f"  [prepare_deploy] OK: wrangler deploy + gh-pages sync done")
                 else:
                     log(f"  [prepare_deploy] FAILED (exit {result.returncode})")
                     if result.stderr:
-                        log(f"    {result.stderr[:200]}")
+                        log(f"    {result.stderr[:500]}")
             except Exception as e:
                 log(f"  [prepare_deploy] ERROR: {str(e)[:100]}")
         else:
-            log("\n  [prepare_deploy] SKIP: no github config in config.json")
+            missing = []
+            if not has_cf_token:
+                missing.append("CLOUDFLARE_API_TOKEN (or CF_API_TOKEN)")
+            if not has_account_id:
+                missing.append("CLOUDFLARE_ACCOUNT_ID")
+            log(f"\n  [prepare_deploy] SKIP: missing env vars — {', '.join(missing)}")
 
         log("\nPost-processing complete!")
 
