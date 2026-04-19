@@ -212,6 +212,47 @@ def _discover_deployable_topics():
     return sorted(topics)
 
 
+_PREFLIGHT_MIN_BYTES = 100_000  # topic index < this = likely stub/broken
+
+
+def _preflight_topics(topics=None, min_size=_PREFLIGHT_MIN_BYTES):
+    """Abort before wrangler deploy if any topic's index.html is missing or
+    suspiciously small (e.g. redirect stub ~500 bytes, partial regen failure).
+
+    We had an incident where a deploy went out with the topic dirs missing
+    because a stale working tree was deployed — this guard stops that
+    class of error. The threshold is deliberately loose (100 KB); real
+    topic indices are multi-MB.
+    """
+    docs = str(DOCS_DIR)
+    topics = topics or _discover_deployable_topics()
+    if not topics:
+        print("  [preflight] no deployable topics discovered (nothing to guard)")
+        return
+    problems, ok_sizes = [], []
+    for t in topics:
+        path = os.path.join(docs, t, "index.html")
+        if not os.path.isfile(path):
+            problems.append(f"{t}: index.html missing")
+            continue
+        size = os.path.getsize(path)
+        if size < min_size:
+            problems.append(f"{t}: index.html only {size:,} bytes "
+                            f"(< {min_size:,} threshold; likely stub)")
+        else:
+            ok_sizes.append((t, size))
+    if problems:
+        print("\n  [preflight] ABORT — deployable topics look broken:")
+        for p in problems:
+            print(f"    - {p}")
+        print("\n  Fix: regenerate topic indices before redeploying, e.g.")
+        print("       PYTHONUTF8=1 python pipeline/build_topic_index.py <topic>")
+        raise SystemExit("Refusing to deploy: preflight failed")
+    print("  [preflight] deployable topics OK:")
+    for t, sz in ok_sizes:
+        print(f"    - {t}: {sz / 1024:.0f} KB")
+
+
 def _wrangler_env():
     """Build env for wrangler subprocess — accepts CF_API_TOKEN or
     CLOUDFLARE_API_TOKEN, maps the former to the latter for wrangler."""
@@ -457,6 +498,8 @@ def main():
         else:
             # Step 7: Upload full content to Cloudflare via wrangler
             print("\nStep 7: Deploying to Cloudflare (wrangler deploy)...")
+            print("  [preflight] verifying topic indices before upload")
+            _preflight_topics(args.topics)
             _wrangler_deploy()
 
             # Step 8: Ensure gh-pages has redirect stubs for every deployed topic
