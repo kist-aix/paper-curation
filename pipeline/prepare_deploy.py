@@ -269,11 +269,17 @@ def _wrangler_env():
 
 
 def _wrangler_deploy():
-    """Run `npx wrangler deploy` from the repo root. Raises on failure."""
+    """Run `npx wrangler deploy` from the repo root. Raises on failure.
+
+    Windows note: Python's CreateProcess won't locate `npx` without the
+    `.cmd` extension, so we resolve the real executable via shutil.which.
+    """
+    import shutil as _sh
     env = _wrangler_env()
-    print("\n  [wrangler] npx wrangler deploy ...")
+    npx = _sh.which("npx") or _sh.which("npx.cmd") or "npx"
+    print(f"\n  [wrangler] {npx} wrangler deploy ...")
     result = subprocess.run(
-        ["npx", "wrangler", "deploy"],
+        [npx, "wrangler", "deploy"],
         cwd=REPO, env=env,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
