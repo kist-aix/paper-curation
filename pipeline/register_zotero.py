@@ -212,13 +212,102 @@ def _extract_arxiv_id(paper):
     arxiv_id = paper.get("arxiv_id") or paper.get("arxivId") or ""
     if not arxiv_id:
         url = paper.get("url") or paper.get("pdf_url") or ""
-        doi = paper.get("doi") or ""
-        for s in (url, doi):
-            m = re.search(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]+)", s)
+        doi = paper.get("doi") or paper.get("DOI") or ""
+        archive_id = paper.get("archiveID", "") or paper.get("archive_id", "")
+        for s in (url, doi, archive_id):
+            if not s:
+                continue
+            # 표준 arXiv URL: arxiv.org/abs/2404.18400 or /pdf/ or /html/
+            m = re.search(r"arxiv\.org/(?:abs|pdf|html)/([0-9]{4}\.[0-9]{4,5})",
+                           str(s), re.IGNORECASE)
+            if m:
+                arxiv_id = m.group(1)
+                break
+            # arXiv DOI 형식: 10.48550/arXiv.2404.18400 (대소문자 무관)
+            m = re.search(r"10\.48550/arxiv\.([0-9]{4}\.[0-9]{4,5})",
+                           str(s), re.IGNORECASE)
+            if m:
+                arxiv_id = m.group(1)
+                break
+            # archiveID 형식: "arXiv:2404.18400"
+            m = re.search(r"arxiv\s*:\s*([0-9]{4}\.[0-9]{4,5})",
+                           str(s), re.IGNORECASE)
             if m:
                 arxiv_id = m.group(1)
                 break
     return arxiv_id
+
+
+def _try_crossref_pdf_url(doi):
+    """CrossRef link[] 배열에서 PDF URL 추출. 없으면 빈문자열."""
+    if not doi:
+        return ""
+    safe = urllib.parse.quote(doi.strip(), safe="")
+    url = f"https://api.crossref.org/works/{safe}"
+    ua = "paper-curation/1.0"
+    if UNPAYWALL_EMAIL:
+        ua += f" (mailto:{UNPAYWALL_EMAIL})"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": ua})
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx) as resp:
+            msg = json.loads(resp.read()).get("message", {})
+    except Exception:
+        return ""
+    # PDF content-type 우선
+    for link in msg.get("link", []):
+        if "pdf" in (link.get("content-type") or "").lower():
+            return link.get("URL") or ""
+    # content-type 없는 경우라도 .pdf 확장자
+    for link in msg.get("link", []):
+        u = link.get("URL") or ""
+        if u.lower().endswith(".pdf"):
+            return u
+    return ""
+
+
+def _try_semanticscholar_pdf_url(doi="", arxiv_id=""):
+    """Semantic Scholar live 조회로 openAccessPdf URL 획득."""
+    if arxiv_id:
+        spec = f"ArXiv:{arxiv_id}"
+    elif doi:
+        spec = f"DOI:{doi}"
+    else:
+        return ""
+    url = (f"https://api.semanticscholar.org/graph/v1/paper/"
+           f"{urllib.parse.quote(spec, safe=':')}?fields=openAccessPdf")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "paper-curation/1.0"})
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return ""
+    oa = data.get("openAccessPdf") or {}
+    if isinstance(oa, dict):
+        return oa.get("url") or ""
+    return ""
+
+
+def _try_openalex_pdf_url(doi):
+    """OpenAlex 에서 best_oa_location.pdf_url 추출."""
+    if not doi:
+        return ""
+    url = f"https://api.openalex.org/works/doi:{urllib.parse.quote(doi.strip(), safe='/')}"
+    if UNPAYWALL_EMAIL:
+        url += f"?mailto={UNPAYWALL_EMAIL}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "paper-curation/1.0"})
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return ""
+    best = data.get("best_oa_location") or {}
+    if isinstance(best, dict) and best.get("pdf_url"):
+        return best["pdf_url"]
+    # primary location 폴백
+    prim = data.get("primary_location") or {}
+    if isinstance(prim, dict) and prim.get("pdf_url"):
+        return prim["pdf_url"]
+    return ""
 
 
 def download_pdf(paper, dest_dir):
@@ -240,20 +329,41 @@ def download_pdf(paper, dest_dir):
             return dest_path, ""
         time.sleep(3)
 
-    # 전략 2: S2 openAccessPdf
+    # 전략 2: S2 openAccessPdf 캐시 (paper dict 에 이미 있는 경우)
     pdf_url = paper.get("openAccessPdf") or paper.get("pdf_url") or ""
     if isinstance(pdf_url, dict):
         pdf_url = pdf_url.get("url", "")
     if pdf_url and pdf_url.endswith(".pdf"):
         ok, err = _download_url(pdf_url, dest_path)
         if ok:
-            log(f"    S2 openAccessPdf 다운로드 성공")
+            log(f"    S2 openAccessPdf (cached) 다운로드 성공")
             return dest_path, ""
 
-    # 전략 3: Unpaywall
     doi = paper.get("doi") or paper.get("DOI") or ""
+
+    # 전략 3: CrossRef link[] 직접 PDF URL
+    if doi:
+        time.sleep(0.3)
+        cr_pdf = _try_crossref_pdf_url(doi)
+        if cr_pdf:
+            ok, err = _download_url(cr_pdf, dest_path)
+            if ok:
+                log(f"    CrossRef link 다운로드 성공")
+                return dest_path, ""
+
+    # 전략 4: Semantic Scholar live 조회
+    if arxiv_id or doi:
+        time.sleep(0.3)
+        s2_pdf = _try_semanticscholar_pdf_url(doi=doi, arxiv_id=arxiv_id)
+        if s2_pdf:
+            ok, err = _download_url(s2_pdf, dest_path)
+            if ok:
+                log(f"    Semantic Scholar 다운로드 성공")
+                return dest_path, ""
+
+    # 전략 5: Unpaywall
     if doi and UNPAYWALL_EMAIL:
-        time.sleep(0.5)
+        time.sleep(0.3)
         try:
             upw_url = f"https://api.unpaywall.org/v2/{urllib.parse.quote(doi, safe='')}?email={UNPAYWALL_EMAIL}"
             req = urllib.request.Request(upw_url, headers={"User-Agent": "paper-curation/1.0"})
@@ -264,12 +374,22 @@ def download_pdf(paper, dest_dir):
             if upw_pdf:
                 ok, err = _download_url(upw_pdf, dest_path)
                 if ok:
-                    log(f"    Unpaywall PDF 다운로드 성공")
+                    log(f"    Unpaywall 다운로드 성공")
                     return dest_path, ""
         except Exception as e:
             log(f"    Unpaywall 조회 실패: {e}")
 
-    return "", "모든 전략 실패"
+    # 전략 6: OpenAlex
+    if doi:
+        time.sleep(0.3)
+        oa_pdf = _try_openalex_pdf_url(doi)
+        if oa_pdf:
+            ok, err = _download_url(oa_pdf, dest_path)
+            if ok:
+                log(f"    OpenAlex 다운로드 성공")
+                return dest_path, ""
+
+    return "", "모든 전략 실패 (arXiv/CrossRef/S2/Unpaywall/OpenAlex)"
 
 
 # ── Attach PDF to Zotero item ─────────────────────────────────────────────────
@@ -606,16 +726,17 @@ def fix_pdfs(collection_key, zotero_dir, dry_run=False):
         doi = d.get("DOI") or d.get("doi") or ""
         url_field = d.get("url", "")
 
-        # Reconstruct minimal paper dict
+        # Reconstruct paper dict — Zotero archiveID/extra 까지 활용해
+        # arXiv ID 가 강력하게 추출되도록 한다.
         paper = {
             "title": title,
             "doi": doi,
             "url": url_field,
+            "archiveID": d.get("archiveID", ""),
         }
-        # Try to extract arXiv from URL
-        if "arxiv.org/abs/" in url_field:
-            arxiv_id = url_field.split("arxiv.org/abs/")[-1].split("v")[0]
-            paper["arxiv_id"] = arxiv_id
+        ax = _extract_arxiv_id(paper)
+        if ax:
+            paper["arxiv_id"] = ax
 
         log(f"  재시도: {title[:60]}")
 
