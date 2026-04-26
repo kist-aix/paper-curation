@@ -58,7 +58,11 @@ def _split_cats_by_image_presence(topic, cats):
         (with_image if has_image else missing).append(cat)
     return with_image, missing
 
-# topic_modeling.py는 UMAP/sentence-transformers 의존 → .venv312 필요
+# topic_modeling.py / classify_papers.py 는 UMAP + hdbscan + sentence-transformers
+# 의존 → .venv312 (Python 3.12) 필요. 시스템 Python(3.14) 은 Windows Smart App
+# Control 이 numba/llvmlite DLL 을 차단해 UMAP 이 동작하지 않는다. classify_papers
+# 도 학습된 UMAP transformer 로 신규 임베딩을 5D 로 투영해야 하므로 같은 환경에서
+# 실행한다 (변수명은 호환을 위해 TOPIC_MODELING_PYTHON 유지).
 _VENV312_PYTHON = PROJECT_ROOT / ".venv312" / "Scripts" / "python.exe"
 TOPIC_MODELING_PYTHON = str(_VENV312_PYTHON) if _VENV312_PYTHON.exists() else "python"
 
@@ -1390,8 +1394,11 @@ def main():
                      [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 1200)
 
         # Step 3: classify (always — new papers only in update mode without --category)
+        # classify_papers loads the joblib bundle from topic_modeling and runs
+        # hdbscan.approximate_predict + UMAP.transform — same .venv312 (Python 3.12)
+        # is required because UMAP/numba is blocked under WDAC on system Python 3.14.
         run_step("classify_papers",
-                 ["python", "pipeline/classify_papers.py", "--topic", topic], 600)
+                 [TOPIC_MODELING_PYTHON, "pipeline/classify_papers.py", "--topic", topic], 600)
 
         # Step 4: Determine changed categories
         changed_cats = []

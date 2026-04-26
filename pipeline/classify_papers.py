@@ -1,34 +1,45 @@
 """
-Paper classification via node-based distance in the SPECTER2 embedding space.
+Paper classification via HDBSCAN approximate_predict (원 설계).
 
-Phase 3 re-implementation. Replaces the legacy Haiku-prompt approach with a
-density-faithful (HDBSCAN-style) assignment:
+Density-faithful 분류기. `topic_modeling.py` 가 학습·저장한 모델 번들
+(`{topic}/_hdbscan_model.joblib`) 을 로드해서 신규 논문을 같은 클러스터 공간
+으로 라우팅한다.
 
-  * Primary category = nearest neighbor's sub-cluster's parent category
-    (single-linkage 1-NN).
-  * all_categories  = top-3 sub-clusters that win the K-nearest-neighbor vote
-    (default K=10, MIN_VOTES=3) sorted by mean distance ascending.
-    The primary category is always included (even if it didn't reach the
-    vote threshold) and pinned to position 0.
+분류 흐름 (원 설계 그대로):
+  1. SPECTER2 768D 임베딩 (`_embeddings_cache.json` + `topic_modeling.compute_embeddings`)
+  2. `umap_cluster.transform()` 으로 5D 투영 (학습 시와 동일 transformer)
+  3. `hdbscan.approximate_predict(hdbscan_model, vec_5d)` → primary sub-cluster (int tid)
+  4. tid == -1 (outlier) 이면 768D 공간에서 **가장 가까운 sub-cluster centroid**
+     로 강제 배정 (모든 논문이 반드시 하나의 sub-category 소속)
+  5. `all_categories` = 768D centroid 코사인 거리 오름차순 상위 sub-cluster 의
+     parent category 를 중복 제거해 최대 TOP_N_CATEGORIES 개. primary 는 항상
+     index 0 에 고정.
 
-Why node-based: HDBSCAN is density-based and has no centroid concept; using
-centroid cosine biases assignments toward isotropic blobs. Node-pair distances
-respect cluster shape and density.
+왜 centroid 거리는 outlier·all_categories 에만 쓰는가:
+  HDBSCAN 자체는 density-based 이라 centroid 가 없다. 메인 분류는
+  `approximate_predict` 가 mutual reachability + condensed tree 를 사용해
+  density-faithful 로 수행한다. centroid 는 "outlier 도 어떤 클러스터에 강제
+  편입" 이라는 운영 요구와 "다중 라벨 top-N 후보" 에만 보조적으로 쓰인다.
 
 Pipeline contract:
-  * Reads `{topic}/_embeddings_cache.json` (slug → 768D SPECTER2 vector).
-  * Reads `{topic}/_new_classification.json` (slug → sub_category mapping for
-    existing papers; provides the "anchor set" for kNN search).
-  * For papers without a cached embedding, computes one on the fly via
-    `topic_modeling.compute_embeddings` (incremental cache update).
-  * Updates `docs/papers/_papers_index.json` and rewrites
-    `{topic}/_new_classification.json`.
+  * Reads `{topic}/_hdbscan_model.joblib` (필수 — 없으면 exit 2)
+      bundle keys: hdbscan_model, umap_cluster, centroids,
+                   tid_to_cat, tid_to_subname
+  * Reads `{topic}/_embeddings_cache.json` (slug → 768D SPECTER2)
+  * 신규 임베딩은 `topic_modeling.compute_embeddings` 로 즉시 계산 (cache 갱신).
+  * Updates `docs/papers/_papers_index.json` (classifications[topic] 갱신)
+  * Rewrites `{topic}/_new_classification.json` (assignments 재기록)
+
+실행 환경:
+  topic_modeling 과 동일하게 `.venv312` (Python 3.12) 에서 실행해야 한다.
+  Windows Smart App Control 은 Python 3.14 의 numba/llvmlite DLL 을 차단해
+  UMAP `.transform()` 이 시스템 Python 에서 동작하지 않는다 (CLAUDE.md
+  Python Environment 섹션 참조).
 
 Usage:
-  PYTHONUTF8=1 python pipeline/classify_papers.py --topic ai4s
-  PYTHONUTF8=1 python pipeline/classify_papers.py --topic ai4s --slugs 088,1093
-  PYTHONUTF8=1 python pipeline/classify_papers.py --topic ai4s --dry-run
-  PYTHONUTF8=1 python pipeline/classify_papers.py --topic ai4s --k 15 --min-votes 4
+  PYTHONUTF8=1 .venv312/Scripts/python.exe pipeline/classify_papers.py --topic ai4s
+  PYTHONUTF8=1 .venv312/Scripts/python.exe pipeline/classify_papers.py --topic ai4s --slugs 088,1093
+  PYTHONUTF8=1 .venv312/Scripts/python.exe pipeline/classify_papers.py --topic ai4s --dry-run
 """
 
 import argparse
@@ -43,8 +54,6 @@ import numpy as np
 from config_loader import PAPERS_DIR as _PAPERS_DIR, get_topic_dir
 PAPERS_DIR = str(_PAPERS_DIR)
 
-DEFAULT_K = 20
-DEFAULT_MIN_VOTES = 2
 TOP_N_CATEGORIES = 3
 
 
@@ -57,121 +66,120 @@ def load_index():
     return json.loads(p.read_text(encoding="utf-8")), p
 
 
-def load_anchor_set(topic_dir):
-    """Read existing classification → slug→sub map, sub→category map.
+def load_bundle(topic_dir):
+    """Load the joblib bundle saved by topic_modeling.py.
 
-    The "anchor set" is the set of slugs whose cluster membership is fixed and
-    used to vote on new papers. We exclude assignments whose sub_category is
-    empty (failed previous runs).
+    Returns dict with: hdbscan_model, umap_cluster, centroids (tid→768D vec),
+    tid_to_cat (tid→parent name), tid_to_subname (tid→textual sub name).
     """
-    cls_path = Path(topic_dir) / "_new_classification.json"
-    if not cls_path.exists():
-        log(f"ERROR: {cls_path} missing — run topic_modeling.py first to seed clusters.")
+    import joblib
+    bundle_path = Path(topic_dir) / "_hdbscan_model.joblib"
+    if not bundle_path.exists():
+        log(f"ERROR: {bundle_path} missing — run topic_modeling.py first to "
+            f"train and persist the HDBSCAN model.")
         sys.exit(2)
-    cls = json.loads(cls_path.read_text(encoding="utf-8"))
-
-    slug_to_sub = {}
-    sub_to_cat = {}
-    for a in cls.get("assignments", []):
-        sub = a.get("sub_category")
-        cat = a.get("primary_category")
-        slug = a.get("slug")
-        if not sub or not cat or not slug:
-            continue
-        slug_to_sub[slug] = sub
-        sub_to_cat[sub] = cat
-    return slug_to_sub, sub_to_cat
+    bundle = joblib.load(bundle_path)
+    required = {"hdbscan_model", "umap_cluster", "centroids",
+                "tid_to_cat", "tid_to_subname"}
+    missing = required - set(bundle.keys())
+    if missing:
+        log(f"ERROR: bundle at {bundle_path} missing keys: {sorted(missing)}.")
+        sys.exit(2)
+    return bundle
 
 
-def cosine_distances_to_all(query_vec, anchor_mat):
-    """Return cosine distance vector (n,) of query against each anchor row."""
-    q = query_vec / (np.linalg.norm(query_vec) + 1e-12)
-    A = anchor_mat / (np.linalg.norm(anchor_mat, axis=1, keepdims=True) + 1e-12)
-    sims = A @ q
-    return 1.0 - sims  # cosine distance
+def cosine_distances(query_vec, centroid_dict):
+    """Return list of (tid, cosine_distance) sorted ascending.
 
-
-def hybrid_classify(query_vec, query_slug, anchor_slugs, anchor_mat,
-                    slug_to_sub, sub_to_cat, k=DEFAULT_K, min_votes=DEFAULT_MIN_VOTES):
-    """Hybrid node-based assignment.
-
-    Returns (primary_category, all_categories, primary_sub, sub_per_cat_map).
+    Used only for outlier fallback and all_categories top-N.
     """
-    # Distances to every anchor (exclude self if present)
-    dists = cosine_distances_to_all(query_vec, anchor_mat)
-    if query_slug in anchor_slugs:
-        self_idx = anchor_slugs.index(query_slug)
-        dists[self_idx] = np.inf  # exclude
+    q = np.asarray(query_vec, dtype=np.float32)
+    qn = q / (np.linalg.norm(q) + 1e-12)
+    out = []
+    for tid, c in centroid_dict.items():
+        c = np.asarray(c, dtype=np.float32)
+        cn = c / (np.linalg.norm(c) + 1e-12)
+        out.append((tid, 1.0 - float(qn @ cn)))
+    out.sort(key=lambda x: x[1])
+    return out
 
-    # Sort all anchors ascending by distance
-    order = np.argsort(dists)
 
-    # K-NN vote among nearest k anchors
-    knn_idxs = order[:k]
-    sub_votes = Counter()
-    sub_dists = {}
-    for i in knn_idxs:
-        s = slug_to_sub[anchor_slugs[int(i)]]
-        sub_votes[s] += 1
-        sub_dists.setdefault(s, []).append(float(dists[int(i)]))
+def classify_via_bundle(vec_768, bundle):
+    """Original-design classification:
 
-    # Primary: highest vote count, tie-break by smallest mean distance
-    # (replaces 1-NN to reduce single-neighbor noise; per user directive 2026-04-16)
-    def primary_key(item):
-        s, votes = item
-        return (-votes, float(np.mean(sub_dists[s])))
-    primary_sub = sorted(sub_votes.items(), key=primary_key)[0][0]
-    primary_cat = sub_to_cat[primary_sub]
+      1. UMAP transform → 5D
+      2. hdbscan.approximate_predict → primary tid
+      3. outlier → nearest centroid (cosine, 768D)
+      4. all_categories = top-N parent categories from centroid-ranked subs
 
-    # Qualifying subs for all_categories: vote >= min_votes
-    qualifying_subs = [s for s, n in sub_votes.items() if n >= min_votes]
-    # Sort qualifying by mean distance ascending (tighter cluster first)
-    qualifying_subs.sort(key=lambda s: float(np.mean(sub_dists[s])))
+    Returns (primary_cat, all_cats, primary_subname, sub_per_cat_map).
+    """
+    import hdbscan as _hdbscan
 
-    # Build all_categories: primary always pinned at index 0, then top qualifying subs' parents
-    sub_per_cat = {primary_cat: primary_sub}
+    hdbscan_model = bundle["hdbscan_model"]
+    umap_cluster = bundle["umap_cluster"]
+    centroids = bundle["centroids"]
+    tid_to_cat = bundle["tid_to_cat"]
+    tid_to_subname = bundle["tid_to_subname"]
+
+    vec = np.asarray(vec_768, dtype=np.float32).reshape(1, -1)
+    vec_5d = umap_cluster.transform(vec)
+
+    labels, strengths = _hdbscan.approximate_predict(hdbscan_model, vec_5d)
+    primary_tid = int(labels[0])
+
+    # Outlier 강제 배정: 768D centroid 코사인 최단
+    if primary_tid == -1 or primary_tid not in tid_to_cat:
+        ranked = cosine_distances(vec_768, centroids)
+        if not ranked:
+            raise RuntimeError("No centroids available for outlier fallback")
+        primary_tid = int(ranked[0][0])
+
+    primary_cat = tid_to_cat[primary_tid]
+    primary_subname = tid_to_subname.get(primary_tid, str(primary_tid))
+
+    # all_categories: centroid 거리 오름차순으로 부모 카테고리 중복 제거 top-N
+    ranked = cosine_distances(vec_768, centroids)
+    sub_per_cat = {primary_cat: primary_subname}
     all_cats = [primary_cat]
-    for s in qualifying_subs:
-        cat = sub_to_cat[s]
-        if cat not in all_cats:
-            all_cats.append(cat)
-            sub_per_cat[cat] = s
+    for tid, _dist in ranked:
+        cat = tid_to_cat.get(int(tid))
+        if not cat or cat in all_cats:
+            continue
+        all_cats.append(cat)
+        sub_per_cat[cat] = tid_to_subname.get(int(tid), str(tid))
         if len(all_cats) >= TOP_N_CATEGORIES:
             break
 
-    return primary_cat, all_cats, primary_sub, sub_per_cat
+    return primary_cat, all_cats, primary_subname, sub_per_cat
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Node-based hybrid classifier (Phase 3)")
+    ap = argparse.ArgumentParser(
+        description="HDBSCAN approximate_predict classifier (원 설계)")
     ap.add_argument("--topic", required=True)
     ap.add_argument("--slugs", default="",
                     help="Comma-separated slug prefixes. If set, only these "
                          "papers are (re)classified; others keep existing entries.")
     ap.add_argument("--dry-run", action="store_true",
                     help="Print assignment summary without writing JSONs.")
-    ap.add_argument("--k", type=int, default=DEFAULT_K,
-                    help="K for kNN vote on all_categories (default 10).")
-    ap.add_argument("--min-votes", type=int, default=DEFAULT_MIN_VOTES,
-                    help="Minimum kNN votes for a sub to qualify for "
-                         "all_categories (default 3).")
     args = ap.parse_args()
 
     topic = args.topic
     topic_dir = str(get_topic_dir(topic))
 
-    # 1. Anchor set: existing slug→sub & sub→cat
-    slug_to_sub, sub_to_cat = load_anchor_set(topic_dir)
-    log(f"[anchor] {len(slug_to_sub)} anchored slugs, "
-        f"{len(set(sub_to_cat.values()))} parent categories, "
-        f"{len(sub_to_cat)} sub-clusters")
+    # 1. HDBSCAN bundle (학습된 모델)
+    bundle = load_bundle(topic_dir)
+    log(f"[bundle] {bundle['n_subclusters']} sub-clusters, "
+        f"{len(set(bundle['tid_to_cat'].values()))} parent categories, "
+        f"trained_at={bundle.get('trained_at', '?')}")
 
     # 2. Index → topic_papers
     all_papers, index_path = load_index()
     topic_papers = [p for p in all_papers if topic in p.get("topics", [])]
     log(f"[index] {len(topic_papers)} {topic} papers")
 
-    # 3. Embeddings (incremental cache; computes new ones via SPECTER2 if needed)
+    # 3. Embeddings (incremental cache; SPECTER2 on demand)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from topic_modeling import extract_originalities, compute_embeddings
     originalities = extract_originalities(topic_papers)
@@ -179,15 +187,7 @@ def main():
     embeddings, slugs = compute_embeddings(originalities, cache_path)
     slug_to_vec = dict(zip(slugs, embeddings))
 
-    # 4. Build anchor matrix from anchored slugs that ALSO have embeddings
-    anchor_slugs = [s for s in slug_to_sub if s in slug_to_vec]
-    if not anchor_slugs:
-        log("ERROR: no anchored slug has an embedding — cannot classify.")
-        sys.exit(3)
-    anchor_mat = np.array([slug_to_vec[s] for s in anchor_slugs])
-    log(f"[anchor matrix] shape={anchor_mat.shape}")
-
-    # 5. Slug filter (--slugs)
+    # 4. Slug filter (--slugs)
     slug_filter = None
     if args.slugs:
         prefixes = [s.strip() for s in args.slugs.split(",") if s.strip()]
@@ -196,11 +196,15 @@ def main():
                               for pref in prefixes)}
         log(f"[slug filter] restricting to {len(slug_filter)} papers")
 
-    # 6. Classify
+    # 5. Classify each paper via approximate_predict
     reassigned = 0
     unchanged = 0
     skipped = 0
+    outlier_count = 0
     assignments = []
+
+    # Detect outliers separately to report
+    import hdbscan as _hdbscan
     for p in topic_papers:
         slug = p["slug"]
         if slug_filter is not None and slug not in slug_filter:
@@ -218,9 +222,15 @@ def main():
             log(f"  WARN: {slug} missing embedding — skipped")
             skipped += 1
             continue
-        primary, all_cats, sub, sub_map = hybrid_classify(
-            vec, slug, anchor_slugs, anchor_mat,
-            slug_to_sub, sub_to_cat, k=args.k, min_votes=args.min_votes)
+
+        # Detect raw outlier flag for reporting (before centroid fallback)
+        vec_5d = bundle["umap_cluster"].transform(
+            np.asarray(vec, dtype=np.float32).reshape(1, -1))
+        raw_labels, _ = _hdbscan.approximate_predict(bundle["hdbscan_model"], vec_5d)
+        if int(raw_labels[0]) == -1:
+            outlier_count += 1
+
+        primary, all_cats, sub, sub_map = classify_via_bundle(vec, bundle)
 
         prev = p.get("classifications", {}).get(topic, {})
         if prev.get("primary_category") == primary and prev.get("sub_category") == sub:
@@ -245,7 +255,8 @@ def main():
             "sub_category": sub,
         })
 
-    log(f"[classify] reassigned={reassigned}, unchanged={unchanged}, skipped={skipped}")
+    log(f"[classify] reassigned={reassigned}, unchanged={unchanged}, "
+        f"skipped={skipped}, outliers_force_assigned={outlier_count}")
 
     if args.dry_run:
         cats = Counter(a["primary_category"] for a in assignments)

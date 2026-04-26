@@ -177,14 +177,17 @@ def compute_embeddings(originalities, cache_path=None):
 
 def run_clustering(embeddings, slugs, originalities, min_cluster_size=2,
                     target_min=40, target_max=100):
-    """sklearn HDBSCAN + UMAP으로 fine-grained clustering (BERTopic 대체).
+    """hdbscan + UMAP으로 fine-grained clustering (BERTopic 대체).
 
     1. UMAP 차원축소 (768D → 5D) for clustering
     2. HDBSCAN 클러스터링 (min_cluster_size 자동 조정으로 sub-topic 40~100개)
+       — `hdbscan` 라이브러리 사용, `prediction_data=True` 설정해 신규 논문이
+       `approximate_predict()` 로 같은 클러스터에 매핑될 수 있도록 한다
+       (`classify_papers.py` 가 모델을 로드해 사용).
     3. TF-IDF 키워드 추출 (c-TF-IDF 대체)
     """
     from umap import UMAP
-    from sklearn.cluster import HDBSCAN
+    import hdbscan
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     docs = [originalities[s] for s in slugs]
@@ -200,11 +203,13 @@ def run_clustering(embeddings, slugs, originalities, min_cluster_size=2,
     embeddings_5d = umap_cluster.fit_transform(embeddings)
 
     # 2. HDBSCAN — adaptive min_cluster_size (target_min~target_max)
+    # prediction_data=True 가 필수: classify_papers 가 approximate_predict 호출
     mcs = min_cluster_size
     for attempt in range(20):
-        hdbscan_model = HDBSCAN(
+        hdbscan_model = hdbscan.HDBSCAN(
             min_cluster_size=mcs,
             min_samples=1, metric="euclidean",
+            prediction_data=True,
         )
         topics = hdbscan_model.fit_predict(embeddings_5d).tolist()
         probs = hdbscan_model.probabilities_ if hasattr(hdbscan_model, 'probabilities_') else None
@@ -263,7 +268,11 @@ def run_clustering(embeddings, slugs, originalities, min_cluster_size=2,
     )
     coords_3d = umap_3d.fit_transform(embeddings)
 
-    return topics, probs, topic_keywords, centroids, coords_2d, coords_3d
+    # Return clustering model + UMAP transformer too — classify_papers persists
+    # them via joblib so new papers can be projected to the same 5D space and
+    # routed via hdbscan.approximate_predict.
+    return (topics, probs, topic_keywords, centroids, coords_2d, coords_3d,
+            hdbscan_model, umap_cluster)
 
 
 # ═══════════════════════════════════════════
@@ -690,7 +699,8 @@ def main():
     log("\n" + "=" * 50)
     log("STEP 3: HDBSCAN FINE-GRAINED CLUSTERING")
     log("=" * 50)
-    topics, probs, topic_keywords, centroids, coords_2d, coords_3d = run_clustering(
+    (topics, probs, topic_keywords, centroids, coords_2d, coords_3d,
+     hdbscan_model, umap_cluster) = run_clustering(
         embeddings, slugs, originalities
     )
 
@@ -768,15 +778,17 @@ def main():
         json.dump(umap_data, f, ensure_ascii=False, indent=2)
     log(f"  UMAP coordinates: {umap_path}")
 
-    # Save topic model info. classify_papers (Phase 3) reads sub→category map
-    # from _new_classification.json directly, so we don't need to duplicate it
-    # here. Centroids are intentionally NOT stored: classify_papers uses
-    # node-based (single-linkage / kNN-vote) distance per HDBSCAN's density
-    # semantics, not centroid distance.
+    # Save topic model info + persisted clustering bundle. classify_papers
+    # loads the joblib bundle and routes new papers via:
+    #   1. umap_cluster.transform(new_768D) → 5D
+    #   2. hdbscan.approximate_predict(hdbscan_model, 5D) → primary sub-cluster
+    #   3. centroids[sub_id] (768D) → outlier fallback + all_categories top-N
+    # 즉 클러스터링은 density-faithful (HDBSCAN), centroid 는 outlier 와
+    # 부차 카테고리 선정에만 사용한다 (원 설계 그대로).
     if not args.skip_classification:
         topic_info_data = {
             "generated_at": datetime.now().strftime("%Y-%m-%d"),
-            "model": "SPECTER2 + sklearn.HDBSCAN + UMAP",
+            "model": "SPECTER2 + hdbscan.HDBSCAN(prediction_data=True) + UMAP",
             "n_papers": len(topic_papers),
             "n_topics": len(topic_names),
             "topics": {str(tid): info for tid, info in topic_names.items()},
@@ -787,6 +799,29 @@ def main():
         with open(info_path, "w", encoding="utf-8") as f:
             json.dump(topic_info_data, f, ensure_ascii=False, indent=2)
         log(f"  Topic model info: {info_path}")
+
+        # Persist HDBSCAN model + UMAP transformer + centroids + maps.
+        # classify_papers loads this and uses:
+        #   - umap_cluster.transform(new_768D) → 5D
+        #   - hdbscan.approximate_predict(hdbscan_model, 5D) → primary tid (int)
+        #   - tid_to_subname[tid] → textual sub-category name
+        #   - tid_to_cat[tid]     → parent category name
+        #   - centroids[tid]      → outlier fallback + all_categories top-N (cosine on 768D)
+        import joblib
+        bundle = {
+            "hdbscan_model": hdbscan_model,
+            "umap_cluster": umap_cluster,
+            "centroids": {int(k): v for k, v in centroids.items()},
+            "tid_to_cat": {int(k): v for k, v in tid_to_cat.items()},
+            "tid_to_subname": {int(k): v["name"] for k, v in topic_names.items()},
+            "trained_at": datetime.now().isoformat(),
+            "n_papers": len(topic_papers),
+            "n_subclusters": len(centroids),
+        }
+        bundle_path = os.path.join(topic_dir, "_hdbscan_model.joblib")
+        joblib.dump(bundle, bundle_path)
+        log(f"  HDBSCAN bundle: {bundle_path} "
+            f"({len(centroids)} sub-clusters, {len(tid_to_cat)} mapped)")
 
     # Step 6
     if not args.skip_connections:
