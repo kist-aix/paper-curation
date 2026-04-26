@@ -495,8 +495,11 @@ def main():
         if args.categories and os.path.exists(insights_path):
             with open(insights_path, "r", encoding="utf-8") as f:
                 existing_insights = json.load(f)
-            # Merge per_category (overwrite updated categories, keep rest)
-            existing_per_cat = existing_insights.get("per_category", {})
+            # Merge per_category (overwrite updated categories, keep rest);
+            # drop entries whose category no longer exists in current cat_papers
+            current_cats = set(cat_papers.keys())
+            existing_per_cat = {k: v for k, v in existing_insights.get("per_category", {}).items()
+                                if k in current_cats}
             existing_per_cat.update(insights.get("per_category", {}))
             insights["per_category"] = existing_per_cat
             insights["paper_count"] = len(topic_papers)

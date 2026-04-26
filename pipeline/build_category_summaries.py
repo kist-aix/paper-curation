@@ -174,10 +174,18 @@ def main():
         if args.categories and os.path.exists(sum_path):
             with open(sum_path, "r", encoding="utf-8") as f:
                 existing = json.load(f)
-            preserved = [s for s in existing if s["category"] not in args.categories]
+            current_cats = set(cat_papers.keys())
+            preserved = [s for s in existing
+                         if s["category"] not in args.categories
+                         and s["category"] in current_cats]
+            dropped = [s["category"] for s in existing
+                       if s["category"] not in args.categories
+                       and s["category"] not in current_cats]
             summaries = preserved
             CATEGORIES = [c for c in args.categories if c in cat_papers]
             print(f"  Selective update: {len(CATEGORIES)} categories to regenerate, {len(preserved)} preserved")
+            if dropped:
+                print(f"  Dropped {len(dropped)} stale categories: {dropped}")
         else:
             summaries = []
             CATEGORIES = sorted(c for c in cat_papers.keys() if c != "Other") + (["Other"] if "Other" in cat_papers else [])
