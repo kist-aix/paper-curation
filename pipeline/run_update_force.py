@@ -409,7 +409,7 @@ def extract_figures(pdf_path, slug_dir):
                       f"\"issues\":\"brief\",\"adjust_pt\":{{\"top\":0,\"bottom\":0,\"left\":0,\"right\":0}}}}\n"
                       f"adjust_pt: positive=expand, negative=shrink. PDF points.")
             resp = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
+                model="gemini-3.1-pro-preview",
                 contents=[types.Part.from_bytes(data=img_bytes, mime_type="image/png"), prompt])
             text = resp.text.strip()
             if "```" in text:
