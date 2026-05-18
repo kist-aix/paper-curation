@@ -144,13 +144,18 @@ conda activate py314
 
 # 2) 핵심 의존성 설치
 pip install anthropic openai google-genai pymupdf Pillow requests pyzotero \
+            opendataloader-pdf \
             numpy scikit-learn joblib \
             umap-learn hdbscan sentence-transformers
 
-# 3) 새 셸이 열릴 때 자동 활성화하려면 ~/.zshrc 마지막에 추가
+# 3) Java Runtime — opendataloader-pdf 는 Java CLI 래퍼. 없으면 PyMuPDF 로
+#    조용히 fallback 되어 표/구조 추출 품질이 떨어짐.
+brew install --cask temurin   # macOS Eclipse Temurin (OpenJDK)
+
+# 4) 새 셸이 열릴 때 자동 활성화하려면 ~/.zshrc 마지막에 추가
 echo 'conda activate py314' >> ~/.zshrc
 
-# 4) 평소 사용
+# 5) 평소 사용
 PYTHONUTF8=1 python pipeline/run_full.py --topic ai4s --mode curate --source web --days 7
 ```
 

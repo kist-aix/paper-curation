@@ -331,17 +331,30 @@ def extract_text(pdf_path, slug_dir):
     text_path = os.path.join(slug_dir, "text.md")
 
     # Strategy 1: OpenDataLoader (better table/formula/structure extraction)
+    # NOTE: pip package is `opendataloader-pdf` but Python import name is
+    # `opendataloader_pdf` (underscore). Earlier code used `opendataloader.pdf`
+    # which silently ImportError'd and fell through to PyMuPDF every time.
+    # Requires Java Runtime (e.g. `brew install --cask temurin`).
     try:
-        import tempfile
-        from opendataloader.pdf import convert as odl_convert
+        import tempfile, re
+        from opendataloader_pdf import convert as odl_convert
         with tempfile.TemporaryDirectory() as tmpdir:
             odl_convert(input_path=[pdf_path], output_dir=tmpdir,
-                        format="markdown")
+                        format="markdown", quiet=True)
             md_files = [f for f in os.listdir(tmpdir) if f.endswith(".md")]
             if md_files:
                 with open(os.path.join(tmpdir, md_files[0]), "r", encoding="utf-8") as f:
                     text = f.read()
                 if text and len(text) > 100:
+                    # OpenDataLoader exports its own image dump and embeds
+                    # `![image N](relative/path.png)` lines pointing to a
+                    # sibling dir that paper-curation never tracks (we use
+                    # PyMuPDF for figures/). Collapse those refs into
+                    # `[Figure N]` so the body flow survives but the broken
+                    # paths don't pollute Claude review prompts.
+                    text = re.sub(r'!\[image\s*(\d+)\]\([^)]*\)',
+                                  r'[Figure \1]', text)
+                    text = re.sub(r'\n{3,}', '\n\n', text)
                     with open(text_path, "w", encoding="utf-8") as f:
                         f.write(text)
                     return True

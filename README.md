@@ -49,6 +49,7 @@ python pipeline/setup.py
 - **Zotero**: [API Key 발급](https://www.zotero.org/settings/keys) + 큐레이션할 컬렉션에 논문 PDF 준비
 - **환경변수**: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY`
 - **Python 3.14 권장** (3.12+ 동작). macOS 표준 셋업은 conda env `py314` — UMAP/HDBSCAN/sentence-transformers 휠 모두 3.14 지원. Windows 에서 Smart App Control 이 numba/llvmlite DLL 을 차단하면 Python 3.12 전용 fallback env 가 필요할 수 있음.
+- **Java Runtime** — `opendataloader-pdf` 가 PDF 추출에 Java CLI 를 호출. macOS: `brew install --cask temurin`. 없으면 PyMuPDF 로 자동 fallback 되지만 표·헤딩·구조 추출 품질이 떨어짐.
 
 ---
 
@@ -381,6 +382,7 @@ python pipeline/setup.py
 - **Zotero**: [API Key](https://www.zotero.org/settings/keys) + a collection with paper PDFs
 - **Environment variables**: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY`
 - **Python 3.14 recommended** (3.12+ works). Standard setup on macOS is a conda env named `py314` — UMAP/HDBSCAN/sentence-transformers all ship wheels for 3.14. On Windows, if Smart App Control blocks numba/llvmlite DLLs, a Python 3.12 fallback env may be needed.
+- **Java Runtime** — `opendataloader-pdf` shells out to a Java CLI for PDF extraction. macOS: `brew install --cask temurin`. Without Java the pipeline silently falls back to PyMuPDF, which loses table/heading/structure markers.
 
 ---
 
