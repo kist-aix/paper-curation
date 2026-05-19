@@ -391,19 +391,121 @@ def _is_gemini_transient(exc_or_text):
     return any(m in t for m in markers)
 
 
-# Per-call watchdog timeout for PaperBanana. A normal critic-loop image takes
-# ~1~3 minutes; anything past 10 minutes is silent stall (e.g. Gemini endpoint
-# hanging with no exception). We abort that candidate and let the outer loop
-# move on instead of waiting indefinitely.
-_PB_CALL_TIMEOUT_S = 600
+# PaperBanana watchdog policy.
+#
+# PaperBanana does not use the `logging` module — its agents print() to stdout.
+# Wall-clock timeouts misfire because legitimate critic loops can legitimately
+# run 5~10 minutes. The real "stuck" signal is **stdout silence**: when the
+# Gemini endpoint hangs without raising, no agent print() ever arrives.
+#
+# So we redirect fds 1/2 into a pipe and have a reader thread tail the lines,
+# stamping a last_activity counter on every byte received. A watchdog loop in
+# the main thread aborts if either:
+#   - idle (no stdout for _PB_IDLE_TIMEOUT_S) — strong stuck signal
+#   - wall (total elapsed > _PB_WALL_TIMEOUT_S) — failsafe ceiling
+_PB_IDLE_TIMEOUT_S = 180    # 3 min of stdout silence = stuck
+_PB_WALL_TIMEOUT_S = 1800   # 30 min hard ceiling per call
+_PB_POLL_INTERVAL_S = 10    # how often the watchdog checks
+
+
+def _pb_call_with_watchdog(method_text, caption, output_path, critic_rounds):
+    """Invoke PaperBanana with stdout-idle + wall-clock watchdog.
+
+    Returns (png_bytes_or_None, status):
+      status == "ok"            → success (png_bytes set)
+      status == "idle_timeout"  → no stdout for _PB_IDLE_TIMEOUT_S
+      status == "wall_timeout"  → exceeded _PB_WALL_TIMEOUT_S
+      status == "exception"     → worker raised; exception is re-raised after status read
+    The worker thread may keep running in the background after timeout;
+    Python threads are cooperative and cannot be hard-killed.
+    """
+    import os as _os
+    import threading
+    import time as _time
+    from lib.paperbanana import generate_diagram
+
+    # 1) Re-route fd 1/2 → pipe write end. Save originals.
+    saved_out = _os.dup(1)
+    saved_err = _os.dup(2)
+    pipe_r, pipe_w = _os.pipe()
+    _os.dup2(pipe_w, 1)
+    _os.dup2(pipe_w, 2)
+    _os.close(pipe_w)  # fds 1 and 2 are now the only writers
+
+    last_activity = [_time.time()]
+    activity_lock = threading.Lock()
+
+    def reader():
+        """Forward PB stdout to saved_out as '[pb] <line>', stamp activity."""
+        try:
+            with _os.fdopen(pipe_r, "r", buffering=1, errors="replace") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line:
+                        _os.write(saved_out, f"      [pb] {line}\n".encode("utf-8", errors="replace"))
+                    with activity_lock:
+                        last_activity[0] = _time.time()
+        except Exception:
+            pass
+
+    reader_t = threading.Thread(target=reader, daemon=True, name="pb-stdout-reader")
+    reader_t.start()
+
+    result_box = {"value": None, "exc": None, "done": False}
+
+    def worker():
+        try:
+            result_box["value"] = generate_diagram(
+                method=method_text, caption=caption,
+                aspect_ratio="16:9", critic_rounds=critic_rounds,
+                exp_mode="demo_planner_critic",
+                retrieval_setting="auto",
+                output_path=output_path,
+            )
+        except BaseException as e:  # capture even SystemExit-style
+            result_box["exc"] = e
+        finally:
+            result_box["done"] = True
+
+    worker_t = threading.Thread(target=worker, daemon=True, name="pb-worker")
+    worker_t.start()
+
+    t0 = _time.time()
+    status = "ok"
+    while not result_box["done"]:
+        worker_t.join(timeout=_PB_POLL_INTERVAL_S)
+        elapsed = _time.time() - t0
+        with activity_lock:
+            idle = _time.time() - last_activity[0]
+        if elapsed > _PB_WALL_TIMEOUT_S:
+            status = "wall_timeout"
+            break
+        if idle > _PB_IDLE_TIMEOUT_S:
+            status = "idle_timeout"
+            break
+
+    # 2) Restore fd 1/2 (this closes the pipe writers → reader sees EOF).
+    try:
+        _os.dup2(saved_out, 1)
+        _os.dup2(saved_err, 2)
+    finally:
+        try: _os.close(saved_out)
+        except Exception: pass
+        try: _os.close(saved_err)
+        except Exception: pass
+
+    reader_t.join(timeout=2)
+
+    if result_box["exc"] is not None and status == "ok":
+        # Worker raised before any watchdog fired
+        raise result_box["exc"]
+    return result_box["value"], status
 
 
 def generate_with_paperbanana(method_text, caption, output_path, critic_rounds=3):
     """PaperBanana 로 이미지 생성. Gemini 일시 실패 시 사용자 정책에 따라 재시도.
-    각 호출은 _PB_CALL_TIMEOUT_S 안에 끝나야 한다 (silent-stall 방어)."""
+    각 호출은 stdout-idle + wall watchdog 으로 stuck 을 감지한다."""
     import time as _time
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
-    from lib.paperbanana import generate_diagram
 
     last_exc = None
     for attempt_idx, sleep_s in enumerate([0] + _GEMINI_RETRY_SCHEDULE):
@@ -413,43 +515,28 @@ def generate_with_paperbanana(method_text, caption, output_path, critic_rounds=3
             _time.sleep(sleep_s)
         t0 = _time.time()
         log(f"    [paperbanana] calling generate_diagram (attempt {attempt_idx}, "
-            f"timeout {_PB_CALL_TIMEOUT_S}s)...")
+            f"idle≤{_PB_IDLE_TIMEOUT_S}s, wall≤{_PB_WALL_TIMEOUT_S}s)...")
         try:
-            with ThreadPoolExecutor(max_workers=1) as ex:
-                fut = ex.submit(
-                    generate_diagram,
-                    method=method_text,
-                    caption=caption,
-                    aspect_ratio="16:9",
-                    critic_rounds=critic_rounds,
-                    exp_mode="demo_planner_critic",
-                    retrieval_setting="auto",
-                    output_path=output_path,
-                )
-                try:
-                    png_bytes = fut.result(timeout=_PB_CALL_TIMEOUT_S)
-                except _FutTimeout:
-                    elapsed = _time.time() - t0
-                    log(f"    [paperbanana-timeout] ERROR: no output for {elapsed:.0f}s "
-                        f"(> {_PB_CALL_TIMEOUT_S}s) — aborting this candidate")
-                    # Worker thread keeps running in the background; ThreadPoolExecutor
-                    # context exit won't kill it (Python threads are cooperative), but
-                    # the next candidate proceeds independently.
-                    return None
-            elapsed = _time.time() - t0
-            if png_bytes and os.path.exists(output_path):
-                log(f"    [paperbanana] ok in {elapsed:.0f}s")
-                return os.path.getsize(output_path) / 1024
-            # No exception but empty output — treat as transient
-            log(f"    [paperbanana] ERROR: empty output after {elapsed:.0f}s")
-            last_exc = RuntimeError("PaperBanana returned empty output")
-            if not _is_gemini_transient(last_exc):
-                return None
+            png_bytes, status = _pb_call_with_watchdog(
+                method_text, caption, output_path, critic_rounds)
         except Exception as e:
             last_exc = e
             if not _is_gemini_transient(e):
                 log(f"    [gemini-retry] non-transient error, aborting: {e}")
                 raise
+            continue
+        elapsed = _time.time() - t0
+        if status != "ok":
+            log(f"    [paperbanana-watchdog] ABORT: {status} after {elapsed:.0f}s — "
+                f"abandoning candidate (worker thread leaked into background)")
+            return None
+        if png_bytes and os.path.exists(output_path):
+            log(f"    [paperbanana] ok in {elapsed:.0f}s")
+            return os.path.getsize(output_path) / 1024
+        log(f"    [paperbanana] ERROR: empty output after {elapsed:.0f}s")
+        last_exc = RuntimeError("PaperBanana returned empty output")
+        if not _is_gemini_transient(last_exc):
+            return None
 
     log(f"    [gemini-retry] GAVE UP after 3×1m + 2×30m. Last error: {last_exc}")
     return None
