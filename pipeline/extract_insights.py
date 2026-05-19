@@ -72,7 +72,7 @@ def _est_tokens(text):
     return int(len(text) / 1.5)
 
 
-def _count_tokens(client, text, model="claude-sonnet-4-20250514"):
+def _count_tokens(client, text, model="claude-sonnet-4-6"):
     """Authoritative token count via Anthropic API (no output tokens spent).
     Falls back to _est_tokens on any API error."""
     try:
@@ -243,7 +243,7 @@ Output ONLY valid JSON in this exact format:
     log(f"  Cross-category insight extraction ({total} papers, {len(cat_papers)} categories, "
         f"~{_est_tokens(prompt)} tokens)...")
     resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -323,7 +323,7 @@ Rules:
 - target은 위 목록에 있는 논문 번호만 사용"""
 
     resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=10000,
         messages=[{"role": "user", "content": prompt}],
     )

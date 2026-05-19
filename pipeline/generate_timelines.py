@@ -60,7 +60,7 @@ def opus_streaming_call(prompt, max_tokens=12000):
 
     text = ""
     with client.messages.stream(
-        model="claude-opus-4-20250514",
+        model="claude-opus-4-7",
         max_tokens=max_tokens,
         temperature=0.3,
         messages=[{"role": "user", "content": prompt}],

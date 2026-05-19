@@ -1682,7 +1682,7 @@ HTML = (
     '        </select>\n'
     '        <select id="deep-model" class="deep-model">\n'
     '          <option value="claude-haiku-4-5">Haiku 4.5 (fast &amp; cheap)</option>\n'
-    '          <option value="claude-sonnet-4-5">Sonnet 4.5 (best quality)</option>\n'
+    '          <option value="claude-sonnet-4-6">Sonnet 4.6 (best quality)</option>\n'
     '        </select>\n'
     '        <button class="deep-btn" id="deep-rerun" disabled title="현재 질의를 선택한 모델·분량으로 다시 실행">&#x21BB; 재시작</button>\n'
     '        <div class="deep-actions">\n'

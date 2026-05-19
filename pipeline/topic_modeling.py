@@ -327,7 +327,7 @@ Rules:
 """
 
         resp = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -456,7 +456,7 @@ Rules:
 
     log(f"  Naming {n_cats} categories via Sonnet...")
     resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -619,7 +619,7 @@ Rules:
 - target은 candidate 목록의 논문 번호만 사용"""
 
         resp = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=10000,
             messages=[{"role": "user", "content": prompt}],
         )
