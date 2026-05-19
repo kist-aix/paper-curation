@@ -195,7 +195,11 @@ def generate_diagram(method: str, caption: str,
         return png_bytes
 
     except Exception as e:
-        logger.error(f"PaperBanana diagram generation failed: {e}")
-        return None
+        # Log full traceback so root causes (e.g. ModuleNotFoundError for
+        # PaperBanana's own deps) surface in the wrapper's stderr instead of
+        # being swallowed into a generic "returned None". Then re-raise so the
+        # outer watchdog/retry layer can decide whether it's transient.
+        logger.exception(f"PaperBanana diagram generation failed: {e}")
+        raise
     finally:
         os.chdir(prev_cwd)
