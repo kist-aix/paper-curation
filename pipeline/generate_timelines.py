@@ -403,21 +403,26 @@ def _is_gemini_transient(exc_or_text):
 # the main thread aborts if either:
 #   - idle (no stdout for _PB_IDLE_TIMEOUT_S) — strong stuck signal
 #   - wall (total elapsed > _PB_WALL_TIMEOUT_S) — failsafe ceiling
-_PB_IDLE_TIMEOUT_S = 180    # 3 min of stdout silence = stuck
+_PB_IDLE_TIMEOUT_S = 600    # 10 min of stdout silence = stuck (raised from 180s
+                            # — PaperBanana's wrap-up + internal asyncio retry
+                            # legitimately silences stdout for ~4 minutes)
 _PB_WALL_TIMEOUT_S = 1800   # 30 min hard ceiling per call
 _PB_POLL_INTERVAL_S = 10    # how often the watchdog checks
+_PB_FILE_STABLE_S  = 15     # output file present + stable for this long = success
 
 
 def _pb_call_with_watchdog(method_text, caption, output_path, critic_rounds):
-    """Invoke PaperBanana with stdout-idle + wall-clock watchdog.
+    """Invoke PaperBanana with stdout-idle + wall-clock + file-presence watchdog.
 
     Returns (png_bytes_or_None, status):
-      status == "ok"            → success (png_bytes set)
-      status == "idle_timeout"  → no stdout for _PB_IDLE_TIMEOUT_S
+      status == "ok"            → worker returned cleanly
+      status == "file_complete" → output file on disk + stable; worker still running
+                                   (PaperBanana finished writing but is in wrap-up)
+      status == "idle_timeout"  → no stdout for _PB_IDLE_TIMEOUT_S and no output file
       status == "wall_timeout"  → exceeded _PB_WALL_TIMEOUT_S
-      status == "exception"     → worker raised; exception is re-raised after status read
     The worker thread may keep running in the background after timeout;
-    Python threads are cooperative and cannot be hard-killed.
+    Python threads are cooperative and cannot be hard-killed. Callers should
+    treat any status with an existing, non-empty output_path as success.
     """
     import os as _os
     import threading
@@ -470,18 +475,56 @@ def _pb_call_with_watchdog(method_text, caption, output_path, critic_rounds):
     worker_t = threading.Thread(target=worker, daemon=True, name="pb-worker")
     worker_t.start()
 
+    def _file_ready():
+        """Output file exists with non-zero size."""
+        try:
+            return bool(output_path) and _os.path.exists(str(output_path)) \
+                   and _os.path.getsize(str(output_path)) > 0
+        except Exception:
+            return False
+
     t0 = _time.time()
+    file_seen_at = None       # time we first saw output_path present
+    file_seen_size = 0
     status = "ok"
     while not result_box["done"]:
         worker_t.join(timeout=_PB_POLL_INTERVAL_S)
+        if result_box["done"]:
+            break
         elapsed = _time.time() - t0
         with activity_lock:
             idle = _time.time() - last_activity[0]
+
+        # B: output-file presence trumps both timeouts. Once PaperBanana has
+        # written the PNG to disk, the work is meaningfully done — anything
+        # the worker thread is still doing is cleanup/return marshalling.
+        if _file_ready():
+            try:
+                cur_size = _os.path.getsize(str(output_path))
+            except Exception:
+                cur_size = 0
+            if file_seen_at is None:
+                file_seen_at = _time.time()
+                file_seen_size = cur_size
+            else:
+                # File is stable (same size) for _PB_FILE_STABLE_S → finalize.
+                stable = (cur_size == file_seen_size and
+                          (_time.time() - file_seen_at) >= _PB_FILE_STABLE_S)
+                if stable:
+                    status = "file_complete"
+                    break
+                if cur_size != file_seen_size:
+                    file_seen_size = cur_size
+                    file_seen_at = _time.time()
+
         if elapsed > _PB_WALL_TIMEOUT_S:
-            status = "wall_timeout"
+            # Wall ceiling — still salvage if file exists.
+            status = "file_complete" if _file_ready() else "wall_timeout"
             break
         if idle > _PB_IDLE_TIMEOUT_S:
-            status = "idle_timeout"
+            # Stdout silence — also salvage if file exists (the silence is
+            # most likely PaperBanana's post-write wrap-up).
+            status = "file_complete" if _file_ready() else "idle_timeout"
             break
 
     # 2) Restore fd 1/2 (this closes the pipe writers → reader sees EOF).
@@ -526,14 +569,20 @@ def generate_with_paperbanana(method_text, caption, output_path, critic_rounds=3
                 raise
             continue
         elapsed = _time.time() - t0
-        if status != "ok":
+        # A non-"ok" status from the watchdog is informational. The real
+        # success criterion is "does the PNG exist on disk with non-zero size".
+        # status=="file_complete" already signals success-via-disk.
+        if status not in ("ok", "file_complete") and not (
+                output_path and os.path.exists(output_path)
+                and os.path.getsize(output_path) > 0):
             log(f"    [paperbanana-watchdog] ABORT: {status} after {elapsed:.0f}s — "
                 f"abandoning candidate (worker thread leaked into background)")
             return None
-        if png_bytes and os.path.exists(output_path):
-            log(f"    [paperbanana] ok in {elapsed:.0f}s")
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            note = "" if status == "ok" else f" (status={status}, salvaged from disk)"
+            log(f"    [paperbanana] ok in {elapsed:.0f}s{note}")
             return os.path.getsize(output_path) / 1024
-        log(f"    [paperbanana] ERROR: empty output after {elapsed:.0f}s")
+        log(f"    [paperbanana] ERROR: empty output after {elapsed:.0f}s (status={status})")
         last_exc = RuntimeError("PaperBanana returned empty output")
         if not _is_gemini_transient(last_exc):
             return None
