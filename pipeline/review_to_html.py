@@ -13,6 +13,16 @@ from html import escape as esc
 from config_loader import PAPERS_DIR as _PAPERS_DIR
 PAPERS = str(_PAPERS_DIR)
 
+# Zotero PDF attachment keys (slug → key). Written by build_topic_index;
+# absent on the very first build, harmless when missing — button just doesn't
+# render for papers without a known key.
+_ZOTERO_KEYS_PATH = os.path.join(os.path.dirname(_PAPERS_DIR), "_zotero_keys.json")
+try:
+    with open(_ZOTERO_KEYS_PATH, "r", encoding="utf-8") as _f:
+        _ZOTERO_KEYS = json.load(_f)
+except Exception:
+    _ZOTERO_KEYS = {}
+
 THEMES = {
     "ai4s": {"accent": "#D63423", "accent_dark": "#A62018", "accent_bg": "#FEF0EF",
              "essence_border": "#8B1A1A", "essence_bg": "#FDF8F8",
@@ -391,7 +401,24 @@ def convert_review(md_path, topic, slug_dir):
     # Metadata
     if meta_line:
         meta_html = _inline(meta_line)
-        body_parts.append(f'<blockquote><p>{meta_html}</p></blockquote>')
+        # Zotero "Open PDF" button — same inline style as the Deep Research
+        # reference list buttons in build_topic_index.py, so the affordance
+        # looks identical wherever it appears. Only rendered when we have a
+        # PDF attachment key for this slug (otherwise harmless skip).
+        # slug_dir is a full path (docs/papers/<slug>) — strip to bare slug for lookup
+        zkey = _ZOTERO_KEYS.get(os.path.basename(slug_dir), "")
+        pdf_btn = ""
+        if zkey:
+            pdf_btn = (
+                f' <a href="zotero://open-pdf/library/items/{esc(zkey)}" '
+                f'title="Open PDF in Zotero" '
+                f'style="margin-left:0.5rem; font-size:0.75rem; color:#555; '
+                f'text-decoration:none; padding:0.05rem 0.4rem; '
+                f'border-radius:3px; background:#f0f0f0; '
+                f'border:1px solid #ddd;">'
+                f'&#x1F4C4; PDF</a>'
+            )
+        body_parts.append(f'<blockquote><p>{meta_html}{pdf_btn}</p></blockquote>')
 
     body_parts.append('<hr>')
 
