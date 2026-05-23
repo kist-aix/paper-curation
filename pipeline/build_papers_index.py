@@ -168,6 +168,7 @@ def main():
             "doi_verified": parsed.get("doi_verified", False),
             # Preserve any zotero_item_key from previous index (populated by run_update_force)
             "zotero_item_key": prev.get("zotero_item_key", ""),
+            "pdf_path": prev.get("pdf_path", ""),
         }
         index.append(entry)
 

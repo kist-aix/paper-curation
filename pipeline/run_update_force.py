@@ -89,6 +89,7 @@ def load_checkpoint():
 
 _cp_lock = threading.Lock()
 _slug_to_zotero_key = {}
+_slug_to_pdf_path = {}  # populated by find_pdf hits; persisted to _papers_index.json for PDF-change detection on subsequent runs
 
 
 def save_checkpoint(cp):
@@ -105,9 +106,23 @@ def fetch_zotero_items(collection_key):
     while True:
         url = (f"https://api.zotero.org/users/{USER_ID}/collections/"
                f"{collection_key}/items/top?limit=100&start={start}&format=json&sort=title")
-        req = urllib.request.Request(url, headers={"Zotero-API-Key": API_KEY})
-        with urllib.request.urlopen(req, context=_ssl_ctx) as resp:
-            batch = json.load(resp)
+        # Korea-to-Zotero links drop connections mid-stream; retry with exp backoff.
+        last_err = None
+        batch = None
+        for attempt in range(5):
+            try:
+                req = urllib.request.Request(url, headers={"Zotero-API-Key": API_KEY})
+                with urllib.request.urlopen(req, timeout=30, context=_ssl_ctx) as resp:
+                    batch = json.load(resp)
+                break
+            except Exception as e:
+                last_err = e
+                wait = min(60, 2 * (2 ** attempt))
+                print(f"[fetch_zotero_items] attempt {attempt+1}/5 (start={start}) failed: "
+                      f"{type(e).__name__}: {str(e)[:120]}; sleeping {wait}s", flush=True)
+                import time as _t; _t.sleep(wait)
+        if batch is None:
+            raise RuntimeError(f"fetch_zotero_items exhausted retries at start={start}: {last_err}")
         if not batch:
             break
         for item in batch:
@@ -186,6 +201,17 @@ def find_pdf(item):
             path = cd.get("path", "")
             if not path.lower().endswith(".pdf"):
                 continue
+            # Zotero "Linked Attachment Base Directory" stores paths as
+            # `attachments:<filename>` (relative to ZOTERO_DIR). Strip the
+            # prefix so os.path.exists/basename work against the real file.
+            if path.startswith("attachments:"):
+                rel = path[len("attachments:"):]
+                resolved = os.path.join(ZOTERO_DIR, rel)
+                if os.path.exists(resolved):
+                    _audit_append({"key": key, "title": title[:80],
+                                   "method": "zotero_children_attachments_uri",
+                                   "path": resolved})
+                    return resolved, "zotero_children_abs"
             if os.path.exists(path):
                 _audit_append({"key": key, "title": title[:80],
                                "method": "zotero_children_abs", "path": path})
@@ -585,7 +611,7 @@ def write_review(item, slug_dir, figures):
 
     try:
         from anthropic import Anthropic
-        client = Anthropic()
+        client = Anthropic(timeout=180.0, max_retries=4)
 
         prompt = f"""논문을 분석하고 JSON으로 리뷰 필드를 반환하세요.
 
@@ -1037,6 +1063,7 @@ def process_paper(item, slug, cp):
     # PDF integrity field). Keyed across threads via _cp_lock for safety.
     with _cp_lock:
         _slug_to_zotero_key[slug] = item.get("key", "")
+        _slug_to_pdf_path[slug] = pdf_path
     if match_method == "fuzzy":
         log(f"  {slug}: PDF matched via FUZZY — review required")
 
@@ -1260,6 +1287,36 @@ def main():
     forced_slugs = set()
     if args.slugs:
         forced_slugs = {slug for _, slug in item_slug_pairs}
+
+    # PDF-change auto-detect: if _papers_index.json has cached pdf_path for a
+    # slug AND that PDF's mtime is newer than the slug's review.md, force a
+    # rebuild. Cheap (stat-only) — no Zotero API calls. Cache populated by
+    # prior find_pdf hits and persisted in the index.
+    if args.skip_existing or args.resume:
+        try:
+            _idx_path = os.path.join(PAPERS_DIR, "_papers_index.json")
+            if os.path.exists(_idx_path):
+                with open(_idx_path, "r", encoding="utf-8") as _f:
+                    _cached = {p["slug"]: p.get("pdf_path", "") for p in json.load(_f)}
+                _pdf_detected = []
+                for _, slug in item_slug_pairs:
+                    if slug in forced_slugs:
+                        continue
+                    _pdf = _cached.get(slug, "")
+                    _review = os.path.join(PAPERS_DIR, slug, "review.md")
+                    if _pdf and os.path.exists(_pdf) and os.path.exists(_review):
+                        if os.path.getmtime(_pdf) > os.path.getmtime(_review):
+                            _pdf_detected.append(slug)
+                if _pdf_detected:
+                    forced_slugs.update(_pdf_detected)
+                    log(f"[pdf-change] {len(_pdf_detected)} papers: PDF mtime > review.md mtime — forcing rebuild")
+                    for _s in _pdf_detected[:10]:
+                        log(f"  - {_s}")
+                    if len(_pdf_detected) > 10:
+                        log(f"  ... +{len(_pdf_detected)-10} more")
+        except Exception as _e:
+            log(f"[pdf-change] check skipped: {_e}")
+
     if args.skip_existing or args.resume:
         skipped = 0
         for item, slug in item_slug_pairs:
@@ -1318,26 +1375,32 @@ def main():
 
     log(f"\nFinal: {len(cp['completed'])} completed, {len(cp['failed'])} failed")
 
-    # ── Persist Zotero item key → slug mapping into _papers_index.json ──
-    # build_papers_index will preserve `zotero_item_key` via prev.get(...).
-    if _slug_to_zotero_key:
+    # ── Persist Zotero item key + PDF path → slug mapping into _papers_index.json ──
+    # build_papers_index will preserve `zotero_item_key` and `pdf_path` via prev.get(...).
+    if _slug_to_zotero_key or _slug_to_pdf_path:
         try:
             from lib.atomic_io import atomic_write_json
             idx_path = os.path.join(PAPERS_DIR, "_papers_index.json")
             if os.path.exists(idx_path):
                 with open(idx_path, "r", encoding="utf-8") as f:
                     _idx = json.load(f)
-                _patched = 0
+                _patched_key = 0
+                _patched_pdf = 0
                 for _e in _idx:
-                    _k = _slug_to_zotero_key.get(_e.get("slug"))
+                    _s = _e.get("slug")
+                    _k = _slug_to_zotero_key.get(_s)
                     if _k and _e.get("zotero_item_key") != _k:
                         _e["zotero_item_key"] = _k
-                        _patched += 1
-                if _patched:
+                        _patched_key += 1
+                    _p = _slug_to_pdf_path.get(_s)
+                    if _p and _e.get("pdf_path") != _p:
+                        _e["pdf_path"] = _p
+                        _patched_pdf += 1
+                if _patched_key or _patched_pdf:
                     atomic_write_json(idx_path, _idx)
-                    log(f"  [zotero_item_key] persisted {_patched} mappings into _papers_index.json")
+                    log(f"  [persist] zotero_item_key={_patched_key}, pdf_path={_patched_pdf} mappings into _papers_index.json")
         except Exception as _e:
-            log(f"  [zotero_item_key] persist failed: {_e}")
+            log(f"  [persist] failed: {_e}")
 
     # ── Post-processing: rebuild index, classify, insights, topic page ──
     if len(cp['completed']) > 0 or args.timeline or args.category:

@@ -160,7 +160,7 @@ def main():
         key = (pc, sc)
         sub_papers[key].append(p)
 
-    client = Anthropic()
+    client = Anthropic(timeout=180.0, max_retries=4)
 
     # Load existing or start fresh
     if args.regen_ko and os.path.exists(sum_path):

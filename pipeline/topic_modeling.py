@@ -714,7 +714,7 @@ def main():
     )
 
     from anthropic import Anthropic
-    client = Anthropic()
+    client = Anthropic(timeout=180.0, max_retries=4)
 
     if args.skip_classification:
         log("\n  [Steps 4-5] SKIP (--skip-classification: preserving existing categories)")

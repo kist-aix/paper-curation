@@ -54,22 +54,32 @@ def log(msg):
 # ═══════════════════════════════════════════
 
 def opus_streaming_call(prompt, max_tokens=12000):
-    """Opus streaming 호출. 10분 초과 방지."""
+    """Opus streaming 호출. SDK retry는 request-level만 처리하므로 mid-stream
+    Connection reset/ReadError를 잡아서 수동 retry (exp backoff)."""
+    import time as _time
     from anthropic import Anthropic
-    client = Anthropic()
+    client = Anthropic(timeout=600.0, max_retries=4)
 
-    text = ""
-    # Opus 4.7 uses adaptive thinking and rejects an explicit `temperature` —
-    # the API returns 400 "`temperature` is deprecated for this model."
-    with client.messages.stream(
-        model="claude-opus-4-7",
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        for chunk in stream.text_stream:
-            text += chunk
-
-    return text
+    last_err = None
+    for attempt in range(5):
+        try:
+            text = ""
+            # Opus 4.7 uses adaptive thinking and rejects an explicit `temperature` —
+            # the API returns 400 "`temperature` is deprecated for this model."
+            with client.messages.stream(
+                model="claude-opus-4-7",
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                for chunk in stream.text_stream:
+                    text += chunk
+            return text
+        except Exception as e:
+            last_err = e
+            wait = min(60, 5 * (2 ** attempt))
+            print(f"[opus_streaming_call] attempt {attempt+1}/5 failed: {type(e).__name__}: {str(e)[:120]}; sleeping {wait}s", flush=True)
+            _time.sleep(wait)
+    raise RuntimeError(f"opus_streaming_call exhausted retries: {last_err}")
 
 
 def build_category_narrative(papers, topic, category):

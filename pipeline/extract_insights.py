@@ -247,10 +247,10 @@ Output ONLY valid JSON in this exact format:
     log(f"  Cross-category insight extraction ({total} papers, {len(cat_papers)} categories, "
         f"~{_est_tokens(prompt)} tokens)...")
     _t0 = time.time()
-    log(f"    [insights] calling Sonnet 4.6 (max_tokens=4000)...")
+    log(f"    [insights] calling Sonnet 4.6 (max_tokens=8000)...")
     resp = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )
     text = resp.content[0].text.strip()
@@ -331,10 +331,10 @@ Rules:
 - target은 위 목록에 있는 논문 번호만 사용"""
 
     _t0 = time.time()
-    log(f"    [conn-batch:{cat_name[:30]}] calling Sonnet 4.6 ({len(papers_batch)} targets, max_tokens=10000)...")
+    log(f"    [conn-batch:{cat_name[:30]}] calling Sonnet 4.6 ({len(papers_batch)} targets, max_tokens=20000)...")
     resp = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=10000,
+        max_tokens=20000,
         messages=[{"role": "user", "content": prompt}],
     )
     text = resp.content[0].text.strip()
@@ -491,7 +491,7 @@ def main():
     # script stalled for 1h22m with no log activity, suggesting an httpx read
     # without a deadline. 5-min per-attempt cap × 2 retries = ~15 min worst
     # case before the SDK raises, instead of hanging forever.
-    client = Anthropic(timeout=300.0, max_retries=2)
+    client = Anthropic(timeout=180.0, max_retries=4)
     run_insights = not args.connections_only
     run_connections = not args.insights_only
 
