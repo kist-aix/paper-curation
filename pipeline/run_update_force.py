@@ -1482,13 +1482,13 @@ def main():
             except Exception:
                 pass
             run_step("topic_modeling",
-                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 3600)
         elif is_update:
             run_step("topic_modeling (coords+connections)",
-                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-classification"], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-classification"], 3600)
         else:
             run_step("topic_modeling",
-                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 1200)
+                     [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic], 3600)
 
         # Step 3: classify (always — new papers only in update mode without --category)
         run_step("classify_papers",
@@ -1553,7 +1553,7 @@ def main():
             run_step("build_category_summaries",
                      ["python", "pipeline/build_category_summaries.py", "--topic", topic], 1200)
             run_step("extract_insights",
-                     ["python", "pipeline/extract_insights.py", "--topic", topic], 1800)
+                     ["python", "pipeline/extract_insights.py", "--topic", topic], 14400)
             cats_arg = ["--categories"] + changed_cats
             run_step("generate_timelines",
                      ["python", "pipeline/generate_timelines.py", "--topic", topic] + cats_arg, 21600)
@@ -1562,7 +1562,7 @@ def main():
             run_step("build_category_summaries",
                      ["python", "pipeline/build_category_summaries.py", "--topic", topic], 1200)
             run_step("extract_insights",
-                     ["python", "pipeline/extract_insights.py", "--topic", topic], 1800)
+                     ["python", "pipeline/extract_insights.py", "--topic", topic], 14400)
             run_step("generate_timelines",
                      ["python", "pipeline/generate_timelines.py", "--topic", topic], 21600)
         elif is_update:
@@ -1571,7 +1571,7 @@ def main():
                 run_step("build_category_summaries",
                          ["python", "pipeline/build_category_summaries.py", "--topic", topic] + cats_arg, 1200)
                 run_step("extract_insights",
-                         ["python", "pipeline/extract_insights.py", "--topic", topic] + cats_arg, 1800)
+                         ["python", "pipeline/extract_insights.py", "--topic", topic] + cats_arg, 14400)
 
                 # Split by image presence:
                 #   - cats_with_image: narrative-only (unless --timeline explicitly requested)
@@ -1603,7 +1603,7 @@ def main():
             run_step("build_category_summaries",
                      ["python", "pipeline/build_category_summaries.py", "--topic", topic], 1200)
             run_step("extract_insights",
-                     ["python", "pipeline/extract_insights.py", "--topic", topic], 1800)
+                     ["python", "pipeline/extract_insights.py", "--topic", topic], 14400)
             run_step("generate_timelines",
                      ["python", "pipeline/generate_timelines.py", "--topic", topic], 21600)
         else:
@@ -1611,7 +1611,7 @@ def main():
             run_step("build_category_summaries",
                      ["python", "pipeline/build_category_summaries.py", "--topic", topic], 1200)
             run_step("extract_insights",
-                     ["python", "pipeline/extract_insights.py", "--topic", topic], 1800)
+                     ["python", "pipeline/extract_insights.py", "--topic", topic], 14400)
             run_step("generate_timelines",
                      ["python", "pipeline/generate_timelines.py", "--topic", topic], 21600)
 
@@ -1639,7 +1639,7 @@ def main():
             if missing:
                 log(f"\n  [verify_umap] {len(missing)} papers missing UMAP coordinates — re-running topic_modeling...")
                 run_step("topic_modeling (umap fix)",
-                         [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-connections"], 1200)
+                         [TOPIC_MODELING_PYTHON, "pipeline/topic_modeling.py", "--topic", topic, "--skip-connections"], 3600)
                 run_step("generate_network (rebuild)",
                          ["python", "pipeline/generate_network.py", "--topic", topic], 600)
             else:
