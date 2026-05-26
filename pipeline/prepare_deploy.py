@@ -474,6 +474,13 @@ def main():
             r'\1 _OPENAI_KEY = ""',
             new_text,
         )
+        # Gemini key for the Audio Overview feature (review pages):
+        #   window._GEMINI_KEY = "AIza...";
+        new_text = _re.sub(
+            r'(window\.)?_GEMINI_KEY\s*=\s*"AIza[^"]*"',
+            lambda m: (m.group(1) or "") + '_GEMINI_KEY = ""',
+            new_text,
+        )
         if new_text != text:
             _originals[html_path] = text
             html_path.write_text(new_text, encoding="utf-8")
@@ -483,9 +490,10 @@ def main():
             p.write_text(orig, encoding="utf-8")
 
     # Safety net: verify no residual API keys remain in any deployed HTML
+    _leak_re = _re.compile(r'sk-(ant|proj)-[A-Za-z0-9_\-]{10,}|AIza[0-9A-Za-z_\-]{30,}')
     _leak_paths = [
         str(p) for p in DOCS_DIR.rglob("index.html")
-        if _re.search(r'sk-(ant|proj)-[A-Za-z0-9_\-]{10,}', p.read_text(encoding="utf-8"))
+        if _leak_re.search(p.read_text(encoding="utf-8"))
     ]
     if _leak_paths:
         _restore_originals()
