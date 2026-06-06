@@ -109,7 +109,7 @@ def classify_via_bundle(vec_768, bundle):
     """Original-design classification:
 
       1. UMAP transform → 5D
-      2. hdbscan.approximate_predict → primary tid
+      2. hdbscan.approximate_predict → primary sub-cluster
       3. outlier → nearest centroid (cosine, 768D)
       4. all_categories = top-N parent categories from centroid-ranked subs
 
@@ -155,18 +155,18 @@ def classify_via_bundle(vec_768, bundle):
     return primary_cat, all_cats, primary_subname, sub_per_cat
 
 
-def main():
-    ap = argparse.ArgumentParser(
-        description="HDBSCAN approximate_predict classifier (원 설계)")
-    ap.add_argument("--topic", required=True)
-    ap.add_argument("--slugs", default="",
-                    help="Comma-separated slug prefixes. If set, only these "
-                         "papers are (re)classified; others keep existing entries.")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Print assignment summary without writing JSONs.")
-    args = ap.parse_args()
+def _run_classify(topic, *, slugs=None, dry_run=False):
+    """Programmatic entrypoint for classify_papers.
 
-    topic = args.topic
+    `slugs` may be a list of slug-prefixes or a comma-separated string.
+    """
+    if isinstance(slugs, str):
+        slugs_str = slugs
+    elif slugs:
+        slugs_str = ",".join(slugs)
+    else:
+        slugs_str = ""
+
     topic_dir = str(get_topic_dir(topic))
 
     # 1. HDBSCAN bundle (학습된 모델)
@@ -190,8 +190,8 @@ def main():
 
     # 4. Slug filter (--slugs)
     slug_filter = None
-    if args.slugs:
-        prefixes = [s.strip() for s in args.slugs.split(",") if s.strip()]
+    if slugs_str:
+        prefixes = [s.strip() for s in slugs_str.split(",") if s.strip()]
         slug_filter = {p["slug"] for p in topic_papers
                        if any(p["slug"].startswith(pref) or p["slug"] == pref
                               for pref in prefixes)}
@@ -239,7 +239,7 @@ def main():
         else:
             reassigned += 1
 
-        if not args.dry_run:
+        if not dry_run:
             if "classifications" not in p:
                 p["classifications"] = {}
             p["classifications"][topic] = {
@@ -259,7 +259,7 @@ def main():
     log(f"[classify] reassigned={reassigned}, unchanged={unchanged}, "
         f"skipped={skipped}, outliers_force_assigned={outlier_count}")
 
-    if args.dry_run:
+    if dry_run:
         cats = Counter(a["primary_category"] for a in assignments)
         log("[dry-run] per-category counts:")
         for c, n in cats.most_common():
@@ -279,6 +279,19 @@ def main():
     cls_path = Path(topic_dir) / "_new_classification.json"
     atomic_write_json(cls_path, cls_data)
     log(f"[write] {cls_path}  ({len(cats_list)} categories)")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="HDBSCAN approximate_predict classifier (원 설계)")
+    ap.add_argument("--topic", required=True)
+    ap.add_argument("--slugs", default="",
+                    help="Comma-separated slug prefixes. If set, only these "
+                         "papers are (re)classified; others keep existing entries.")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="Print assignment summary without writing JSONs.")
+    args = ap.parse_args()
+    _run_classify(topic=args.topic, slugs=args.slugs, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

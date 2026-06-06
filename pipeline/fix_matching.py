@@ -77,6 +77,95 @@ def delete_slug_artifacts(slug, dry_run=True):
     return [str(t.relative_to(PAPERS_DIR)) for t in targets]
 
 
+def _run_fix_matching(topic, *, slugs=None, execute=False, include_medium=False):
+    """Programmatic entrypoint for fix_matching.
+
+    `slugs` may be a list of slug-prefixes or a comma-separated string.
+    """
+    if isinstance(slugs, str):
+        slugs_str = slugs
+    elif slugs:
+        slugs_str = ",".join(slugs)
+    else:
+        slugs_str = ""
+
+    index = load_index()
+
+    if slugs_str:
+        prefixes = [s.strip() for s in slugs_str.split(",") if s.strip()]
+        target_slugs = []
+        for d in PAPERS_DIR.iterdir():
+            if d.is_dir() and any(d.name.startswith(p) for p in prefixes):
+                target_slugs.append(d.name)
+        source = f"--slugs ({len(prefixes)} prefixes)"
+    else:
+        report = load_audit_report(topic)
+        levels = {"high"}
+        if include_medium:
+            levels.add("medium")
+        target_slugs = [r["slug"] for r in report.get("results", [])
+                        if r.get("confidence") in levels]
+        source = f"_audit_report.json ({','.join(sorted(levels))})"
+
+    if not target_slugs:
+        print("No target slugs.")
+        return
+
+    skipped_shared = []
+    fixable = []
+    for slug in target_slugs:
+        if slug_has_other_topics(slug, index, topic):
+            skipped_shared.append(slug)
+        else:
+            fixable.append(slug)
+
+    print(f"Source         : {source}")
+    print(f"Target slugs   : {len(target_slugs)}")
+    print(f"Fixable        : {len(fixable)}")
+    print(f"Skipped(shared): {len(skipped_shared)}  (belong to other topics too)")
+    print(f"Mode           : {'EXECUTE' if execute else 'DRY-RUN'}")
+    print()
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = {
+        "timestamp": ts,
+        "topic": topic,
+        "source": source,
+        "target_slugs": target_slugs,
+        "fixable": fixable,
+        "skipped_shared": skipped_shared,
+    }
+    backup_path = get_topic_dir(topic) / f"_fix_matching_backup_{ts}.json"
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    from lib.atomic_io import atomic_write_json
+    atomic_write_json(backup_path, backup)
+    print(f"Backup list    : {backup_path}")
+
+    deleted_counts = 0
+    for slug in fixable:
+        targets = delete_slug_artifacts(slug, dry_run=not execute)
+        print(f"  {'DEL' if execute else 'would-del'}: {slug}  "
+              f"({len(targets)} items)")
+        deleted_counts += len(targets)
+
+    print()
+    print(f"Total artifacts: {deleted_counts}")
+    print()
+    print("Next step — re-review the cleaned slugs:")
+    prefixes = sorted({s.split("_", 1)[0] for s in fixable})
+    chunks = [",".join(prefixes[i:i + 30]) for i in range(0, len(prefixes), 30)]
+    for i, c in enumerate(chunks, 1):
+        tag = f" (batch {i}/{len(chunks)})" if len(chunks) > 1 else ""
+        print(f"  PYTHONUTF8=1 python pipeline/run_update_force.py "
+              f"--topic {topic} --slugs {c} --strict-pdf{tag}")
+    print()
+    print("After re-review:")
+    print(f"  PYTHONUTF8=1 python pipeline/audit_matching.py --topic {topic}")
+    print("  (verify 'high-confidence mismatch' has dropped)")
+    return {"fixable": fixable, "skipped_shared": skipped_shared,
+            "deleted_artifacts": deleted_counts, "backup_path": str(backup_path)}
+
+
 def main():
     ap = argparse.ArgumentParser(description="PDF-review mismatch recovery")
     ap.add_argument("--topic", required=True)
@@ -87,84 +176,8 @@ def main():
     ap.add_argument("--include-medium", action="store_true",
                     help="Also fix medium-confidence entries (default: high only).")
     args = ap.parse_args()
-
-    index = load_index()
-
-    if args.slugs:
-        prefixes = [s.strip() for s in args.slugs.split(",") if s.strip()]
-        target_slugs = []
-        for d in PAPERS_DIR.iterdir():
-            if d.is_dir() and any(d.name.startswith(p) for p in prefixes):
-                target_slugs.append(d.name)
-        source = f"--slugs ({len(prefixes)} prefixes)"
-    else:
-        report = load_audit_report(args.topic)
-        levels = {"high"}
-        if args.include_medium:
-            levels.add("medium")
-        target_slugs = [r["slug"] for r in report.get("results", [])
-                        if r.get("confidence") in levels]
-        source = f"_audit_report.json ({','.join(sorted(levels))})"
-
-    if not target_slugs:
-        print("No target slugs.")
-        return
-
-    # Filter out cross-topic slugs (we don't want to nuke another topic's review)
-    skipped_shared = []
-    fixable = []
-    for slug in target_slugs:
-        if slug_has_other_topics(slug, index, args.topic):
-            skipped_shared.append(slug)
-        else:
-            fixable.append(slug)
-
-    print(f"Source         : {source}")
-    print(f"Target slugs   : {len(target_slugs)}")
-    print(f"Fixable        : {len(fixable)}")
-    print(f"Skipped(shared): {len(skipped_shared)}  (belong to other topics too)")
-    print(f"Mode           : {'EXECUTE' if args.execute else 'DRY-RUN'}")
-    print()
-
-    # Backup dump
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = {
-        "timestamp": ts,
-        "topic": args.topic,
-        "source": source,
-        "target_slugs": target_slugs,
-        "fixable": fixable,
-        "skipped_shared": skipped_shared,
-    }
-    backup_path = get_topic_dir(args.topic) / f"_fix_matching_backup_{ts}.json"
-    backup_path.parent.mkdir(parents=True, exist_ok=True)
-    from lib.atomic_io import atomic_write_json
-    atomic_write_json(backup_path, backup)
-    print(f"Backup list    : {backup_path}")
-
-    # Per-slug action
-    deleted_counts = 0
-    for slug in fixable:
-        targets = delete_slug_artifacts(slug, dry_run=not args.execute)
-        print(f"  {'DEL' if args.execute else 'would-del'}: {slug}  "
-              f"({len(targets)} items)")
-        deleted_counts += len(targets)
-
-    print()
-    print(f"Total artifacts: {deleted_counts}")
-    print()
-    print("Next step — re-review the cleaned slugs:")
-    # Build comma-separated slug prefix list (use numeric prefix before first underscore)
-    prefixes = sorted({s.split("_", 1)[0] for s in fixable})
-    chunks = [",".join(prefixes[i:i + 30]) for i in range(0, len(prefixes), 30)]
-    for i, c in enumerate(chunks, 1):
-        tag = f" (batch {i}/{len(chunks)})" if len(chunks) > 1 else ""
-        print(f"  PYTHONUTF8=1 python pipeline/run_update_force.py "
-              f"--topic {args.topic} --slugs {c} --strict-pdf{tag}")
-    print()
-    print("After re-review:")
-    print(f"  PYTHONUTF8=1 python pipeline/audit_matching.py --topic {args.topic}")
-    print("  (verify 'high-confidence mismatch' has dropped)")
+    _run_fix_matching(topic=args.topic, slugs=args.slugs,
+                       execute=args.execute, include_medium=args.include_medium)
 
 
 if __name__ == "__main__":

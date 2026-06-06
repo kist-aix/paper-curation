@@ -30,1881 +30,1893 @@ def get_topic():
         return sys.argv[1]
     return "ai4s"
 
-TOPIC = get_topic()
-TOPIC_DIR = str(get_topic_dir(TOPIC))
 
-# Theme colors per topic (title from config.json Zotero collection name)
-from config_loader import load_config
-_collections_raw = load_config().get("zotero", {}).get("collections", {})
+def _run_topic_index(topic=None):
+    """Build {topic}/index.html (cards + Deep Research UI).
 
-THEME = {
-    "ai4s": {
-        "gradient": "linear-gradient(135deg, #2a0f0d 0%, #5c1a14 50%, #A62018 100%)",
-        "accent": "#D63423", "accent_dark": "#A62018", "accent_light": "#F06050",
-    },
-    "scisci": {
-        "gradient": "linear-gradient(135deg, #0d1a2a 0%, #14385c 50%, #1866A6 100%)",
-        "accent": "#2374D6", "accent_dark": "#1856A0", "accent_light": "#50A0F0",
-    },
-}
-# Default theme for unknown topics
-_default_theme = {
-    "gradient": "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
-    "accent": "#3B82F6", "accent_dark": "#2563EB", "accent_light": "#60A5FA",
-}
-theme = THEME.get(TOPIC, _default_theme)
-# Title from Zotero collection name in config.json
-_collection_name = _collections_raw.get(TOPIC, TOPIC)
-theme["title"] = _collection_name
-theme["subtitle_prefix"] = _collection_name
+    Phase 5 refactor: module-level code was wrapped into this
+    function so the script is importable without side-effects.
+    Pass ``topic`` explicitly; falls back to ``sys.argv[1]``.
+    """
+    TOPIC = topic if topic is not None else get_topic()
+    TOPIC_DIR = str(get_topic_dir(TOPIC))
 
-# Load data
-with open(os.path.join(PAPERS_DIR, "_papers_index.json"), encoding="utf-8") as f:
-    papers_index = json.load(f)
+    # Theme colors per topic (title from config.json Zotero collection name)
+    from config_loader import load_config
+    _collections_raw = load_config().get("zotero", {}).get("collections", {})
 
-cls_path = os.path.join(TOPIC_DIR, "_new_classification.json")
-narr_path = os.path.join(TOPIC_DIR, "_timeline_narrative.json")
-
-if os.path.exists(cls_path):
-    with open(cls_path, encoding="utf-8") as f:
-        cls_data = json.load(f)
-    categories = cls_data.get("categories", [])
-    assignments = cls_data.get("assignments", [])
-else:
-    # Fallback: extract categories from classifications[TOPIC] in _papers_index.json
-    _cat_names = set()
-    for p in papers_index:
-        cls = p.get("classifications", {}).get(TOPIC, {})
-        for c in cls.get("all_categories", []):
-            _cat_names.add(c)
-        if cls.get("primary_category"):
-            _cat_names.add(cls["primary_category"])
-    categories = [{"name": c} for c in sorted(_cat_names)] if _cat_names else []
-    assignments = []
-
-if os.path.exists(narr_path):
-    with open(narr_path, encoding="utf-8") as f:
-        narrative = json.load(f)
-    category_analyses = narrative.get("category_analyses", {})
-    executive_summary = narrative.get("executive_summary_ko", "")
-else:
-    category_analyses = {}
-    executive_summary = ""
-
-# Load insights
-insights_path = os.path.join(TOPIC_DIR, "_insights.json")
-if os.path.exists(insights_path):
-    with open(insights_path, encoding="utf-8") as f:
-        insights_data = json.load(f)
-else:
-    insights_data = {}
-
-# Merge _category_summaries.json (has description + papers per category)
-cat_sum_path = os.path.join(TOPIC_DIR, "_category_summaries.json")
-if os.path.exists(cat_sum_path):
-    with open(cat_sum_path, encoding="utf-8") as f:
-        cat_summaries = json.load(f)
-    for cs in cat_summaries:
-        cat_name_cs = cs.get("category", "")
-        if cat_name_cs not in category_analyses:
-            category_analyses[cat_name_cs] = {}
-        if cs.get("description"):
-            category_analyses[cat_name_cs]["description"] = cs["description"]
-        if cs.get("description_ko"):
-            category_analyses[cat_name_cs]["description_ko"] = cs["description_ko"]
-        if cs.get("sub_themes_ko"):
-            category_analyses[cat_name_cs]["sub_themes_ko"] = cs["sub_themes_ko"]
-        if cs.get("papers"):
-            category_analyses[cat_name_cs]["papers"] = cs["papers"]
-        # sub_themes from _category_summaries.json always wins (has description_ko)
-        if cs.get("sub_themes"):
-            category_analyses[cat_name_cs]["sub_themes"] = cs["sub_themes"]
-
-# Filter papers for this topic
-topic_papers = [p for p in papers_index if TOPIC in p.get("topics", [])]
-slug_to_index = {p["slug"]: p for p in topic_papers}
-
-# Assignment slug → category mapping (multi-class)
-# Priority: 1) classifications[TOPIC] in papers_index, 2) _new_classification.json assignments
-slug_to_cat = {}       # slug → primary_category (str)
-slug_to_all_cats = {}  # slug → all_categories (list)
-
-# From _new_classification.json (legacy, lower priority)
-for a in assignments:
-    slug_to_cat[a["slug"]] = a.get("primary_category", "Other")
-    slug_to_all_cats[a["slug"]] = a.get("all_categories", [a.get("primary_category", "Other")])
-
-# From classifications[TOPIC] in papers_index (higher priority, overrides)
-for p in topic_papers:
-    cls = p.get("classifications", {}).get(TOPIC, {})
-    if cls.get("primary_category"):
-        slug_to_cat[p["slug"]] = cls["primary_category"]
-        slug_to_all_cats[p["slug"]] = cls.get("all_categories", [cls["primary_category"]])
-
-# Available paper directories in papers/
-actual_dirs = sorted(
-    d for d in os.listdir(PAPERS_DIR)
-    if os.path.isdir(os.path.join(PAPERS_DIR, d)) and len(d) >= 3 and d[:3].isdigit()
-)
-
-def find_dir_for_slug(slug):
-    if slug in actual_dirs:
-        return slug
-    for d in actual_dirs:
-        if d.startswith(slug[:35]):
-            return d
-    num = slug.split("_")[0] if "_" in slug else slug[:4]
-    candidates = [d for d in actual_dirs if d.startswith(num + "_")]
-    if len(candidates) == 1:
-        return candidates[0]
-    return None
-
-def parse_review_md(slug):
-    dir_name = find_dir_for_slug(slug)
-    if not dir_name:
-        return {}, None
-    md_path = os.path.join(PAPERS_DIR, dir_name, "review.md")
-    if not os.path.exists(md_path):
-        return {}, dir_name
-    with open(md_path, encoding="utf-8") as f:
-        text = f.read()
-    result = {}
-    m = re.search(r"^#\s+(.+)", text, re.MULTILINE)
-    if m: result["title"] = m.group(1).strip()
-    hm = re.search(r"^>\s*\*\*저자\*\*:\s*(.+)", text, re.MULTILINE)
-    if hm:
-        hl = hm.group(1)
-        result["authors"] = hl.split("|")[0].strip()
-        dm = re.search(r"\*\*날짜\*\*:\s*([^\|]+)", hl)
-        if dm: result["date"] = dm.group(1).strip()
-        jm = re.search(r"\*\*Journal\*\*:\s*([^\|]+)", hl)
-        if jm: result["journal"] = jm.group(1).strip()
-        doi_m = re.search(r"\*\*DOI\*\*:\s*([^\|]+)", hl)
-        if doi_m: result["doi"] = doi_m.group(1).strip()
-        ax_m = re.search(r"\*\*arXiv\*\*:\s*([^\|]+)", hl)
-        if ax_m: result["arxiv"] = ax_m.group(1).strip()
-    em = re.search(r"## (?:Essence|한줄 요약)[^\n]*\s*\n+([\s\S]+?)(?=\n## |\Z)", text)
-    if em: result["essence"] = em.group(1).strip()
-    # Parse scores from table format OR list format
-    for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical_soundness"),
-                        ("Significance", "significance"), ("Clarity", "clarity"), ("Overall", "overall_score")]:
-        # Table: | Label | X/5 |
-        sm = re.search(rf"\|\s*{label}\s*\|\s*(\d+(?:\.\d+)?)\s*/\s*5\s*\|", text)
-        if not sm:
-            # List: - Label: X/5
-            sm = re.search(rf"-\s*{label}\s*:\s*(\d+(?:\.\d+)?)\s*/\s*5", text)
-        if sm:
-            val = float(sm.group(1))
-            if key == "overall_score":
-                result[key] = val
-            else:
-                result[key] = int(val)
-    vm = re.search(r"\*\*총평\*\*:\s*([\s\S]+?)(?=\n##|\Z)", text)
-    if vm: result["verdict"] = vm.group(1).strip()
-    return result, dir_name
-
-from lib.dateutil import normalize_date
-
-# Build category → papers mapping
-cat_order = [c["name"] for c in categories] if categories else ["Other"]
-cat_papers = defaultdict(list)
-unmatched = []
-
-for p_idx in topic_papers:
-    slug = p_idx["slug"]
-    p_cls = p_idx.get("classifications", {}).get(TOPIC, {})
-    all_cats = slug_to_all_cats.get(slug, p_cls.get("all_categories", [p_cls.get("primary_category", "Other")]))
-    if not all_cats:
-        all_cats = [slug_to_cat.get(slug, "Other")]
-    review, dir_name = parse_review_md(slug)
-    if dir_name is None:
-        unmatched.append(slug)
-        continue
-    title = review.get("title") or p_idx.get("title", slug)
-    authors = review.get("authors", "")
-    raw_date = review.get("date") or str(p_idx.get("date", ""))
-    date_fmt = normalize_date(raw_date)
-    journal = review.get("journal", "")
-    doi = review.get("doi") or p_idx.get("doi", "")
-    arxiv = review.get("arxiv", "")
-    essence = review.get("essence") or p_idx.get("essence", "")
-    overall_score = review.get("overall_score") or p_idx.get("score") or 0
-    has_fig = (os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.webp"))
-               or os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.png")))
-    # Extract fig1 caption from pdffigures2 JSON or review.md
-    fig_caption = ""
-    pf2_dir = os.path.join(PAPERS_DIR, dir_name, "figures", "pdffigures2")
-    pf2_json = None
-    if os.path.isdir(pf2_dir):
-        pf2_jsons = [f for f in os.listdir(pf2_dir) if f.endswith(".json")]
-        if pf2_jsons:
-            pf2_json = os.path.join(pf2_dir, pf2_jsons[0])
-    if pf2_json and pf2_json.endswith(".json"):
-        try:
-            with open(pf2_json, "r", encoding="utf-8") as _f:
-                figs_meta = json.load(_f)
-            if figs_meta and isinstance(figs_meta, list):
-                fig_caption = figs_meta[0].get("caption", "")
-        except Exception as e:
-            print(f"WARNING: pdffigures2 parse failed for {dir_name}: {e}")
-    if not fig_caption:
-        # Fallback: extract from review.md (line after ![Figure 1])
-        md_path = os.path.join(PAPERS_DIR, dir_name, "review.md")
-        if os.path.exists(md_path):
-            with open(md_path, "r", encoding="utf-8") as _f:
-                md_text = _f.read()
-            cap_m = re.search(r'!\[.*?\]\(figures/fig1.*?\)\s*\n+\*(.+?)\*', md_text)
-            if cap_m:
-                fig_caption = cap_m.group(1).strip()
-    paper_data = {
-        "dir": dir_name, "slug": slug, "title": title, "authors": authors,
-        "date": date_fmt, "journal": journal, "doi": doi, "arxiv": arxiv,
-        "essence": essence, "overall_score": float(overall_score) if overall_score else 0,
-        "novelty": review.get("novelty"), "technical_soundness": review.get("technical_soundness"),
-        "significance": review.get("significance"), "clarity": review.get("clarity"),
-        "verdict": review.get("verdict", ""),
-        "has_fig": has_fig,
-        "fig_src": (f"../papers/{dir_name}/figures/fig1.webp" if os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.webp"))
-                    else f"../papers/{dir_name}/figures/fig1.png") if has_fig else None,
-        "fig_caption": fig_caption,
+    THEME = {
+        "ai4s": {
+            "gradient": "linear-gradient(135deg, #2a0f0d 0%, #5c1a14 50%, #A62018 100%)",
+            "accent": "#D63423", "accent_dark": "#A62018", "accent_light": "#F06050",
+        },
+        "scisci": {
+            "gradient": "linear-gradient(135deg, #0d1a2a 0%, #14385c 50%, #1866A6 100%)",
+            "accent": "#2374D6", "accent_dark": "#1856A0", "accent_light": "#50A0F0",
+        },
     }
-    # Multi-class: add to ALL matching categories, with per-category sub_category
-    sub_categories_map = p_cls.get("sub_categories", {})
-    for cat in all_cats:
-        if cat in cat_order or cat == "Other":
-            card = dict(paper_data)
-            card["sub_category"] = sub_categories_map.get(cat, p_cls.get("sub_category", "General") if cat == p_cls.get("primary_category") else "General")
-            cat_papers[cat].append(card)
-
-if unmatched:
-    print(f"WARNING unmatched: {unmatched}")
-for cat in cat_papers:
-    cat_papers[cat].sort(key=lambda p: p["overall_score"], reverse=True)
-total_cards = sum(len(v) for v in cat_papers.values())
-unique_papers = len(topic_papers)
-print(f"Total papers for {TOPIC}: {unique_papers} unique ({total_cards} cards with multi-class)")
-for cn in cat_order:
-    print(f"  {cn}: {len(cat_papers.get(cn, []))}")
-
-# --- HTML Rendering ---
-
-def esc(s):
-    return escape(str(s)) if s else ""
-
-def make_doi_link(doi, arxiv):
-    if doi:
-        # Skip invalid/empty values
-        if doi in ('N/A', '[', ''):
-            pass  # fall through to arxiv
-        # Parse markdown link: [text](url)
-        elif doi.startswith('['):
-            md_m = re.match(r'\[([^\]]*)\]\((https?://[^)]+)\)', doi)
-            if md_m:
-                text, url = md_m.group(1), md_m.group(2)
-                label = text if text else url
-                return f'<a href="{esc(url)}" target="_blank">{esc(label)}</a>'
-        elif doi.startswith("http"):
-            return f'<a href="{esc(doi)}" target="_blank">{esc(doi)}</a>'
-        elif re.match(r'10\.\d{4,}/', doi):
-            return f'<a href="https://doi.org/{esc(doi)}" target="_blank">{esc(doi)}</a>'
-        else:
-            return esc(doi)
-    if arxiv:
-        aid = arxiv.strip()
-        if aid.startswith("http"):
-            arxiv_id = aid.rsplit('/', 1)[-1]
-            return f'<a href="{esc(aid)}" target="_blank">arXiv:{esc(arxiv_id)}</a>'
-        return f'<a href="https://arxiv.org/abs/{esc(aid)}" target="_blank">arXiv:{esc(aid)}</a>'
-    return ""
-
-def render_paper_card(paper, num, cat_slug):
-    score = paper["overall_score"]
-    score_disp = f"{int(score)}/5" if score and score > 0 else "N/A"
-    score_val = score if score else 0
-    meta_parts = []
-    if paper["authors"]: meta_parts.append(f'<strong>\uc800\uc790</strong>: {esc(paper["authors"])}')
-    if paper["date"]: meta_parts.append(f'<strong>\ub0a0\uc9dc</strong>: {esc(paper["date"])}')
-    if paper["journal"]: meta_parts.append(f'<strong>Journal</strong>: {esc(paper["journal"])}')
-    dl = make_doi_link(paper["doi"], paper["arxiv"])
-    if dl: meta_parts.append(f'<strong>DOI</strong>: {dl}')
-    meta_html = " | ".join(meta_parts)
-    badges = []
-    for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical_soundness"),
-                        ("Significance", "significance"), ("Clarity", "clarity")]:
-        val = paper.get(key)
-        if val is not None: badges.append(f'<span class="score-badge">{label}: {val}</span>')
-    if score and score > 0: badges.append(f'<span class="score-badge">Overall: {int(score)}</span>')
-    badges_html = " ".join(badges)
-    fig_html = ""
-    if paper["has_fig"]:
-        cap = paper.get("fig_caption", "")
-        cap_html = f'<p class="fig-caption">{esc(cap)}</p>' if cap else ""
-        fig_html = (
-            '\n          <div class="paper-fig">'
-            f'<img data-src="{esc(paper["fig_src"])}" alt="Figure" class="lazy">'
-            f'{cap_html}</div>'
-        )
-    essence_html = ""
-    if paper["essence"]:
-        essence_html = (
-            '\n          <div class="section">'
-            '\n            <div class="section-label">Essence</div>'
-            f'\n            <p>{esc(paper["essence"])}</p>'
-            '\n          </div>'
-        )
-    eval_html = ""
-    if badges or paper["verdict"]:
-        inner = ""
-        if badges_html: inner += f'<div class="scores">{badges_html}</div>\n            '
-        if paper["verdict"]: inner += f'<p class="verdict">{esc(paper["verdict"])}</p>'
-        eval_html = (
-            '\n          <div class="section">'
-            '\n            <div class="section-label">Evaluation</div>'
-            f'\n            {inner}'
-            '\n          </div>'
-        )
-    # Link to ../papers/{slug}/index.html
-    link_href = f"../papers/{esc(paper['dir'])}/index.html"
-    return (
-        f'        <div class="paper-card" data-date="{esc(paper["date"])}"'
-        f' data-score="{score_val}" data-topic="{esc(cat_slug)}">\n'
-        f'          <div class="paper-header">\n'
-        f'            <span class="paper-num">#{num}</span>\n'
-        f'            <span class="paper-date">{esc(paper["date"])}</span>\n'
-        f'            <span class="paper-score">{score_disp}</span>\n'
-        f'          </div>\n'
-        f'          <h3><a href="{link_href}">{esc(paper["title"])}</a></h3>\n'
-        f'          <p class="meta">{meta_html}</p>'
-        f'{fig_html}{essence_html}{eval_html}\n'
-        f'        </div>'
-    )
-
-def _match_papers_to_subtheme(st_name, st_desc, papers):
-    """Match papers to a sub-theme by keyword overlap in title."""
-    keywords = set((st_name + " " + st_desc).lower().split())
-    scored = []
-    for p in papers:
-        title_words = set(p.get("title", "").lower().split())
-        overlap = len(keywords & title_words)
-        if overlap >= 2:
-            scored.append((overlap, p))
-    scored.sort(key=lambda x: (-x[0], -x[1].get("score", 0)))
-    return [s[1] for s in scored[:4]]  # max 4 papers per sub-theme
-
-
-def validate_description(text, cat_name, sub_name=""):
-    """카테고리/sub-category 설명 품질 검증."""
-    issues = []
-    label = f"{cat_name}/{sub_name}" if sub_name else cat_name
-
-    if not text or len(text) < 50:
-        issues.append(f"{label}: 설명 누락 또는 너무 짧음 ({len(text or '')}자)")
-    elif len(text) < 150:
-        issues.append(f"{label}: 설명 부실 ({len(text)}자, 최소 150자 권장)")
-
-    if text:
-        # [NNN] 리터럴 체크
-        if "[NNN]" in text:
-            issues.append(f"{label}: [NNN] 리터럴 남아있음")
-        # 논문 제목 인라인 체크 (영문 20자 이상 따옴표)
-        quoted = re.findall(r"['\"][A-Z][^'\"]{20,}['\"]", text)
-        if quoted:
-            issues.append(f"{label}: 논문 제목 인라인 ({quoted[0][:40]}...)")
-        # 한국어 비율 체크
-        korean = len(re.findall(r'[\uac00-\ud7af]', text))
-        if korean < len(text) * 0.3:
-            issues.append(f"{label}: 한국어 비율 낮음 ({korean}/{len(text)})")
-        # 마침표 종료
-        if text.strip() and text.strip()[-1] not in ".다":
-            issues.append(f"{label}: 마침표로 끝나지 않음 ('{text.strip()[-5:]}')")
-
-    return issues
-
-
-def render_category_narrative(cat_name):
-    ca = category_analyses.get(cat_name, {})
-    if not ca: return ""
-    overview = ca.get("description", "")
-    sub_themes = ca.get("sub_themes", [])
-    cat_papers = ca.get("papers", [])
-    html_parts = []
-
-    # Build slug number → paper info lookup from ALL papers (not just top 20)
-    num_to_paper = {}
-    for p in papers_index:
-        slug = p.get("slug", "")
-        title = p.get("title", "")
-        num = slug.split("_")[0] if "_" in slug else slug[:3]
-        num_to_paper[num] = (slug, title)
-
-    def _refs_to_links(text_html):
-        """Convert [NNN] markers to <a> links."""
-        def _repl(m):
-            num = m.group(1)
-            if num in num_to_paper:
-                slug, title = num_to_paper[num]
-                return f'<a href="../papers/{esc(slug)}/index.html" title="{esc(title)}">[{num}]</a>'
-            # Try zero-padded: "87" → "087", "9" → "009"
-            padded = num.zfill(3)
-            if padded in num_to_paper:
-                slug, title = num_to_paper[padded]
-                return f'<a href="../papers/{esc(slug)}/index.html" title="{esc(title)}">[{num}]</a>'
-            return m.group(0)
-        return re.sub(r'\[(\d{1,4})\]', _repl, text_html)
-
-    # Category Overview (한글 우선)
-    overview_ko = ca.get("description_ko", "")
-    if overview_ko:
-        overview_html = _refs_to_links(esc(overview_ko))
-        html_parts.append(f'<h4>Category Overview</h4>\n<p>{overview_html}</p>')
-    elif overview:
-        html_parts.append(f'<h4>Category Overview</h4>\n<p>{esc(overview)}</p>')
-
-    # Sub-category bullets — description_ko directly from sub_themes
-    if sub_themes:
-        html_parts.append('<ul class="subcategory-list">')
-        for st in sub_themes:
-            name = st.get("name", "")
-            desc = st.get("description_ko", "") or st.get("description", "")
-            if not name or not desc:
-                continue
-            # Convert [NNN] markers to hyperlinks
-            desc_html = _refs_to_links(esc(desc))
-            html_parts.append(
-                f'<li><strong>{esc(name)}</strong>: {desc_html}</li>'
-            )
-        html_parts.append('</ul>')
-
-    return "\n".join(html_parts)
-
-def render_exec_summary(text):
-    if not text: return ""
-    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
-    return "\n    ".join(f"<p>{esc(p)}</p>" for p in paras)
-
-# CSS with theme
-accent = theme["accent"]
-accent_dark = theme["accent_dark"]
-accent_light = theme["accent_light"]
-gradient = theme["gradient"]
-
-CSS = f"""* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{ font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }}
-.container {{ max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }}
-.hero {{ background: {gradient}; color: white; padding: 3rem 2rem; border-radius: 16px; margin-bottom: 2rem; }}
-.hero h1 {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }}
-.hero .subtitle {{ opacity: 0.85; font-size: 1rem; }}
-.hero .stats {{ margin-top: 1rem; display: flex; gap: 2rem; }}
-.hero .stat {{ text-align: center; }}
-.hero .stat-num {{ font-size: 2rem; font-weight: 700; color: {accent_light}; }}
-.hero .stat-label {{ font-size: 0.8rem; opacity: 0.7; }}
-.paper-card {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 4px solid {accent}; transition: transform 0.15s, box-shadow 0.15s; }}
-.paper-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
-.paper-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }}
-.paper-num {{ font-size: 0.85rem; color: #888; font-weight: 600; }}
-.paper-score {{ background: {accent}; color: white; padding: 0.2rem 0.7rem; border-radius: 20px; font-weight: 700; font-size: 0.9rem; }}
-.paper-card h3 {{ font-size: 1.05rem; color: #1a1a2e; margin-bottom: 0.3rem; }}
-.paper-card h3 a {{ color: #1a1a2e; text-decoration: none; }}
-.paper-card h3 a:hover {{ color: {accent}; }}
-.meta {{ font-size: 0.8rem; color: #888; margin-bottom: 0.8rem; }}
-.section {{ margin-top: 0.8rem; }}
-.section-label {{ font-weight: 700; font-size: 0.85rem; color: {accent}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; border-bottom: 1px solid #e8edf3; padding-bottom: 0.2rem; }}
-.section p {{ font-size: 0.92rem; color: #444; }}
-.scores {{ display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; }}
-.score-badge {{ background: #e8edf3; color: {accent_dark}; padding: 0.15rem 0.6rem; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }}
-.verdict {{ font-style: normal; color: #444; font-size: 0.9rem; }}
-.paper-fig {{ margin: 0.8rem 0; text-align: center; }}
-.paper-fig img {{ max-width: min(100%, 600px); border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }}
-.paper-fig .fig-caption {{ font-size: 0.78rem; color: #888; margin-top: 0.3rem; font-style: italic; line-height: 1.4; }}
-.excluded {{ background: #fff3cd; border-radius: 12px; padding: 1.2rem; margin-top: 1.5rem; }}
-.excluded h3 {{ color: #856404; font-size: 1rem; margin-bottom: 0.5rem; }}
-.excluded li {{ font-size: 0.85rem; color: #856404; margin: 0.3rem 0; }}
-.credit {{ text-align: center; font-size: 0.8rem; color: #aaa; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; }}
-.sort-bar {{ display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap; }}
-.sort-btn {{ background: white; border: 1px solid {accent}; color: {accent}; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }}
-.sort-btn:hover, .sort-btn.active {{ background: {accent}; color: white; }}
-.timeline-section {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
-.timeline-section h2 {{ color: {accent_dark}; font-size: 1.1rem; margin-bottom: 1rem; }}
-.timeline-summary {{ font-size: 0.9rem; color: #444; line-height: 1.6; }}
-.timeline-summary p {{ margin: 0.5rem 0; }}
-.topic-group {{ margin-bottom: 1rem; }}
-.topic-header {{ background: #f5f5f5; border-radius: 12px; padding: 0.8rem 1.2rem; cursor: pointer; display: flex; align-items: center; gap: 0.8rem; border-left: 4px solid #999; user-select: none; transition: background 0.15s; }}
-.topic-header:hover {{ background: #ebebeb; }}
-.topic-name {{ font-weight: 700; font-size: 1rem; flex: 1; color: #444; }}
-.topic-count {{ font-size: 0.8rem; color: #888; background: #e0e0e0; padding: 0.15rem 0.5rem; border-radius: 10px; }}
-.topic-toggle {{ font-size: 0.8rem; color: #999; transition: transform 0.2s; }}
-.topic-body {{ padding: 0.5rem 0 0 0; }}
-.topic-body.collapsed {{ display: none; }}
-.category-timeline {{ margin: 0.5rem 0 1rem; text-align: center; }}
-.category-timeline img {{ max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
-.category-summary {{ background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); font-size: 0.9rem; line-height: 1.7; color: #444; }}
-.sub-group {{ margin: 0.5rem 0; }}
-.sub-header {{ background: #fafafa; border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.6rem; border-left: 3px solid {accent_light}; user-select: none; transition: background 0.15s; }}
-.sub-header:hover {{ background: #f0f0f0; }}
-.sub-name {{ font-weight: 600; font-size: 0.9rem; flex: 1; color: #555; }}
-.sub-count {{ font-size: 0.75rem; color: #999; background: #e8e8e8; padding: 0.1rem 0.4rem; border-radius: 8px; }}
-.sub-toggle {{ font-size: 0.7rem; color: #bbb; transition: transform 0.2s; }}
-.sub-body {{ padding: 0 0 0 0.5rem; }}
-.sub-body.collapsed {{ display: none; }}
-.category-summary p {{ margin: 0.6rem 0; }}
-.category-summary h4 {{ font-size: 0.95rem; color: {accent_dark}; margin: 0 0 0.4rem; }}
-.category-summary .subcategory-list {{ margin: 0.6rem 0 0.2rem 1.2rem; padding: 0; }}
-.category-summary .subcategory-list li {{ margin: 0.5rem 0; line-height: 1.6; }}
-.category-summary a {{ color: #2563EB; text-decoration: none; font-weight: 500; }}
-.category-summary a:hover {{ text-decoration: underline; }}
-.paper-date {{ font-size: 0.75rem; color: #999; }}
-img.lazy {{ opacity: 0; transition: opacity 0.3s; }}
-img.lazy.loaded {{ opacity: 1; }}
-.search-box {{ background: white; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
-.search-box input {{ width: 100%; padding: 0.6rem 1rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem; font-family: inherit; outline: none; transition: border-color 0.2s; }}
-.search-box input:focus {{ border-color: {accent}; }}
-.search-box .search-hint {{ font-size: 0.75rem; color: #aaa; margin-top: 0.3rem; }}
-.search-box .search-count {{ font-size: 0.8rem; color: {accent}; font-weight: 600; margin-top: 0.3rem; display: none; }}
-.lightbox {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }}
-.lightbox.active {{ display: flex; }}
-.lightbox img {{ max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }}
-.paper-fig img, .category-timeline img, .timeline-section img {{ cursor: zoom-in; }}
-.insights-section {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
-.insights-section h2 {{ color: {accent_dark}; font-size: 1.1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }}
-.insights-section .insight-count {{ font-size: 0.8rem; color: #888; font-weight: 400; }}
-.insight-card {{ border-left: 4px solid #999; border-radius: 0 8px 8px 0; padding: 1rem 1.2rem; margin-bottom: 0.8rem; background: #fafafa; }}
-.insight-card.convergence {{ border-left-color: #7C3AED; background: #FAF5FF; }}
-.insight-card.gap {{ border-left-color: #F59E0B; background: #FFFBEB; }}
-.insight-card.emerging {{ border-left-color: #10B981; background: #F0FDF4; }}
-.insight-card.declining {{ border-left-color: #9CA3AF; background: #F9FAFB; }}
-.insight-type {{ font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }}
-.convergence .insight-type {{ color: #7C3AED; }}
-.gap .insight-type {{ color: #D97706; }}
-.emerging .insight-type {{ color: #059669; }}
-.declining .insight-type {{ color: #6B7280; }}
-.insight-title {{ font-size: 1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.4rem; }}
-.insight-desc {{ font-size: 0.9rem; color: #444; line-height: 1.6; margin-bottom: 0.5rem; }}
-.insight-meta {{ font-size: 0.8rem; color: #888; display: flex; flex-wrap: wrap; gap: 0.8rem; }}
-.insight-meta .cats {{ color: {accent}; }}
-.insight-meta .evidence a {{ color: #2563EB; text-decoration: none; font-weight: 500; }}
-.insight-meta .evidence a:hover {{ text-decoration: underline; }}
-.insight-policy {{ font-size: 0.85rem; color: #4B5563; margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: rgba(0,0,0,0.03); border-radius: 4px; }}
-.cat-insight {{ background: #f8f9fa; border-radius: 8px; padding: 0.8rem 1rem; margin-top: 0.8rem; font-size: 0.88rem; line-height: 1.6; }}
-.cat-insight .ci-label {{ font-weight: 600; color: {accent_dark}; margin-right: 0.3rem; }}
-.cat-insight .ci-gap {{ color: #D97706; }}
-.cat-insight .ci-policy {{ color: #4B5563; }}
-/* ============ Deep Research ============ */
-.search-row {{ display: flex; gap: 0.5rem; align-items: stretch; }}
-.search-row input {{ flex: 1; }}
-.mode-toggle {{ display: flex; gap: 0; border: 2px solid #e0e0e0; border-radius: 8px; overflow: hidden; flex-shrink: 0; }}
-.mode-btn {{ background: white; border: none; padding: 0.5rem 0.9rem; font-size: 0.85rem; cursor: pointer; color: #888; transition: all 0.15s; font-family: inherit; }}
-.mode-btn.active {{ background: {accent}; color: white; }}
-.mode-btn:hover:not(.active) {{ background: #f5f5f5; color: {accent_dark}; }}
-.deep-panel {{ margin-top: 1rem; background: #fcfcfd; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; }}
-.deep-header {{ display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 1.1rem; background: linear-gradient(135deg, {accent}12, transparent); border-bottom: 1px solid #eee; flex-wrap: wrap; }}
-.deep-header h3 {{ font-size: 0.95rem; color: {accent_dark}; margin: 0; flex-shrink: 0; font-weight: 700; }}
-.deep-model {{ padding: 0.35rem 0.55rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.78rem; background: white; cursor: pointer; font-family: inherit; color: #444; }}
-.deep-actions {{ margin-left: auto; display: flex; gap: 0.35rem; flex-wrap: wrap; }}
-.deep-btn {{ background: white; border: 1px solid #ddd; border-radius: 6px; padding: 0.32rem 0.7rem; font-size: 0.76rem; cursor: pointer; color: #555; transition: all 0.15s; font-family: inherit; }}
-.deep-btn:hover:not(:disabled) {{ background: {accent}; color: white; border-color: {accent}; }}
-.deep-btn:disabled {{ opacity: 0.4; cursor: not-allowed; }}
-.deep-status {{ padding: 0.55rem 1.1rem; font-size: 0.82rem; color: #555; background: #f7f9fb; border-bottom: 1px solid #eee; display: none; }}
-.deep-status.active {{ display: block; }}
-.deep-status.error {{ color: #b33a3a; background: #fef3f2; border-bottom-color: #fadcd9; }}
-.deep-body {{ padding: 1.2rem 1.5rem; display: none; }}
-.deep-body.active {{ display: block; }}
-.deep-answer {{ font-size: 0.94rem; line-height: 1.75; color: #262626; }}
-.deep-answer p {{ margin: 0.75rem 0; }}
-.deep-answer h1, .deep-answer h2, .deep-answer h3 {{ color: {accent_dark}; margin: 1.1rem 0 0.45rem; line-height: 1.3; }}
-.deep-answer h1 {{ font-size: 1.2rem; }}
-.deep-answer h2 {{ font-size: 1.05rem; }}
-.deep-answer h3 {{ font-size: 0.96rem; }}
-.deep-answer ul, .deep-answer ol {{ margin: 0.5rem 0 0.5rem 1.5rem; }}
-.deep-answer li {{ margin: 0.25rem 0; }}
-.deep-answer strong {{ color: #1a1a1a; }}
-.deep-answer a.ref {{ display: inline-block; color: {accent}; text-decoration: none; font-weight: 700; font-size: 0.72rem; padding: 0 0.32rem; border-radius: 3px; background: {accent}1a; margin: 0 0.12rem; vertical-align: super; line-height: 1.2; }}
-.deep-answer a.ref:hover {{ background: {accent}; color: white; }}
-.deep-answer figure {{ margin: 1rem 0; max-width: 100%; }}
-.deep-answer img {{ width: 100%; height: auto; display: block; margin: 1rem 0; padding: 0.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box; cursor: zoom-in; }}
-.deep-answer figure img {{ margin: 0; }}
-.deep-answer figure figcaption {{ font-size: 0.78rem; color: #666; text-align: center; margin-top: 0.45rem; font-style: italic; }}
-.deep-answer p img {{ margin: 0.5rem 0; }}
-.deep-answer code {{ background: #f2f2f4; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.86em; font-family: ui-monospace, monospace; }}
-.deep-answer pre {{ background: #f6f8fa; padding: 0.7rem 0.9rem; border-radius: 6px; overflow-x: auto; }}
-.deep-refs {{ margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #eee; }}
-.deep-refs h4 {{ font-size: 0.88rem; color: {accent_dark}; margin-bottom: 0.55rem; }}
-.deep-refs ol {{ margin-left: 1.2rem; font-size: 0.82rem; color: #555; }}
-.deep-refs li {{ margin: 0.3rem 0; line-height: 1.55; }}
-.deep-refs a {{ color: {accent}; text-decoration: none; }}
-.deep-refs a:hover {{ text-decoration: underline; }}
-.deep-figures {{ margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid #eee; }}
-.deep-figures h4 {{ font-size: 0.88rem; color: {accent_dark}; margin-bottom: 0.6rem; }}
-.deep-figures-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.7rem; }}
-.deep-fig-item {{ background: #fafafa; border: 1px solid #eee; border-radius: 6px; overflow: hidden; }}
-.deep-fig-item a {{ text-decoration: none; color: inherit; display: block; }}
-.deep-fig-item img {{ width: 100%; height: 115px; object-fit: cover; cursor: zoom-in; display: block; }}
-.deep-fig-item .fig-cap {{ padding: 0.35rem 0.6rem; font-size: 0.7rem; color: #666; line-height: 1.35; }}"""
-
-# Audio Overview styles (shared lib). accent_bg ≈ accent at ~10% alpha.
-CSS = CSS + "\n" + _audio_css(accent, accent_dark, accent + "1a")
-
-JS = """function toggleTopic(id) {
-  const body = document.getElementById(id);
-  const toggle = document.getElementById('toggle-' + id);
-  body.classList.toggle('collapsed');
-  toggle.textContent = body.classList.contains('collapsed') ? '\\u25B6' : '\\u25BC';
-  if (!body.classList.contains('collapsed')) setTimeout(lazyLoad, 100);
-}
-function toggleSub(id) {
-  const body = document.getElementById(id);
-  const toggle = document.getElementById('toggle-' + id);
-  body.classList.toggle('collapsed');
-  toggle.textContent = body.classList.contains('collapsed') ? '\\u25B6' : '\\u25BC';
-  if (!body.classList.contains('collapsed')) setTimeout(lazyLoad, 100);
-}
-function sortCards(key, order) {
-  document.querySelectorAll('.topic-body').forEach(body => {
-    const cards = [...body.querySelectorAll('.paper-card')];
-    cards.sort((a, b) => {
-      let va, vb;
-      if (key === 'date') { va = a.dataset.date || ''; vb = b.dataset.date || ''; }
-      else { va = parseFloat(a.dataset.score) || 0; vb = parseFloat(b.dataset.score) || 0; }
-      if (order === 'asc') return va > vb ? 1 : va < vb ? -1 : 0;
-      return va < vb ? 1 : va > vb ? -1 : 0;
-    });
-    cards.forEach(c => body.appendChild(c));
-  });
-  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  setTimeout(lazyLoad, 100);
-}
-function lazyLoad() {
-  const imgs = document.querySelectorAll('img.lazy:not(.loaded)');
-  if ('IntersectionObserver' in window) {
-    const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          const img = e.target; img.src = img.dataset.src;
-          img.classList.add('loaded'); obs.unobserve(img);
-        }
-      });
-    }, {rootMargin: '200px'});
-    imgs.forEach(img => obs.observe(img));
-  } else { imgs.forEach(img => { img.src = img.dataset.src; img.classList.add('loaded'); }); }
-}
-document.addEventListener('DOMContentLoaded', lazyLoad);
-
-// Search
-function searchPapers(query) {
-  const q = query.trim().toLowerCase();
-  const groups = document.querySelectorAll('.topic-group');
-  const countEl = document.querySelector('.search-count');
-  if (!q) {
-    groups.forEach(g => { g.style.display = '';
-      g.querySelectorAll('.paper-card').forEach(c => c.style.display = '');
-      const body = g.querySelector('.topic-body');
-      if (body) { body.classList.add('collapsed'); }
-      const toggle = g.querySelector('.topic-toggle');
-      if (toggle) toggle.textContent = '\\u25B6';
-    });
-    if (countEl) countEl.style.display = 'none';
-    return;
-  }
-  let total = 0;
-  groups.forEach(g => {
-    let catMatched = 0;
-    const subs = g.querySelectorAll('.sub-group');
-    if (subs.length > 0) {
-      subs.forEach(sg => {
-        const cards = sg.querySelectorAll('.paper-card');
-        let subMatched = 0;
-        cards.forEach(c => {
-          const text = c.textContent.toLowerCase();
-          if (text.includes(q)) { c.style.display = ''; subMatched++; }
-          else { c.style.display = 'none'; }
-        });
-        if (subMatched > 0) {
-          sg.style.display = '';
-          const subBadge = sg.querySelector('.sub-count');
-          if (subBadge) subBadge.textContent = subMatched;
-        } else {
-          sg.style.display = 'none';
-        }
-        // Keep sub-category collapsed — user clicks to expand
-        const subBody = sg.querySelector('.sub-body');
-        if (subBody) subBody.classList.add('collapsed');
-        const subToggle = sg.querySelector('.sub-toggle');
-        if (subToggle) subToggle.textContent = '\\u25B6';
-        catMatched += subMatched;
-      });
-    } else {
-      g.querySelectorAll('.paper-card').forEach(c => {
-        const text = c.textContent.toLowerCase();
-        if (text.includes(q)) { c.style.display = ''; catMatched++; }
-        else { c.style.display = 'none'; }
-      });
+    # Default theme for unknown topics
+    _default_theme = {
+        "gradient": "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+        "accent": "#3B82F6", "accent_dark": "#2563EB", "accent_light": "#60A5FA",
     }
-    if (catMatched > 0) {
-      g.style.display = '';
-      // Keep category collapsed — only update count badge
-      const body = g.querySelector('.topic-body');
-      if (body) body.classList.add('collapsed');
-      const toggle = g.querySelector('.topic-toggle');
-      if (toggle) toggle.textContent = '\\u25B6';
-      const badge = g.querySelector('.topic-count');
-      if (badge) badge.textContent = catMatched + '\\ud3b8';
-      total += catMatched;
-    } else {
-      g.style.display = 'none';
-    }
-  });
-  if (countEl) { countEl.textContent = total + ' results'; countEl.style.display = 'block'; }
-  setTimeout(lazyLoad, 100);
-}
-let searchTimer;
-document.addEventListener('DOMContentLoaded', function() {
-  const input = document.getElementById('search-input');
-  if (input) input.addEventListener('input', function() {
-    if (window._searchMode === 'deep') return;
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => searchPapers(this.value), 300);
-  });
-});
+    theme = THEME.get(TOPIC, _default_theme)
+    # Title from Zotero collection name in config.json
+    _collection_name = _collections_raw.get(TOPIC, TOPIC)
+    theme["title"] = _collection_name
+    theme["subtitle_prefix"] = _collection_name
 
-// Lightbox
-document.addEventListener('DOMContentLoaded', function() {
-  const lb = document.getElementById('lightbox');
-  const lbImg = document.getElementById('lightbox-img');
-  if (!lb || !lbImg) return;
-  document.addEventListener('click', function(e) {
-    const img = e.target.closest('.paper-fig img, .category-timeline img, .timeline-section img');
-    if (img) {
-      const src = img.dataset.src || img.src;
-      if (src) { lbImg.src = src; lb.classList.add('active'); }
-    }
-  });
-  lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
-  });
-});
+    # Load data
+    with open(os.path.join(PAPERS_DIR, "_papers_index.json"), encoding="utf-8") as f:
+        papers_index = json.load(f)
 
-// ============================================================================
-// Deep Research (client-side RAG + Anthropic streaming with Extended Thinking)
-// ============================================================================
-const DEEP = { index: null, loading: false, currentAnswer: '', currentRefs: [], currentQuery: '' };
+    cls_path = os.path.join(TOPIC_DIR, "_new_classification.json")
+    narr_path = os.path.join(TOPIC_DIR, "_timeline_narrative.json")
 
-// Safe DOM helpers (no .innerHTML usage)
-function clearEl(el) { while (el && el.firstChild) el.removeChild(el.firstChild); }
-function renderTo(el, content) {
-  if (!el) return;
-  clearEl(el);
-  if (!content) return;
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  const frag = range.createContextualFragment(content);
-  el.appendChild(frag);
-}
-
-function deepSetStatus(text, isError) {
-  const el = document.getElementById('deep-status');
-  if (!el) return;
-  if (!text) { el.classList.remove('active', 'error'); el.textContent = ''; return; }
-  el.textContent = text;
-  el.classList.add('active');
-  if (isError) el.classList.add('error'); else el.classList.remove('error');
-}
-
-function deepShowPanel() {
-  document.getElementById('deep-panel').style.display = '';
-  document.getElementById('deep-body').classList.add('active');
-}
-
-function deepHidePanel() {
-  document.getElementById('deep-panel').style.display = 'none';
-  document.getElementById('deep-body').classList.remove('active');
-  deepSetStatus('');
-  clearEl(document.getElementById('deep-answer'));
-  document.getElementById('deep-refs').style.display = 'none';
-  document.getElementById('deep-figures').style.display = 'none';
-  DEEP.currentAnswer = '';
-  DEEP.currentRefs = [];
-  DEEP.currentQuery = '';
-  deepUpdateButtons(false);
-}
-
-function deepUpdateButtons(enabled) {
-  for (const id of ['deep-copy', 'deep-download', 'deep-download-html', 'deep-newtab', 'deep-obsidian', 'deep-rerun']) {
-    const b = document.getElementById(id);
-    if (b) b.disabled = !enabled;
-  }
-  // Audio Overview button: only usable locally (key present) and after an answer.
-  const ab = document.getElementById('deep-audio');
-  if (ab) ab.disabled = !(enabled && window._GEMINI_KEY);
-}
-
-async function deepLoadIndex() {
-  if (DEEP.index) return DEEP.index;
-  if (DEEP.loading) {
-    while (DEEP.loading) await new Promise(r => setTimeout(r, 100));
-    return DEEP.index;
-  }
-  DEEP.loading = true;
-  deepSetStatus('\U0001F4E6 Loading search index...');
-  try {
-    const resp = await fetch('_search_index.json');
-    if (!resp.ok) throw new Error('Index fetch failed: ' + resp.status);
-    DEEP.index = await resp.json();
-    return DEEP.index;
-  } finally {
-    DEEP.loading = false;
-  }
-}
-
-function dequantizeEmb(b64) {
-  const binary = atob(b64);
-  const dim = binary.length;
-  const vec = new Float32Array(dim);
-  for (let i = 0; i < dim; i++) {
-    let b = binary.charCodeAt(i);
-    if (b >= 128) b -= 256;
-    vec[i] = b / 127.0;
-  }
-  let n = 0;
-  for (let i = 0; i < dim; i++) n += vec[i] * vec[i];
-  n = Math.sqrt(n) || 1;
-  for (let i = 0; i < dim; i++) vec[i] /= n;
-  return vec;
-}
-
-function cosineSim(a, b) {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
-
-async function embedQuery(text) {
-  const key = _OPENAI_KEY;
-  if (!key) throw new Error('OpenAI API key missing — Deep Research 패널에서 키를 입력하세요.');
-  const resp = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + key },
-    body: JSON.stringify({ input: text, model: 'text-embedding-3-small' }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error('OpenAI embed ' + resp.status + ': ' + err.slice(0, 180));
-  }
-  const data = await resp.json();
-  const raw = data.data[0].embedding;
-  let n = 0;
-  for (const v of raw) n += v * v;
-  n = Math.sqrt(n) || 1;
-  return raw.map(v => v / n);
-}
-
-function parseTimeFilter(q) {
-  const now = new Date().getFullYear();
-  const P = [
-    [/(\\d{4})\\s*년\\s*이후|since\\s+(\\d{4})|after\\s+(\\d{4})/i, m => ({min: +(m[1]||m[2]||m[3])})],
-    [/(\\d{4})\\s*년\\s*이전|before\\s+(\\d{4})/i, m => ({max: +(m[1]||m[2])})],
-    [/최근\\s*(\\d+)\\s*년|last\\s+(\\d+)\\s+years?|past\\s+(\\d+)\\s+years?/i, m => ({min: now - +(m[1]||m[2]||m[3])})],
-    [/최근\\s*1\\s*년|last\\s+year/i, () => ({min: now - 1})],
-    [/(\\d{4})\\s*[-~]\\s*(\\d{4})/, m => ({min: +m[1], max: +m[2]})],
-  ];
-  for (const [re, fn] of P) {
-    const m = q.match(re);
-    if (m) return fn(m);
-  }
-  return null;
-}
-
-function detectLang(text) {
-  const ko = (text.match(/[\\u1100-\\u11FF\\u3130-\\u318F\\uAC00-\\uD7AF]/g) || []).length;
-  return (ko / (text.length || 1)) > 0.1 ? 'ko' : 'en';
-}
-
-function retrieveChunks(queryVec, index, timeFilter, k) {
-  const chunks = index.chunks, papers = index.papers;
-  const scored = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const c = chunks[i];
-    const paper = papers[c.slug];
-    if (!paper) continue;
-    if (timeFilter) {
-      const y = parseInt(paper.year);
-      if (timeFilter.min && (!y || y < timeFilter.min)) continue;
-      if (timeFilter.max && (!y || y > timeFilter.max)) continue;
-    }
-    const vec = dequantizeEmb(c.emb);
-    scored.push({ chunk: c, paper: paper, sim: cosineSim(queryVec, vec) });
-  }
-  scored.sort((a, b) => b.sim - a.sim);
-  const used = {};
-  const sel = [];
-  for (const s of scored) {
-    if (sel.length >= k) break;
-    used[s.chunk.slug] = (used[s.chunk.slug] || 0) + 1;
-    if (used[s.chunk.slug] > 3) continue;
-    sel.push(s);
-  }
-  return sel;
-}
-
-function mdToMarkup(md) {
-  if (window.marked) {
-    try { return window.marked.parse(md, { gfm: true, breaks: false }); }
-    catch (e) { /* fallthrough */ }
-  }
-  let h = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-    .replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<figure><img src="$2" alt="$1"><figcaption>$1</figcaption></figure>')
-    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>')
-    .replace(/\\n\\n+/g, '</p><p>');
-  return '<p>' + h + '</p>';
-}
-
-function postProcessRefs(markup, refs) {
-  return markup.replace(/\\[ref:(\\d+)\\]/g, (_, n) => {
-    const ref = refs[parseInt(n) - 1];
-    if (!ref) return '[ref:' + n + ']';
-    return '<a class="ref" href="' + ref.url + '" target="_blank">[' + n + ']</a>';
-  });
-}
-
-function escapeAttr(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function collectCitedNums(md) {
-  const cited = new Set();
-  for (const m of md.matchAll(/\\[ref:(\\d+)\\]/g)) cited.add(parseInt(m[1]));
-  return cited;
-}
-
-function collectInlineFigureUrls(md) {
-  const used = new Set();
-  for (const m of md.matchAll(/!\\[[^\\]]*\\]\\(([^)]+)\\)/g)) used.add(m[1]);
-  return used;
-}
-
-function buildPrompt(query, selected, lang, fullTexts) {
-  const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- 모든 주장에 [ref:N] 인용 (N은 아래 발췌문 번호)\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
-  const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- Cite every claim with [ref:N] where N is the excerpt number below\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
-  const lines = [];
-  for (let i = 0; i < selected.length; i++) {
-    const s = selected[i], n = i + 1, paper = s.paper;
-    const figs = (paper.figures && paper.figures.length)
-      ? '\\n  Figures:\\n' + paper.figures.map(f => '    - ' + f.url + '  (' + (f.caption || 'figure') + ')').join('\\n')
-      : '';
-    // s.chunks is now an array of {section, text} for this single paper
-    const sectionsBlock = s.chunks.map(function(c) {
-      return '  Section: ' + c.section + '\\n  Text:\\n' + c.text.split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
-    }).join('\\n');
-    let originalBlock = '';
-    if (fullTexts && fullTexts[s.slug]) {
-      originalBlock = '\\n  ORIGINAL EXCERPT (use for quantitative detail like reagents, amounts, conditions):\\n' + fullTexts[s.slug].split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
-    }
-    lines.push('[' + n + '] Paper: "' + paper.title + '" (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + figs + '\\n' + sectionsBlock + originalBlock);
-  }
-  const user = 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n') + '\\n\\n---\\nQuestion: ' + query;
-  return { system: lang === 'ko' ? systemKo : systemEn, user: user };
-}
-
-const LENGTH_SPEC = {
-  short:  { max_tokens: 4096,  thinking: 1500, ko: '2~5개 문단으로 간결하게 (약 400~900자)',       en: '2-5 concise paragraphs (roughly 300-700 words)' },
-  medium: { max_tokens: 6500,  thinking: 2500, ko: '5~10개 문단으로 충실하게 (약 900~1800자)',     en: '5-10 substantial paragraphs (roughly 700-1500 words)' },
-  long:   { max_tokens: 12000, thinking: 4000, ko: '10~20개 문단으로 상세하게 (약 1800~4500자)',   en: '10-20 detailed paragraphs (roughly 1500-3500 words)' },
-  ultra:  { max_tokens: 20000, thinking: 6000, ko: '20~40개 문단으로 심층적으로 (약 4500~9000자)', en: '20-40 in-depth paragraphs (roughly 3500-7000 words)' },
-};
-
-async function callClaude(query, selected, lang, model, length, fullTexts) {
-  const apiKey = _ANTHROPIC_KEY;
-  if (!apiKey) throw new Error('Anthropic API key missing — Deep Research 패널에서 키를 입력하세요.');
-  const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
-  // Haiku 4.5 caps output at ~8192 tokens; Sonnet can go higher.
-  let maxTokens = spec.max_tokens;
-  let thinkingBudget = spec.thinking;
-  if (model === 'claude-haiku-4-5' && maxTokens > 8000) {
-    maxTokens = 8000;
-    if (thinkingBudget > 2500) thinkingBudget = 2500;
-  }
-  const p = buildPrompt(query, selected, lang, fullTexts);
-  // Append length directive to the system prompt.
-  p.system += '\\n\\n' + (lang === 'ko'
-    ? '분량 지침: 답변을 ' + spec.ko + '로 작성하세요. 분량이 길수록 각 논문을 더 깊이 있게 다루고, 주제 그룹을 더 세분화하세요.'
-    : 'Length directive: write the answer as ' + spec.en + '. Longer lengths should cover each paper in more depth and introduce finer thematic subdivisions.');
-  const body = {
-    model: model,
-    max_tokens: maxTokens,
-    thinking: { type: 'enabled', budget_tokens: thinkingBudget },
-    system: p.system,
-    messages: [{ role: 'user', content: p.user }],
-    stream: true,
-  };
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error('Anthropic ' + resp.status + ': ' + err.slice(0, 300));
-  }
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf('\\n\\n')) !== -1) {
-      const block = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      for (const line of block.split('\\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6);
-        if (payload === '[DONE]') continue;
-        let ev;
-        try { ev = JSON.parse(payload); } catch { continue; }
-        if (ev.type === 'content_block_start') {
-          if (ev.content_block.type === 'thinking') deepSetStatus('\U0001F914 답변 계획 중...');
-          else if (ev.content_block.type === 'text') deepSetStatus('\u270D\uFE0F 답변 작성 중...');
-        } else if (ev.type === 'content_block_delta') {
-          if (ev.delta.type === 'text_delta') {
-            DEEP.currentAnswer += ev.delta.text;
-            renderDeepAnswer(DEEP.currentAnswer);
-          }
-        } else if (ev.type === 'error') {
-          throw new Error('Anthropic stream error: ' + (ev.error && ev.error.message || JSON.stringify(ev)));
-        }
-      }
-    }
-  }
-}
-
-function renderDeepAnswer(md) {
-  const el = document.getElementById('deep-answer');
-  if (!el) return;
-  let markup = mdToMarkup(md);
-  markup = postProcessRefs(markup, DEEP.currentRefs);
-  renderTo(el, markup);
-}
-
-function finalizeDeepAnswer() {
-  const cited = collectCitedNums(DEEP.currentAnswer);
-  const refsListEl = document.getElementById('deep-refs-list');
-  clearEl(refsListEl);
-  if (cited.size > 0) {
-    const ordered = [...cited].sort((a, b) => a - b);
-    for (const n of ordered) {
-      const ref = DEEP.currentRefs[n - 1];
-      if (!ref) continue;
-      const li = document.createElement('li');
-      li.appendChild(document.createTextNode('[' + n + '] '));
-      const link = document.createElement('a');
-      link.href = ref.url;
-      link.target = '_blank';
-      link.textContent = ref.title;
-      li.appendChild(link);
-      if (ref.year) li.appendChild(document.createTextNode(' (' + ref.year + ')'));
-      // Local-only: render a 'Open PDF' button when we have a Zotero itemKey
-      // for this paper. Clicking it triggers the zotero:// protocol handler
-      // and the Zotero desktop app pops the PDF immediately.
-      if (window._zoteroKeys && window._zoteroKeys[ref.slug]) {
-        const pdfLink = document.createElement('a');
-        pdfLink.href = 'zotero://open-pdf/library/items/' + window._zoteroKeys[ref.slug];
-        pdfLink.title = 'Open PDF in Zotero';
-        pdfLink.textContent = '\U0001F4C4 PDF';
-        pdfLink.style.marginLeft = '0.5rem';
-        pdfLink.style.fontSize = '0.75rem';
-        pdfLink.style.color = '#555';
-        pdfLink.style.textDecoration = 'none';
-        pdfLink.style.padding = '0.05rem 0.4rem';
-        pdfLink.style.borderRadius = '3px';
-        pdfLink.style.background = '#f0f0f0';
-        pdfLink.style.border = '1px solid #ddd';
-        li.appendChild(pdfLink);
-      }
-      refsListEl.appendChild(li);
-    }
-    document.getElementById('deep-refs').style.display = '';
-  }
-  const usedInBody = collectInlineFigureUrls(DEEP.currentAnswer);
-  const grid = document.getElementById('deep-figures-grid');
-  clearEl(grid);
-  let added = 0;
-  for (const n of [...cited].sort((a, b) => a - b)) {
-    const ref = DEEP.currentRefs[n - 1];
-    if (!ref || !ref.figures || !ref.figures.length) continue;
-    for (const fig of ref.figures) {
-      if (usedInBody.has(fig.url)) continue;
-      const div = document.createElement('div');
-      div.className = 'deep-fig-item';
-      const link = document.createElement('a');
-      link.href = ref.url;
-      link.target = '_blank';
-      link.title = ref.title + ' — ' + (fig.caption || '');
-      const img = document.createElement('img');
-      img.src = fig.url;
-      img.alt = fig.caption || '';
-      const cap = document.createElement('div');
-      cap.className = 'fig-cap';
-      cap.textContent = '[' + n + '] ' + (fig.caption || 'Figure');
-      link.appendChild(img);
-      link.appendChild(cap);
-      div.appendChild(link);
-      grid.appendChild(div);
-      added++;
-      if (added >= 20) break;
-    }
-    if (added >= 20) break;
-  }
-  document.getElementById('deep-figures').style.display = added > 0 ? '' : 'none';
-  deepUpdateButtons(true);
-}
-
-async function runDeepResearch(query) {
-  query = (query || '').trim();
-  if (!query) return;
-  DEEP.currentQuery = query;
-  deepShowPanel();
-  if (!_ANTHROPIC_KEY || !_OPENAI_KEY) {
-    const ak = prompt('Anthropic API Key를 입력하세요 (Deep Research에 필요합니다):');
-    if (!ak) { deepSetStatus('Anthropic API Key가 필요합니다.', true); return; }
-    const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다):');
-    if (!ok) { deepSetStatus('OpenAI API Key가 필요합니다.', true); return; }
-    _ANTHROPIC_KEY = ak; _OPENAI_KEY = ok;
-    localStorage.setItem('_ANTHROPIC_KEY', ak);
-    localStorage.setItem('_OPENAI_KEY', ok);
-  }
-  clearEl(document.getElementById('deep-answer'));
-  document.getElementById('deep-refs').style.display = 'none';
-  document.getElementById('deep-figures').style.display = 'none';
-  DEEP.currentAnswer = '';
-  DEEP.currentRefs = [];
-  deepUpdateButtons(false);
-  try {
-    const index = await deepLoadIndex();
-    deepSetStatus('\U0001F50D 질의 임베딩 중...');
-    const queryVec = await embedQuery(query);
-    deepSetStatus('\U0001F4DA 관련 논문 검색 중...');
-    const timeFilter = parseTimeFilter(query);
-    const selected = retrieveChunks(queryVec, index, timeFilter, 30);
-    if (selected.length === 0) {
-      deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
-      return;
-    }
-    // Group chunks by paper so each paper appears as a single reference
-    // entry. The retrieval step still uses chunk-level cosine similarity
-    // (so different sections can independently boost a paper into the
-    // top-k), but downstream prompt construction and references list
-    // operate on unique papers -- otherwise the same paper shows up as
-    // [1], [2], [3] when its Essence/How/Achievement chunks all match.
-    const byPaper = new Map();
-    for (const s of selected) {
-      const slug = s.chunk.slug;
-      if (!byPaper.has(slug)) {
-        byPaper.set(slug, { slug: slug, paper: s.paper, chunks: [] });
-      }
-      byPaper.get(slug).chunks.push({ section: s.chunk.section, text: s.chunk.text });
-    }
-    const dedupedSelected = Array.from(byPaper.values());
-
-    DEEP.currentRefs = dedupedSelected.map((s, i) => ({
-      n: i + 1,
-      slug: s.slug,
-      title: s.paper.title,
-      year: s.paper.year,
-      url: s.paper.url,
-      figures: s.paper.figures || [],
-    }));
-    // Local-only deep dive: try to fetch text.md (raw paper text) for the
-    // top distinct papers so Claude can quote concrete quantitative
-    // details (reagents, amounts, conditions). text.md is git-ignored,
-    // so on Cloudflare these fetches return 404 and we silently fall
-    // back to review-only context. On localhost / file:// they succeed
-    // and the LLM gets richer source material.
-    deepSetStatus('\U0001F4C4 원문 발췌 가져오는 중...');
-    const fullTexts = {};
-    const topSlugs = dedupedSelected.slice(0, 10).map(function(s) { return s.slug; });
-    await Promise.all(topSlugs.map(async function(slug) {
-      try {
-        const r = await fetch('../papers/' + slug + '/text.md');
-        if (!r.ok) return;
-        const t = await r.text();
-        fullTexts[slug] = t.slice(0, 30000);
-      } catch (e) { /* fetch error or missing file -- skip silently */ }
-    }));
-    const lang = detectLang(query);
-    const model = document.getElementById('deep-model').value || 'claude-haiku-4-5';
-    const length = document.getElementById('deep-length').value || 'short';
-    await callClaude(query, dedupedSelected, lang, model, length, fullTexts);
-    finalizeDeepAnswer();
-    deepSetStatus('\u2705 완료');
-    setTimeout(() => deepSetStatus(''), 2500);
-  } catch (e) {
-    console.error(e);
-    deepSetStatus('오류: ' + e.message, true);
-  }
-}
-
-function setSearchMode(mode) {
-  window._searchMode = mode;
-  const cb = document.getElementById('mode-classic');
-  const db = document.getElementById('mode-deep');
-  const input = document.getElementById('search-input');
-  const hint = document.getElementById('search-hint');
-  if (cb) cb.classList.toggle('active', mode === 'classic');
-  if (db) db.classList.toggle('active', mode === 'deep');
-  if (mode === 'deep') {
-    if (input) input.placeholder = 'Deep Research: 자유롭게 질의하세요 (예: 2023년 이후 LLM agent 동향)';
-    if (hint) hint.textContent = 'Press Enter to run Deep Research (API keys built into this page at build time).';
-  } else {
-    if (input) input.placeholder = 'Search papers by title, DOI, keyword...';
-    if (hint) hint.textContent = 'Enter title, DOI, author name, or keyword to filter';
-    deepHidePanel();
-  }
-}
-
-
-function buildFullMarkdown() {
-  const q = document.getElementById('search-input').value;
-  const lines = ['# Deep Research', '', '**Query**: ' + q, '**Generated**: ' + new Date().toISOString(), '', '---', '', DEEP.currentAnswer];
-  const cited = collectCitedNums(DEEP.currentAnswer);
-  if (cited.size > 0) {
-    lines.push('', '## References', '');
-    for (const n of [...cited].sort((a, b) => a - b)) {
-      const ref = DEEP.currentRefs[n - 1];
-      if (!ref) continue;
-      lines.push('[' + n + '] [' + ref.title + '](' + ref.url + ')' + (ref.year ? ' (' + ref.year + ')' : ''));
-    }
-  }
-  return lines.join('\\n');
-}
-
-function copyAnswerMd() {
-  if (!DEEP.currentAnswer) return;
-  const full = buildFullMarkdown();
-  navigator.clipboard.writeText(full).then(() => {
-    const btn = document.getElementById('deep-copy');
-    const orig = btn.textContent;
-    btn.textContent = '\u2713 Copied';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  });
-}
-
-function saveToObsidian() {
-  if (!DEEP.currentAnswer) return;
-  var query = document.getElementById('search-input').value || 'research-note';
-  var topic = window.location.pathname.split('/').filter(Boolean).pop() || 'notes';
-  var ts = new Date().toISOString().slice(0, 10);
-  var slug = query.slice(0, 40).replace(/[^a-zA-Z0-9\\u1100-\\u11FF\\u3130-\\u318F\\uAC00-\\uD7AF]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-  var fileName = 'notes/' + topic + '/PCDR_' + ts + '-' + slug;
-  var lines = [
-    '# ' + query, '',
-    '> Deep Research (' + new Date().toLocaleString() + ')', '',
-    '## My Notes', '', '(\\uC5EC\\uAE30\\uC5D0 \\uC0DD\\uAC01\\uC744 \\uC801\\uC73C\\uC138\\uC694)', '',
-    '---', '',
-    '## Deep Research Answer', '',
-    DEEP.currentAnswer,
-  ];
-  var cited = collectCitedNums(DEEP.currentAnswer);
-  if (cited.size > 0) {
-    lines.push('', '## References', '');
-    var ordered = Array.from(cited).sort(function(a, b) { return a - b; });
-    for (var i = 0; i < ordered.length; i++) {
-      var n = ordered[i];
-      var ref = DEEP.currentRefs[n - 1];
-      if (!ref) continue;
-      lines.push('[' + n + '] [[papers/' + ref.slug + '/review|' + ref.title + ']]' + (ref.year ? ' (' + ref.year + ')' : ''));
-    }
-  }
-  var content = lines.join('\\n');
-  // Fix relative paths: LLM answers use ../papers/ which is correct
-  // from docs/{topic}/, but notes live one level deeper in
-  // docs/notes/{topic}/ so we need ../../papers/ instead.
-  content = content.replace(/\\.\\.\\//g, '../../');
-  var vault = 'docs';
-  var uri = 'obsidian://new?vault=' + encodeURIComponent(vault) + '&file=' + encodeURIComponent(fileName) + '&content=' + encodeURIComponent(content);
-  window.location.href = uri;
-}
-
-function downloadAnswerMd() {
-  if (!DEEP.currentAnswer) return;
-  const full = buildFullMarkdown();
-  const blob = new Blob([full], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  a.href = url;
-  a.download = 'deep-research-' + ts + '.md';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-function buildFullHtml() {
-  const q = document.getElementById('search-input').value;
-  let answerMarkup = mdToMarkup(DEEP.currentAnswer);
-  answerMarkup = postProcessRefs(answerMarkup, DEEP.currentRefs);
-  const cited = collectCitedNums(DEEP.currentAnswer);
-  let refsMarkup = '';
-  if (cited.size > 0) {
-    refsMarkup = '<h3>References</h3><ol>';
-    for (const n of [...cited].sort((a, b) => a - b)) {
-      const ref = DEEP.currentRefs[n - 1];
-      if (!ref) continue;
-      refsMarkup += '<li>[' + n + '] <a href="' + ref.url + '" target="_blank">' + escapeAttr(ref.title) + '</a>' + (ref.year ? ' (' + ref.year + ')' : '') + '</li>';
-    }
-    refsMarkup += '</ol>';
-  }
-  const base = new URL('.', window.location.href).href;
-  answerMarkup = answerMarkup.replace(/(src|href)="(\\.\\.\\/[^"]+)"/g, (_, attr, rel) => attr + '="' + new URL(rel, base).href + '"');
-  refsMarkup = refsMarkup.replace(/href="(\\.\\.\\/[^"]+)"/g, (_, rel) => 'href="' + new URL(rel, base).href + '"');
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deep Research</title><style>' +
-    'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:760px;margin:2rem auto;padding:0 1.5rem;color:#222;line-height:1.75;}' +
-    'h1{font-size:1.35rem;margin-bottom:0.3rem;}' +
-    '.meta{color:#888;font-size:0.85rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid #eee;}' +
-    '.answer{font-size:0.96rem;}' +
-    '.answer p{margin:0.9rem 0;}' +
-    '.answer h1,.answer h2,.answer h3{color:#333;margin:1.2rem 0 0.5rem;}' +
-    '.answer a.ref{display:inline-block;color:#2563EB;text-decoration:none;font-weight:700;font-size:0.72rem;padding:0 0.3rem;border-radius:3px;background:#EBF2FF;vertical-align:super;margin:0 0.1rem;}' +
-    '.answer figure{margin:1rem 0;max-width:100%;}' +
-    '.answer img{width:100%;height:auto;display:block;margin:1rem 0;padding:0.5rem;background:#fafafa;border:1px solid #eee;border-radius:6px;box-sizing:border-box;}' +
-    '.answer figure img{margin:0;}' +
-    '.answer p img{margin:0.5rem 0;}' +
-    '.answer figure figcaption{font-size:0.78rem;color:#666;text-align:center;margin-top:0.4rem;font-style:italic;}' +
-    'h3{color:#333;margin:2rem 0 0.6rem;border-top:1px solid #eee;padding-top:1rem;}' +
-    'ol{font-size:0.85rem;color:#555;margin-left:1rem;}' +
-    'ol li{margin:0.3rem 0;}' +
-    'ol a{color:#2563EB;text-decoration:none;}' +
-    '@media print{body{max-width:none;}}' +
-    '</style></head><body>' +
-    '<h1>Deep Research</h1>' +
-    '<div class="meta"><strong>Query:</strong> ' + escapeAttr(q) + '<br><strong>Generated:</strong> ' + new Date().toLocaleString() + '</div>' +
-    '<div class="answer">' + answerMarkup + '</div>' +
-    refsMarkup +
-    '</body></html>';
-}
-
-function openAnswerInNewTab() {
-  if (!DEEP.currentAnswer) return;
-  const doc = buildFullHtml();
-  const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-}
-
-function downloadAnswerHtml() {
-  if (!DEEP.currentAnswer) return;
-  const doc = buildFullHtml();
-  const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  a.href = url;
-  a.download = 'deep-research-' + ts + '.html';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-  window._searchMode = 'classic';
-
-  // Same pattern for Zotero itemKey lookup. When present (local dev),
-  // the Deep Research References list adds a one-click 'Open PDF'
-  // button next to each citation. Git-ignored, so Cloudflare visitors
-  // get a 404 here and the button never appears for them.
-  fetch('../_zotero_keys.json').then(function(r) {
-    return r.ok ? r.json() : null;
-  }).then(function(keys) {
-    if (keys) window._zoteroKeys = keys;
-  }).catch(function() { /* no zotero keys; fine */ });
-
-  const cb = document.getElementById('mode-classic');
-  const db = document.getElementById('mode-deep');
-  if (cb) cb.addEventListener('click', () => setSearchMode('classic'));
-  if (db) db.addEventListener('click', () => setSearchMode('deep'));
-  const input = document.getElementById('search-input');
-  if (input) {
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && window._searchMode === 'deep') {
-        e.preventDefault();
-        runDeepResearch(this.value);
-      }
-    });
-  }
-  const close = document.getElementById('deep-close');
-  if (close) close.addEventListener('click', deepHidePanel);
-  const copy = document.getElementById('deep-copy');
-  if (copy) copy.addEventListener('click', copyAnswerMd);
-  const dl = document.getElementById('deep-download');
-  if (dl) dl.addEventListener('click', downloadAnswerMd);
-  const dlh = document.getElementById('deep-download-html');
-  if (dlh) dlh.addEventListener('click', downloadAnswerHtml);
-  const nt = document.getElementById('deep-newtab');
-  if (nt) nt.addEventListener('click', openAnswerInNewTab);
-  const ob = document.getElementById('deep-obsidian');
-  if (ob) ob.addEventListener('click', saveToObsidian);
-  const rerun = document.getElementById('deep-rerun');
-  if (rerun) rerun.addEventListener('click', function() {
-    const q = document.getElementById('search-input').value;
-    if (q && q.trim()) runDeepResearch(q);
-  });
-});"""
-
-# --- Build-time: inject API keys from env vars into JS ---
-_cfg_path = Path(__file__).resolve().parent.parent / "config.json"
-_cfg_keys = {}
-if _cfg_path.exists():
-    with open(_cfg_path, "r", encoding="utf-8") as _f:
-        _cfg_keys = json.load(_f)
-_ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or _cfg_keys.get("anthropic_api_key", "")
-_OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or _cfg_keys.get("openai_api_key", "")
-_GEMINI_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-               or _cfg_keys.get("gemini_api_key", "") or _cfg_keys.get("google_api_key", ""))
-JS = ("let _ANTHROPIC_KEY = " + json.dumps(_ANTHROPIC_KEY) + " || localStorage.getItem('_ANTHROPIC_KEY') || '';\n"
-      "let _OPENAI_KEY = " + json.dumps(_OPENAI_KEY) + " || localStorage.getItem('_OPENAI_KEY') || '';\n" + JS)
-
-
-def render_insights_section():
-    """_insights.json에서 cross-category insights 렌더링."""
-    cross = insights_data.get("cross_category", [])
-    if not cross:
-        return ""
-
-    # Build slug number → paper info lookup
-    num_to_paper = {}
-    for p in papers_index:
-        slug = p.get("slug", "")
-        title = p.get("title", "")
-        num = slug.split("_")[0] if "_" in slug else slug[:3]
-        num_to_paper[num] = (slug, title)
-
-    type_labels = {
-        "convergence": "융합",
-        "gap": "연구 갭",
-        "emerging": "신흥 트렌드",
-        "declining": "감소 추세",
-    }
-
-    cards = []
-    for ins in cross:
-        itype = ins.get("type", "gap")
-        label = type_labels.get(itype, itype)
-        title = escape(ins.get("title", ""))
-        desc = escape(ins.get("description", ""))
-        cats = ins.get("categories", [])
-        evidence = ins.get("evidence", [])
-        policy = ins.get("policy_implication", "")
-
-        cats_html = " · ".join(escape(c) for c in cats)
-        ev_links = []
-        for num in evidence:
-            matched = num_to_paper.get(num) or num_to_paper.get(str(num).zfill(3))
-            if matched:
-                slug, ptitle = matched
-                ev_links.append(
-                    f'<a href="../papers/{escape(slug)}/index.html" title="{escape(ptitle)}">[{num}]</a>'
-                )
-            else:
-                ev_links.append(f"[{num}]")
-        ev_html = " ".join(ev_links)
-
-        policy_html = ""
-        if policy:
-            policy_html = f'\n      <div class="insight-policy">&#x1F3DB; {escape(policy)}</div>'
-
-        cards.append(
-            f'    <div class="insight-card {itype}">\n'
-            f'      <div class="insight-type">{label}</div>\n'
-            f'      <div class="insight-title">{title}</div>\n'
-            f'      <div class="insight-desc">{desc}</div>\n'
-            f'      <div class="insight-meta">\n'
-            f'        <span class="cats">{cats_html}</span>\n'
-            f'        <span class="evidence">{ev_html}</span>\n'
-            f'      </div>{policy_html}\n'
-            f'    </div>'
-        )
-
-    return (
-        '<div class="insights-section">\n'
-        f'  <h2>Research Insights <span class="insight-count">{len(cross)} findings</span></h2>\n'
-        + "\n".join(cards) + "\n"
-        + '</div>\n\n'
-    )
-
-
-def render_category_insight(cat_name):
-    """per_category insight를 카테고리 summary에 삽입할 HTML 반환."""
-    per_cat = insights_data.get("per_category", {}).get(cat_name, {})
-    if not per_cat:
-        return ""
-    parts = []
-    kf = per_cat.get("key_finding", "")
-    gap = per_cat.get("gap", "")
-    pi = per_cat.get("policy_implication", "")
-    if kf:
-        parts.append(f'<span class="ci-label">&#x1F4CC; 핵심:</span> {escape(kf)}')
-    if gap:
-        parts.append(f'<span class="ci-label ci-gap">&#x26A0; 갭:</span> {escape(gap)}')
-    if pi:
-        parts.append(f'<span class="ci-label ci-policy">&#x1F3DB; 정책:</span> {escape(pi)}')
-    if not parts:
-        return ""
-    return '<div class="cat-insight">' + "<br>".join(parts) + '</div>'
-
-
-# Build topic groups
-topic_groups_parts = []
-global_num = 1
-for cat_idx, cat_name in enumerate(cat_order):
-    papers = cat_papers.get(cat_name, [])
-    if not papers:
-        continue
-    topic_id = f"topic-{cat_idx}"
-    cat_slug = category_slug(cat_name)
-    narr_html = render_category_narrative(cat_name)
-
-    # Category timeline image (in topic dir)
-    cat_tl_file = f"category_timeline_{cat_slug}.png"
-    cat_tl_exists = os.path.exists(os.path.join(TOPIC_DIR, cat_tl_file))
-    cat_tl_html = ""
-    if cat_tl_exists:
-        cat_tl_html = (
-            f'\n<div class="category-timeline">'
-            f'<img data-src="{cat_tl_file}" alt="{esc(cat_name)} Timeline" class="lazy">'
-            f'</div>'
-        )
-
-    cat_insight_html = render_category_insight(cat_name)
-    summary_block = ""
-    if narr_html or cat_tl_html or cat_insight_html:
-        summary_block = f'\n<div class="category-summary">{cat_tl_html}{narr_html}{cat_insight_html}</div>'
-
-    # Group papers by sub_category (if >30 papers in category)
-    if len(papers) > 30:
-        sub_groups = OrderedDict()
-        for paper in papers:
-            sc = paper.get("sub_category", "General")
-            if sc not in sub_groups:
-                sub_groups[sc] = []
-            sub_groups[sc].append(paper)
-
-        # Merge small sub-categories (<3 papers) into "Others"
-        small = [k for k, v in sub_groups.items() if len(v) < 3 and k != "Others"]
-        if small:
-            others = sub_groups.pop("Others", [])
-            for k in small:
-                others.extend(sub_groups.pop(k))
-            if others:
-                sub_groups["Others"] = others
-
-        cards_html = ""
-        for sc_idx, (sc_name, sc_papers) in enumerate(sub_groups.items()):
-            sc_id = f"{topic_id}-sub-{sc_idx}"
-            sc_cards = []
-            for paper in sc_papers:
-                sc_cards.append(render_paper_card(paper, global_num, cat_slug))
-                global_num += 1
-            cards_html += (
-                f'\n<div class="sub-group">'
-                f'\n  <div class="sub-header" onclick="toggleSub(\'{sc_id}\')">'
-                f'\n    <span class="sub-name">{esc(sc_name)}</span>'
-                f'\n    <span class="sub-count">{len(sc_papers)}</span>'
-                f'\n    <span class="sub-toggle" id="toggle-{sc_id}">&#x25B6;</span>'
-                f'\n  </div>'
-                f'\n  <div class="sub-body collapsed" id="{sc_id}">'
-                + "\n".join(sc_cards)
-                + '\n  </div>'
-                + '\n</div>'
-            )
+    if os.path.exists(cls_path):
+        with open(cls_path, encoding="utf-8") as f:
+            cls_data = json.load(f)
+        categories = cls_data.get("categories", [])
+        assignments = cls_data.get("assignments", [])
     else:
-        cards_html = ""
-        for paper in papers:
-            cards_html += render_paper_card(paper, global_num, cat_slug)
-            global_num += 1
+        # Fallback: extract categories from classifications[TOPIC] in _papers_index.json
+        _cat_names = set()
+        for p in papers_index:
+            cls = p.get("classifications", {}).get(TOPIC, {})
+            for c in cls.get("all_categories", []):
+                _cat_names.add(c)
+            if cls.get("primary_category"):
+                _cat_names.add(cls["primary_category"])
+        categories = [{"name": c} for c in sorted(_cat_names)] if _cat_names else []
+        assignments = []
 
-    group = (
-        f'<div class="topic-group" data-topic="{esc(cat_name)}">\n'
-        f'      <div class="topic-header" onclick="toggleTopic(\'{topic_id}\')">\n'
-        f'        <span class="topic-name">{esc(cat_name)}</span>\n'
-        f'        <span class="topic-count">{len(papers)}\ud3b8</span>\n'
-        f'        <span class="topic-toggle" id="toggle-{topic_id}">&#x25B6;</span>\n'
-        f'      </div>\n'
-        f'      <div class="topic-body collapsed" id="{topic_id}">{summary_block}\n'
-        + cards_html + "\n"
-        + '      </div>\n'
-        + '    </div>'
+    if os.path.exists(narr_path):
+        with open(narr_path, encoding="utf-8") as f:
+            narrative = json.load(f)
+        category_analyses = narrative.get("category_analyses", {})
+        executive_summary = narrative.get("executive_summary_ko", "")
+    else:
+        category_analyses = {}
+        executive_summary = ""
+
+    # Load insights
+    insights_path = os.path.join(TOPIC_DIR, "_insights.json")
+    if os.path.exists(insights_path):
+        with open(insights_path, encoding="utf-8") as f:
+            insights_data = json.load(f)
+    else:
+        insights_data = {}
+
+    # Merge _category_summaries.json (has description + papers per category)
+    cat_sum_path = os.path.join(TOPIC_DIR, "_category_summaries.json")
+    if os.path.exists(cat_sum_path):
+        with open(cat_sum_path, encoding="utf-8") as f:
+            cat_summaries = json.load(f)
+        for cs in cat_summaries:
+            cat_name_cs = cs.get("category", "")
+            if cat_name_cs not in category_analyses:
+                category_analyses[cat_name_cs] = {}
+            if cs.get("description"):
+                category_analyses[cat_name_cs]["description"] = cs["description"]
+            if cs.get("description_ko"):
+                category_analyses[cat_name_cs]["description_ko"] = cs["description_ko"]
+            if cs.get("sub_themes_ko"):
+                category_analyses[cat_name_cs]["sub_themes_ko"] = cs["sub_themes_ko"]
+            if cs.get("papers"):
+                category_analyses[cat_name_cs]["papers"] = cs["papers"]
+            # sub_themes from _category_summaries.json always wins (has description_ko)
+            if cs.get("sub_themes"):
+                category_analyses[cat_name_cs]["sub_themes"] = cs["sub_themes"]
+
+    # Filter papers for this topic
+    topic_papers = [p for p in papers_index if TOPIC in p.get("topics", [])]
+    slug_to_index = {p["slug"]: p for p in topic_papers}
+
+    # Assignment slug → category mapping (multi-class)
+    # Priority: 1) classifications[TOPIC] in papers_index, 2) _new_classification.json assignments
+    slug_to_cat = {}       # slug → primary_category (str)
+    slug_to_all_cats = {}  # slug → all_categories (list)
+
+    # From _new_classification.json (legacy, lower priority)
+    for a in assignments:
+        slug_to_cat[a["slug"]] = a.get("primary_category", "Other")
+        slug_to_all_cats[a["slug"]] = a.get("all_categories", [a.get("primary_category", "Other")])
+
+    # From classifications[TOPIC] in papers_index (higher priority, overrides)
+    for p in topic_papers:
+        cls = p.get("classifications", {}).get(TOPIC, {})
+        if cls.get("primary_category"):
+            slug_to_cat[p["slug"]] = cls["primary_category"]
+            slug_to_all_cats[p["slug"]] = cls.get("all_categories", [cls["primary_category"]])
+
+    # Available paper directories in papers/
+    actual_dirs = sorted(
+        d for d in os.listdir(PAPERS_DIR)
+        if os.path.isdir(os.path.join(PAPERS_DIR, d)) and len(d) >= 3 and d[:3].isdigit()
     )
-    topic_groups_parts.append(group)
 
-exec_html = render_exec_summary(executive_summary)
-num_cats = len([c for c in cat_order if cat_papers.get(c)])
+    def find_dir_for_slug(slug):
+        if slug in actual_dirs:
+            return slug
+        for d in actual_dirs:
+            if d.startswith(slug[:35]):
+                return d
+        num = slug.split("_")[0] if "_" in slug else slug[:4]
+        candidates = [d for d in actual_dirs if d.startswith(num + "_")]
+        if len(candidates) == 1:
+            return candidates[0]
+        return None
 
-# Determine date range
-dates = [p.get("date", "") for cat in cat_papers.values() for p in cat]
-dates = [d for d in dates if d]
-date_range = f"{min(dates)} ~ {max(dates)}" if dates else ""
+    def parse_review_md(slug):
+        dir_name = find_dir_for_slug(slug)
+        if not dir_name:
+            return {}, None
+        md_path = os.path.join(PAPERS_DIR, dir_name, "review.md")
+        if not os.path.exists(md_path):
+            return {}, dir_name
+        with open(md_path, encoding="utf-8") as f:
+            text = f.read()
+        result = {}
+        m = re.search(r"^#\s+(.+)", text, re.MULTILINE)
+        if m: result["title"] = m.group(1).strip()
+        hm = re.search(r"^>\s*\*\*저자\*\*:\s*(.+)", text, re.MULTILINE)
+        if hm:
+            hl = hm.group(1)
+            result["authors"] = hl.split("|")[0].strip()
+            dm = re.search(r"\*\*날짜\*\*:\s*([^\|]+)", hl)
+            if dm: result["date"] = dm.group(1).strip()
+            jm = re.search(r"\*\*Journal\*\*:\s*([^\|]+)", hl)
+            if jm: result["journal"] = jm.group(1).strip()
+            doi_m = re.search(r"\*\*DOI\*\*:\s*([^\|]+)", hl)
+            if doi_m: result["doi"] = doi_m.group(1).strip()
+            ax_m = re.search(r"\*\*arXiv\*\*:\s*([^\|]+)", hl)
+            if ax_m: result["arxiv"] = ax_m.group(1).strip()
+        em = re.search(r"## (?:Essence|한줄 요약)[^\n]*\s*\n+([\s\S]+?)(?=\n## |\Z)", text)
+        if em: result["essence"] = em.group(1).strip()
+        # Parse scores from table format OR list format
+        for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical_soundness"),
+                            ("Significance", "significance"), ("Clarity", "clarity"), ("Overall", "overall_score")]:
+            # Table: | Label | X/5 |
+            sm = re.search(rf"\|\s*{label}\s*\|\s*(\d+(?:\.\d+)?)\s*/\s*5\s*\|", text)
+            if not sm:
+                # List: - Label: X/5
+                sm = re.search(rf"-\s*{label}\s*:\s*(\d+(?:\.\d+)?)\s*/\s*5", text)
+            if sm:
+                val = float(sm.group(1))
+                if key == "overall_score":
+                    result[key] = val
+                else:
+                    result[key] = int(val)
+        vm = re.search(r"\*\*총평\*\*:\s*([\s\S]+?)(?=\n##|\Z)", text)
+        if vm: result["verdict"] = vm.group(1).strip()
+        return result, dir_name
 
-# Research timeline
-has_research_tl = os.path.exists(os.path.join(TOPIC_DIR, "research_timeline.png"))
-research_tl_html = ""
-if has_research_tl:
-    research_tl_html = (
-        '<div class="timeline-section">\n'
-        '  <h2>Research Timeline</h2>\n'
-        '  <div style="text-align:center;margin:1rem 0">'
-        '<img src="research_timeline.png" alt="Research Timeline"'
-        ' style="max-width:100%;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
-        '</div>\n'
+    from lib.dateutil import normalize_date
+
+    # Build category → papers mapping
+    cat_order = [c["name"] for c in categories] if categories else ["Other"]
+    cat_papers = defaultdict(list)
+    unmatched = []
+
+    for p_idx in topic_papers:
+        slug = p_idx["slug"]
+        p_cls = p_idx.get("classifications", {}).get(TOPIC, {})
+        all_cats = slug_to_all_cats.get(slug, p_cls.get("all_categories", [p_cls.get("primary_category", "Other")]))
+        if not all_cats:
+            all_cats = [slug_to_cat.get(slug, "Other")]
+        review, dir_name = parse_review_md(slug)
+        if dir_name is None:
+            unmatched.append(slug)
+            continue
+        title = review.get("title") or p_idx.get("title", slug)
+        authors = review.get("authors", "")
+        raw_date = review.get("date") or str(p_idx.get("date", ""))
+        date_fmt = normalize_date(raw_date)
+        journal = review.get("journal", "")
+        doi = review.get("doi") or p_idx.get("doi", "")
+        arxiv = review.get("arxiv", "")
+        essence = review.get("essence") or p_idx.get("essence", "")
+        overall_score = review.get("overall_score") or p_idx.get("score") or 0
+        has_fig = (os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.webp"))
+                   or os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.png")))
+        # Extract fig1 caption from pdffigures2 JSON or review.md
+        fig_caption = ""
+        pf2_dir = os.path.join(PAPERS_DIR, dir_name, "figures", "pdffigures2")
+        pf2_json = None
+        if os.path.isdir(pf2_dir):
+            pf2_jsons = [f for f in os.listdir(pf2_dir) if f.endswith(".json")]
+            if pf2_jsons:
+                pf2_json = os.path.join(pf2_dir, pf2_jsons[0])
+        if pf2_json and pf2_json.endswith(".json"):
+            try:
+                with open(pf2_json, "r", encoding="utf-8") as _f:
+                    figs_meta = json.load(_f)
+                if figs_meta and isinstance(figs_meta, list):
+                    fig_caption = figs_meta[0].get("caption", "")
+            except Exception as e:
+                print(f"WARNING: pdffigures2 parse failed for {dir_name}: {e}")
+        if not fig_caption:
+            # Fallback: extract from review.md (line after ![Figure 1])
+            md_path = os.path.join(PAPERS_DIR, dir_name, "review.md")
+            if os.path.exists(md_path):
+                with open(md_path, "r", encoding="utf-8") as _f:
+                    md_text = _f.read()
+                cap_m = re.search(r'!\[.*?\]\(figures/fig1.*?\)\s*\n+\*(.+?)\*', md_text)
+                if cap_m:
+                    fig_caption = cap_m.group(1).strip()
+        paper_data = {
+            "dir": dir_name, "slug": slug, "title": title, "authors": authors,
+            "date": date_fmt, "journal": journal, "doi": doi, "arxiv": arxiv,
+            "essence": essence, "overall_score": float(overall_score) if overall_score else 0,
+            "novelty": review.get("novelty"), "technical_soundness": review.get("technical_soundness"),
+            "significance": review.get("significance"), "clarity": review.get("clarity"),
+            "verdict": review.get("verdict", ""),
+            "has_fig": has_fig,
+            "fig_src": (f"../papers/{dir_name}/figures/fig1.webp" if os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.webp"))
+                        else f"../papers/{dir_name}/figures/fig1.png") if has_fig else None,
+            "fig_caption": fig_caption,
+        }
+        # Multi-class: add to ALL matching categories, with per-category sub_category
+        sub_categories_map = p_cls.get("sub_categories", {})
+        for cat in all_cats:
+            if cat in cat_order or cat == "Other":
+                card = dict(paper_data)
+                card["sub_category"] = sub_categories_map.get(cat, p_cls.get("sub_category", "General") if cat == p_cls.get("primary_category") else "General")
+                cat_papers[cat].append(card)
+
+    if unmatched:
+        print(f"WARNING unmatched: {unmatched}")
+    for cat in cat_papers:
+        cat_papers[cat].sort(key=lambda p: p["overall_score"], reverse=True)
+    total_cards = sum(len(v) for v in cat_papers.values())
+    unique_papers = len(topic_papers)
+    print(f"Total papers for {TOPIC}: {unique_papers} unique ({total_cards} cards with multi-class)")
+    for cn in cat_order:
+        print(f"  {cn}: {len(cat_papers.get(cn, []))}")
+
+    # --- HTML Rendering ---
+
+    def esc(s):
+        return escape(str(s)) if s else ""
+
+    def make_doi_link(doi, arxiv):
+        if doi:
+            # Skip invalid/empty values
+            if doi in ('N/A', '[', ''):
+                pass  # fall through to arxiv
+            # Parse markdown link: [text](url)
+            elif doi.startswith('['):
+                md_m = re.match(r'\[([^\]]*)\]\((https?://[^)]+)\)', doi)
+                if md_m:
+                    text, url = md_m.group(1), md_m.group(2)
+                    label = text if text else url
+                    return f'<a href="{esc(url)}" target="_blank">{esc(label)}</a>'
+            elif doi.startswith("http"):
+                return f'<a href="{esc(doi)}" target="_blank">{esc(doi)}</a>'
+            elif re.match(r'10\.\d{4,}/', doi):
+                return f'<a href="https://doi.org/{esc(doi)}" target="_blank">{esc(doi)}</a>'
+            else:
+                return esc(doi)
+        if arxiv:
+            aid = arxiv.strip()
+            if aid.startswith("http"):
+                arxiv_id = aid.rsplit('/', 1)[-1]
+                return f'<a href="{esc(aid)}" target="_blank">arXiv:{esc(arxiv_id)}</a>'
+            return f'<a href="https://arxiv.org/abs/{esc(aid)}" target="_blank">arXiv:{esc(aid)}</a>'
+        return ""
+
+    def render_paper_card(paper, num, cat_slug):
+        score = paper["overall_score"]
+        score_disp = f"{int(score)}/5" if score and score > 0 else "N/A"
+        score_val = score if score else 0
+        meta_parts = []
+        if paper["authors"]: meta_parts.append(f'<strong>\uc800\uc790</strong>: {esc(paper["authors"])}')
+        if paper["date"]: meta_parts.append(f'<strong>\ub0a0\uc9dc</strong>: {esc(paper["date"])}')
+        if paper["journal"]: meta_parts.append(f'<strong>Journal</strong>: {esc(paper["journal"])}')
+        dl = make_doi_link(paper["doi"], paper["arxiv"])
+        if dl: meta_parts.append(f'<strong>DOI</strong>: {dl}')
+        meta_html = " | ".join(meta_parts)
+        badges = []
+        for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical_soundness"),
+                            ("Significance", "significance"), ("Clarity", "clarity")]:
+            val = paper.get(key)
+            if val is not None: badges.append(f'<span class="score-badge">{label}: {val}</span>')
+        if score and score > 0: badges.append(f'<span class="score-badge">Overall: {int(score)}</span>')
+        badges_html = " ".join(badges)
+        fig_html = ""
+        if paper["has_fig"]:
+            cap = paper.get("fig_caption", "")
+            cap_html = f'<p class="fig-caption">{esc(cap)}</p>' if cap else ""
+            fig_html = (
+                '\n          <div class="paper-fig">'
+                f'<img data-src="{esc(paper["fig_src"])}" alt="Figure" class="lazy">'
+                f'{cap_html}</div>'
+            )
+        essence_html = ""
+        if paper["essence"]:
+            essence_html = (
+                '\n          <div class="section">'
+                '\n            <div class="section-label">Essence</div>'
+                f'\n            <p>{esc(paper["essence"])}</p>'
+                '\n          </div>'
+            )
+        eval_html = ""
+        if badges or paper["verdict"]:
+            inner = ""
+            if badges_html: inner += f'<div class="scores">{badges_html}</div>\n            '
+            if paper["verdict"]: inner += f'<p class="verdict">{esc(paper["verdict"])}</p>'
+            eval_html = (
+                '\n          <div class="section">'
+                '\n            <div class="section-label">Evaluation</div>'
+                f'\n            {inner}'
+                '\n          </div>'
+            )
+        # Link to ../papers/{slug}/index.html
+        link_href = f"../papers/{esc(paper['dir'])}/index.html"
+        return (
+            f'        <div class="paper-card" data-date="{esc(paper["date"])}"'
+            f' data-score="{score_val}" data-topic="{esc(cat_slug)}">\n'
+            f'          <div class="paper-header">\n'
+            f'            <span class="paper-num">#{num}</span>\n'
+            f'            <span class="paper-date">{esc(paper["date"])}</span>\n'
+            f'            <span class="paper-score">{score_disp}</span>\n'
+            f'          </div>\n'
+            f'          <h3><a href="{link_href}">{esc(paper["title"])}</a></h3>\n'
+            f'          <p class="meta">{meta_html}</p>'
+            f'{fig_html}{essence_html}{eval_html}\n'
+            f'        </div>'
+        )
+
+    def _match_papers_to_subtheme(st_name, st_desc, papers):
+        """Match papers to a sub-theme by keyword overlap in title."""
+        keywords = set((st_name + " " + st_desc).lower().split())
+        scored = []
+        for p in papers:
+            title_words = set(p.get("title", "").lower().split())
+            overlap = len(keywords & title_words)
+            if overlap >= 2:
+                scored.append((overlap, p))
+        scored.sort(key=lambda x: (-x[0], -x[1].get("score", 0)))
+        return [s[1] for s in scored[:4]]  # max 4 papers per sub-theme
+
+
+    def validate_description(text, cat_name, sub_name=""):
+        """카테고리/sub-category 설명 품질 검증."""
+        issues = []
+        label = f"{cat_name}/{sub_name}" if sub_name else cat_name
+
+        if not text or len(text) < 50:
+            issues.append(f"{label}: 설명 누락 또는 너무 짧음 ({len(text or '')}자)")
+        elif len(text) < 150:
+            issues.append(f"{label}: 설명 부실 ({len(text)}자, 최소 150자 권장)")
+
+        if text:
+            # [NNN] 리터럴 체크
+            if "[NNN]" in text:
+                issues.append(f"{label}: [NNN] 리터럴 남아있음")
+            # 논문 제목 인라인 체크 (영문 20자 이상 따옴표)
+            quoted = re.findall(r"['\"][A-Z][^'\"]{20,}['\"]", text)
+            if quoted:
+                issues.append(f"{label}: 논문 제목 인라인 ({quoted[0][:40]}...)")
+            # 한국어 비율 체크
+            korean = len(re.findall(r'[\uac00-\ud7af]', text))
+            if korean < len(text) * 0.3:
+                issues.append(f"{label}: 한국어 비율 낮음 ({korean}/{len(text)})")
+            # 마침표 종료
+            if text.strip() and text.strip()[-1] not in ".다":
+                issues.append(f"{label}: 마침표로 끝나지 않음 ('{text.strip()[-5:]}')")
+
+        return issues
+
+
+    def render_category_narrative(cat_name):
+        ca = category_analyses.get(cat_name, {})
+        if not ca: return ""
+        overview = ca.get("description", "")
+        sub_themes = ca.get("sub_themes", [])
+        cat_papers = ca.get("papers", [])
+        html_parts = []
+
+        # Build slug number → paper info lookup from ALL papers (not just top 20)
+        num_to_paper = {}
+        for p in papers_index:
+            slug = p.get("slug", "")
+            title = p.get("title", "")
+            num = slug.split("_")[0] if "_" in slug else slug[:3]
+            num_to_paper[num] = (slug, title)
+
+        def _refs_to_links(text_html):
+            """Convert [NNN] markers to <a> links."""
+            def _repl(m):
+                num = m.group(1)
+                if num in num_to_paper:
+                    slug, title = num_to_paper[num]
+                    return f'<a href="../papers/{esc(slug)}/index.html" title="{esc(title)}">[{num}]</a>'
+                # Try zero-padded: "87" → "087", "9" → "009"
+                padded = num.zfill(3)
+                if padded in num_to_paper:
+                    slug, title = num_to_paper[padded]
+                    return f'<a href="../papers/{esc(slug)}/index.html" title="{esc(title)}">[{num}]</a>'
+                return m.group(0)
+            return re.sub(r'\[(\d{1,4})\]', _repl, text_html)
+
+        # Category Overview (한글 우선)
+        overview_ko = ca.get("description_ko", "")
+        if overview_ko:
+            overview_html = _refs_to_links(esc(overview_ko))
+            html_parts.append(f'<h4>Category Overview</h4>\n<p>{overview_html}</p>')
+        elif overview:
+            html_parts.append(f'<h4>Category Overview</h4>\n<p>{esc(overview)}</p>')
+
+        # Sub-category bullets — description_ko directly from sub_themes
+        if sub_themes:
+            html_parts.append('<ul class="subcategory-list">')
+            for st in sub_themes:
+                name = st.get("name", "")
+                desc = st.get("description_ko", "") or st.get("description", "")
+                if not name or not desc:
+                    continue
+                # Convert [NNN] markers to hyperlinks
+                desc_html = _refs_to_links(esc(desc))
+                html_parts.append(
+                    f'<li><strong>{esc(name)}</strong>: {desc_html}</li>'
+                )
+            html_parts.append('</ul>')
+
+        return "\n".join(html_parts)
+
+    def render_exec_summary(text):
+        if not text: return ""
+        paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+        return "\n    ".join(f"<p>{esc(p)}</p>" for p in paras)
+
+    # CSS with theme
+    accent = theme["accent"]
+    accent_dark = theme["accent_dark"]
+    accent_light = theme["accent_light"]
+    gradient = theme["gradient"]
+
+    CSS = f"""* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{ font-family: 'KoPub Dotum', 'KoPubDotumMedium', -apple-system, 'Noto Sans KR', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }}
+    .container {{ max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }}
+    .hero {{ background: {gradient}; color: white; padding: 3rem 2rem; border-radius: 16px; margin-bottom: 2rem; }}
+    .hero h1 {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }}
+    .hero .subtitle {{ opacity: 0.85; font-size: 1rem; }}
+    .hero .stats {{ margin-top: 1rem; display: flex; gap: 2rem; }}
+    .hero .stat {{ text-align: center; }}
+    .hero .stat-num {{ font-size: 2rem; font-weight: 700; color: {accent_light}; }}
+    .hero .stat-label {{ font-size: 0.8rem; opacity: 0.7; }}
+    .paper-card {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 4px solid {accent}; transition: transform 0.15s, box-shadow 0.15s; }}
+    .paper-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
+    .paper-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }}
+    .paper-num {{ font-size: 0.85rem; color: #888; font-weight: 600; }}
+    .paper-score {{ background: {accent}; color: white; padding: 0.2rem 0.7rem; border-radius: 20px; font-weight: 700; font-size: 0.9rem; }}
+    .paper-card h3 {{ font-size: 1.05rem; color: #1a1a2e; margin-bottom: 0.3rem; }}
+    .paper-card h3 a {{ color: #1a1a2e; text-decoration: none; }}
+    .paper-card h3 a:hover {{ color: {accent}; }}
+    .meta {{ font-size: 0.8rem; color: #888; margin-bottom: 0.8rem; }}
+    .section {{ margin-top: 0.8rem; }}
+    .section-label {{ font-weight: 700; font-size: 0.85rem; color: {accent}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; border-bottom: 1px solid #e8edf3; padding-bottom: 0.2rem; }}
+    .section p {{ font-size: 0.92rem; color: #444; }}
+    .scores {{ display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; }}
+    .score-badge {{ background: #e8edf3; color: {accent_dark}; padding: 0.15rem 0.6rem; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }}
+    .verdict {{ font-style: normal; color: #444; font-size: 0.9rem; }}
+    .paper-fig {{ margin: 0.8rem 0; text-align: center; }}
+    .paper-fig img {{ max-width: min(100%, 600px); border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }}
+    .paper-fig .fig-caption {{ font-size: 0.78rem; color: #888; margin-top: 0.3rem; font-style: italic; line-height: 1.4; }}
+    .excluded {{ background: #fff3cd; border-radius: 12px; padding: 1.2rem; margin-top: 1.5rem; }}
+    .excluded h3 {{ color: #856404; font-size: 1rem; margin-bottom: 0.5rem; }}
+    .excluded li {{ font-size: 0.85rem; color: #856404; margin: 0.3rem 0; }}
+    .credit {{ text-align: center; font-size: 0.8rem; color: #aaa; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; }}
+    .sort-bar {{ display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap; }}
+    .sort-btn {{ background: white; border: 1px solid {accent}; color: {accent}; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }}
+    .sort-btn:hover, .sort-btn.active {{ background: {accent}; color: white; }}
+    .timeline-section {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+    .timeline-section h2 {{ color: {accent_dark}; font-size: 1.1rem; margin-bottom: 1rem; }}
+    .timeline-summary {{ font-size: 0.9rem; color: #444; line-height: 1.6; }}
+    .timeline-summary p {{ margin: 0.5rem 0; }}
+    .topic-group {{ margin-bottom: 1rem; }}
+    .topic-header {{ background: #f5f5f5; border-radius: 12px; padding: 0.8rem 1.2rem; cursor: pointer; display: flex; align-items: center; gap: 0.8rem; border-left: 4px solid #999; user-select: none; transition: background 0.15s; }}
+    .topic-header:hover {{ background: #ebebeb; }}
+    .topic-name {{ font-weight: 700; font-size: 1rem; flex: 1; color: #444; }}
+    .topic-count {{ font-size: 0.8rem; color: #888; background: #e0e0e0; padding: 0.15rem 0.5rem; border-radius: 10px; }}
+    .topic-toggle {{ font-size: 0.8rem; color: #999; transition: transform 0.2s; }}
+    .topic-body {{ padding: 0.5rem 0 0 0; }}
+    .topic-body.collapsed {{ display: none; }}
+    .category-timeline {{ margin: 0.5rem 0 1rem; text-align: center; }}
+    .category-timeline img {{ max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+    .category-summary {{ background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); font-size: 0.9rem; line-height: 1.7; color: #444; }}
+    .sub-group {{ margin: 0.5rem 0; }}
+    .sub-header {{ background: #fafafa; border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.6rem; border-left: 3px solid {accent_light}; user-select: none; transition: background 0.15s; }}
+    .sub-header:hover {{ background: #f0f0f0; }}
+    .sub-name {{ font-weight: 600; font-size: 0.9rem; flex: 1; color: #555; }}
+    .sub-count {{ font-size: 0.75rem; color: #999; background: #e8e8e8; padding: 0.1rem 0.4rem; border-radius: 8px; }}
+    .sub-toggle {{ font-size: 0.7rem; color: #bbb; transition: transform 0.2s; }}
+    .sub-body {{ padding: 0 0 0 0.5rem; }}
+    .sub-body.collapsed {{ display: none; }}
+    .category-summary p {{ margin: 0.6rem 0; }}
+    .category-summary h4 {{ font-size: 0.95rem; color: {accent_dark}; margin: 0 0 0.4rem; }}
+    .category-summary .subcategory-list {{ margin: 0.6rem 0 0.2rem 1.2rem; padding: 0; }}
+    .category-summary .subcategory-list li {{ margin: 0.5rem 0; line-height: 1.6; }}
+    .category-summary a {{ color: #2563EB; text-decoration: none; font-weight: 500; }}
+    .category-summary a:hover {{ text-decoration: underline; }}
+    .paper-date {{ font-size: 0.75rem; color: #999; }}
+    img.lazy {{ opacity: 0; transition: opacity 0.3s; }}
+    img.lazy.loaded {{ opacity: 1; }}
+    .search-box {{ background: white; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+    .search-box input {{ width: 100%; padding: 0.6rem 1rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem; font-family: inherit; outline: none; transition: border-color 0.2s; }}
+    .search-box input:focus {{ border-color: {accent}; }}
+    .search-box .search-hint {{ font-size: 0.75rem; color: #aaa; margin-top: 0.3rem; }}
+    .search-box .search-count {{ font-size: 0.8rem; color: {accent}; font-weight: 600; margin-top: 0.3rem; display: none; }}
+    .lightbox {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }}
+    .lightbox.active {{ display: flex; }}
+    .lightbox img {{ max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 8px; }}
+    .paper-fig img, .category-timeline img, .timeline-section img {{ cursor: zoom-in; }}
+    .insights-section {{ background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+    .insights-section h2 {{ color: {accent_dark}; font-size: 1.1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }}
+    .insights-section .insight-count {{ font-size: 0.8rem; color: #888; font-weight: 400; }}
+    .insight-card {{ border-left: 4px solid #999; border-radius: 0 8px 8px 0; padding: 1rem 1.2rem; margin-bottom: 0.8rem; background: #fafafa; }}
+    .insight-card.convergence {{ border-left-color: #7C3AED; background: #FAF5FF; }}
+    .insight-card.gap {{ border-left-color: #F59E0B; background: #FFFBEB; }}
+    .insight-card.emerging {{ border-left-color: #10B981; background: #F0FDF4; }}
+    .insight-card.declining {{ border-left-color: #9CA3AF; background: #F9FAFB; }}
+    .insight-type {{ font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }}
+    .convergence .insight-type {{ color: #7C3AED; }}
+    .gap .insight-type {{ color: #D97706; }}
+    .emerging .insight-type {{ color: #059669; }}
+    .declining .insight-type {{ color: #6B7280; }}
+    .insight-title {{ font-size: 1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.4rem; }}
+    .insight-desc {{ font-size: 0.9rem; color: #444; line-height: 1.6; margin-bottom: 0.5rem; }}
+    .insight-meta {{ font-size: 0.8rem; color: #888; display: flex; flex-wrap: wrap; gap: 0.8rem; }}
+    .insight-meta .cats {{ color: {accent}; }}
+    .insight-meta .evidence a {{ color: #2563EB; text-decoration: none; font-weight: 500; }}
+    .insight-meta .evidence a:hover {{ text-decoration: underline; }}
+    .insight-policy {{ font-size: 0.85rem; color: #4B5563; margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: rgba(0,0,0,0.03); border-radius: 4px; }}
+    .cat-insight {{ background: #f8f9fa; border-radius: 8px; padding: 0.8rem 1rem; margin-top: 0.8rem; font-size: 0.88rem; line-height: 1.6; }}
+    .cat-insight .ci-label {{ font-weight: 600; color: {accent_dark}; margin-right: 0.3rem; }}
+    .cat-insight .ci-gap {{ color: #D97706; }}
+    .cat-insight .ci-policy {{ color: #4B5563; }}
+    /* ============ Deep Research ============ */
+    .search-row {{ display: flex; gap: 0.5rem; align-items: stretch; }}
+    .search-row input {{ flex: 1; }}
+    .mode-toggle {{ display: flex; gap: 0; border: 2px solid #e0e0e0; border-radius: 8px; overflow: hidden; flex-shrink: 0; }}
+    .mode-btn {{ background: white; border: none; padding: 0.5rem 0.9rem; font-size: 0.85rem; cursor: pointer; color: #888; transition: all 0.15s; font-family: inherit; }}
+    .mode-btn.active {{ background: {accent}; color: white; }}
+    .mode-btn:hover:not(.active) {{ background: #f5f5f5; color: {accent_dark}; }}
+    .deep-panel {{ margin-top: 1rem; background: #fcfcfd; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; }}
+    .deep-header {{ display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 1.1rem; background: linear-gradient(135deg, {accent}12, transparent); border-bottom: 1px solid #eee; flex-wrap: wrap; }}
+    .deep-header h3 {{ font-size: 0.95rem; color: {accent_dark}; margin: 0; flex-shrink: 0; font-weight: 700; }}
+    .deep-model {{ padding: 0.35rem 0.55rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.78rem; background: white; cursor: pointer; font-family: inherit; color: #444; }}
+    .deep-actions {{ margin-left: auto; display: flex; gap: 0.35rem; flex-wrap: wrap; }}
+    .deep-btn {{ background: white; border: 1px solid #ddd; border-radius: 6px; padding: 0.32rem 0.7rem; font-size: 0.76rem; cursor: pointer; color: #555; transition: all 0.15s; font-family: inherit; }}
+    .deep-btn:hover:not(:disabled) {{ background: {accent}; color: white; border-color: {accent}; }}
+    .deep-btn:disabled {{ opacity: 0.4; cursor: not-allowed; }}
+    .deep-status {{ padding: 0.55rem 1.1rem; font-size: 0.82rem; color: #555; background: #f7f9fb; border-bottom: 1px solid #eee; display: none; }}
+    .deep-status.active {{ display: block; }}
+    .deep-status.error {{ color: #b33a3a; background: #fef3f2; border-bottom-color: #fadcd9; }}
+    .deep-body {{ padding: 1.2rem 1.5rem; display: none; }}
+    .deep-body.active {{ display: block; }}
+    .deep-answer {{ font-size: 0.94rem; line-height: 1.75; color: #262626; }}
+    .deep-answer p {{ margin: 0.75rem 0; }}
+    .deep-answer h1, .deep-answer h2, .deep-answer h3 {{ color: {accent_dark}; margin: 1.1rem 0 0.45rem; line-height: 1.3; }}
+    .deep-answer h1 {{ font-size: 1.2rem; }}
+    .deep-answer h2 {{ font-size: 1.05rem; }}
+    .deep-answer h3 {{ font-size: 0.96rem; }}
+    .deep-answer ul, .deep-answer ol {{ margin: 0.5rem 0 0.5rem 1.5rem; }}
+    .deep-answer li {{ margin: 0.25rem 0; }}
+    .deep-answer strong {{ color: #1a1a1a; }}
+    .deep-answer a.ref {{ display: inline-block; color: {accent}; text-decoration: none; font-weight: 700; font-size: 0.72rem; padding: 0 0.32rem; border-radius: 3px; background: {accent}1a; margin: 0 0.12rem; vertical-align: super; line-height: 1.2; }}
+    .deep-answer a.ref:hover {{ background: {accent}; color: white; }}
+    .deep-answer figure {{ margin: 1rem 0; max-width: 100%; }}
+    .deep-answer img {{ width: 100%; height: auto; display: block; margin: 1rem 0; padding: 0.5rem; background: #fafafa; border: 1px solid #eee; border-radius: 6px; box-sizing: border-box; cursor: zoom-in; }}
+    .deep-answer figure img {{ margin: 0; }}
+    .deep-answer figure figcaption {{ font-size: 0.78rem; color: #666; text-align: center; margin-top: 0.45rem; font-style: italic; }}
+    .deep-answer p img {{ margin: 0.5rem 0; }}
+    .deep-answer code {{ background: #f2f2f4; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.86em; font-family: ui-monospace, monospace; }}
+    .deep-answer pre {{ background: #f6f8fa; padding: 0.7rem 0.9rem; border-radius: 6px; overflow-x: auto; }}
+    .deep-refs {{ margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #eee; }}
+    .deep-refs h4 {{ font-size: 0.88rem; color: {accent_dark}; margin-bottom: 0.55rem; }}
+    .deep-refs ol {{ margin-left: 1.2rem; font-size: 0.82rem; color: #555; }}
+    .deep-refs li {{ margin: 0.3rem 0; line-height: 1.55; }}
+    .deep-refs a {{ color: {accent}; text-decoration: none; }}
+    .deep-refs a:hover {{ text-decoration: underline; }}
+    .deep-figures {{ margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid #eee; }}
+    .deep-figures h4 {{ font-size: 0.88rem; color: {accent_dark}; margin-bottom: 0.6rem; }}
+    .deep-figures-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.7rem; }}
+    .deep-fig-item {{ background: #fafafa; border: 1px solid #eee; border-radius: 6px; overflow: hidden; }}
+    .deep-fig-item a {{ text-decoration: none; color: inherit; display: block; }}
+    .deep-fig-item img {{ width: 100%; height: 115px; object-fit: cover; cursor: zoom-in; display: block; }}
+    .deep-fig-item .fig-cap {{ padding: 0.35rem 0.6rem; font-size: 0.7rem; color: #666; line-height: 1.35; }}"""
+
+    # Audio Overview styles (shared lib). accent_bg ≈ accent at ~10% alpha.
+    CSS = CSS + "\n" + _audio_css(accent, accent_dark, accent + "1a")
+
+    JS = """function toggleTopic(id) {
+      const body = document.getElementById(id);
+      const toggle = document.getElementById('toggle-' + id);
+      body.classList.toggle('collapsed');
+      toggle.textContent = body.classList.contains('collapsed') ? '\\u25B6' : '\\u25BC';
+      if (!body.classList.contains('collapsed')) setTimeout(lazyLoad, 100);
+    }
+    function toggleSub(id) {
+      const body = document.getElementById(id);
+      const toggle = document.getElementById('toggle-' + id);
+      body.classList.toggle('collapsed');
+      toggle.textContent = body.classList.contains('collapsed') ? '\\u25B6' : '\\u25BC';
+      if (!body.classList.contains('collapsed')) setTimeout(lazyLoad, 100);
+    }
+    function sortCards(key, order) {
+      document.querySelectorAll('.topic-body').forEach(body => {
+        const cards = [...body.querySelectorAll('.paper-card')];
+        cards.sort((a, b) => {
+          let va, vb;
+          if (key === 'date') { va = a.dataset.date || ''; vb = b.dataset.date || ''; }
+          else { va = parseFloat(a.dataset.score) || 0; vb = parseFloat(b.dataset.score) || 0; }
+          if (order === 'asc') return va > vb ? 1 : va < vb ? -1 : 0;
+          return va < vb ? 1 : va > vb ? -1 : 0;
+        });
+        cards.forEach(c => body.appendChild(c));
+      });
+      document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      setTimeout(lazyLoad, 100);
+    }
+    function lazyLoad() {
+      const imgs = document.querySelectorAll('img.lazy:not(.loaded)');
+      if ('IntersectionObserver' in window) {
+        const obs = new IntersectionObserver((entries) => {
+          entries.forEach(e => {
+            if (e.isIntersecting) {
+              const img = e.target; img.src = img.dataset.src;
+              img.classList.add('loaded'); obs.unobserve(img);
+            }
+          });
+        }, {rootMargin: '200px'});
+        imgs.forEach(img => obs.observe(img));
+      } else { imgs.forEach(img => { img.src = img.dataset.src; img.classList.add('loaded'); }); }
+    }
+    document.addEventListener('DOMContentLoaded', lazyLoad);
+
+    // Search
+    function searchPapers(query) {
+      const q = query.trim().toLowerCase();
+      const groups = document.querySelectorAll('.topic-group');
+      const countEl = document.querySelector('.search-count');
+      if (!q) {
+        groups.forEach(g => { g.style.display = '';
+          g.querySelectorAll('.paper-card').forEach(c => c.style.display = '');
+          const body = g.querySelector('.topic-body');
+          if (body) { body.classList.add('collapsed'); }
+          const toggle = g.querySelector('.topic-toggle');
+          if (toggle) toggle.textContent = '\\u25B6';
+        });
+        if (countEl) countEl.style.display = 'none';
+        return;
+      }
+      let total = 0;
+      groups.forEach(g => {
+        let catMatched = 0;
+        const subs = g.querySelectorAll('.sub-group');
+        if (subs.length > 0) {
+          subs.forEach(sg => {
+            const cards = sg.querySelectorAll('.paper-card');
+            let subMatched = 0;
+            cards.forEach(c => {
+              const text = c.textContent.toLowerCase();
+              if (text.includes(q)) { c.style.display = ''; subMatched++; }
+              else { c.style.display = 'none'; }
+            });
+            if (subMatched > 0) {
+              sg.style.display = '';
+              const subBadge = sg.querySelector('.sub-count');
+              if (subBadge) subBadge.textContent = subMatched;
+            } else {
+              sg.style.display = 'none';
+            }
+            // Keep sub-category collapsed — user clicks to expand
+            const subBody = sg.querySelector('.sub-body');
+            if (subBody) subBody.classList.add('collapsed');
+            const subToggle = sg.querySelector('.sub-toggle');
+            if (subToggle) subToggle.textContent = '\\u25B6';
+            catMatched += subMatched;
+          });
+        } else {
+          g.querySelectorAll('.paper-card').forEach(c => {
+            const text = c.textContent.toLowerCase();
+            if (text.includes(q)) { c.style.display = ''; catMatched++; }
+            else { c.style.display = 'none'; }
+          });
+        }
+        if (catMatched > 0) {
+          g.style.display = '';
+          // Keep category collapsed — only update count badge
+          const body = g.querySelector('.topic-body');
+          if (body) body.classList.add('collapsed');
+          const toggle = g.querySelector('.topic-toggle');
+          if (toggle) toggle.textContent = '\\u25B6';
+          const badge = g.querySelector('.topic-count');
+          if (badge) badge.textContent = catMatched + '\\ud3b8';
+          total += catMatched;
+        } else {
+          g.style.display = 'none';
+        }
+      });
+      if (countEl) { countEl.textContent = total + ' results'; countEl.style.display = 'block'; }
+      setTimeout(lazyLoad, 100);
+    }
+    let searchTimer;
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('search-input');
+      if (input) input.addEventListener('input', function() {
+        if (window._searchMode === 'deep') return;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => searchPapers(this.value), 300);
+      });
+    });
+
+    // Lightbox
+    document.addEventListener('DOMContentLoaded', function() {
+      const lb = document.getElementById('lightbox');
+      const lbImg = document.getElementById('lightbox-img');
+      if (!lb || !lbImg) return;
+      document.addEventListener('click', function(e) {
+        const img = e.target.closest('.paper-fig img, .category-timeline img, .timeline-section img');
+        if (img) {
+          const src = img.dataset.src || img.src;
+          if (src) { lbImg.src = src; lb.classList.add('active'); }
+        }
+      });
+      lb.addEventListener('click', function() { lb.classList.remove('active'); lbImg.src = ''; });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lb.classList.contains('active')) { lb.classList.remove('active'); lbImg.src = ''; }
+      });
+    });
+
+    // ============================================================================
+    // Deep Research (client-side RAG + Anthropic streaming with Extended Thinking)
+    // ============================================================================
+    const DEEP = { index: null, loading: false, currentAnswer: '', currentRefs: [], currentQuery: '' };
+
+    // Safe DOM helpers (no .innerHTML usage)
+    function clearEl(el) { while (el && el.firstChild) el.removeChild(el.firstChild); }
+    function renderTo(el, content) {
+      if (!el) return;
+      clearEl(el);
+      if (!content) return;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const frag = range.createContextualFragment(content);
+      el.appendChild(frag);
+    }
+
+    function deepSetStatus(text, isError) {
+      const el = document.getElementById('deep-status');
+      if (!el) return;
+      if (!text) { el.classList.remove('active', 'error'); el.textContent = ''; return; }
+      el.textContent = text;
+      el.classList.add('active');
+      if (isError) el.classList.add('error'); else el.classList.remove('error');
+    }
+
+    function deepShowPanel() {
+      document.getElementById('deep-panel').style.display = '';
+      document.getElementById('deep-body').classList.add('active');
+    }
+
+    function deepHidePanel() {
+      document.getElementById('deep-panel').style.display = 'none';
+      document.getElementById('deep-body').classList.remove('active');
+      deepSetStatus('');
+      clearEl(document.getElementById('deep-answer'));
+      document.getElementById('deep-refs').style.display = 'none';
+      document.getElementById('deep-figures').style.display = 'none';
+      DEEP.currentAnswer = '';
+      DEEP.currentRefs = [];
+      DEEP.currentQuery = '';
+      deepUpdateButtons(false);
+    }
+
+    function deepUpdateButtons(enabled) {
+      for (const id of ['deep-copy', 'deep-download', 'deep-download-html', 'deep-newtab', 'deep-obsidian', 'deep-rerun']) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !enabled;
+      }
+      // Audio Overview button: only usable locally (key present) and after an answer.
+      const ab = document.getElementById('deep-audio');
+      if (ab) ab.disabled = !(enabled && window._GEMINI_KEY);
+    }
+
+    async function deepLoadIndex() {
+      if (DEEP.index) return DEEP.index;
+      if (DEEP.loading) {
+        while (DEEP.loading) await new Promise(r => setTimeout(r, 100));
+        return DEEP.index;
+      }
+      DEEP.loading = true;
+      deepSetStatus('\U0001F4E6 Loading search index...');
+      try {
+        const resp = await fetch('_search_index.json');
+        if (!resp.ok) throw new Error('Index fetch failed: ' + resp.status);
+        DEEP.index = await resp.json();
+        return DEEP.index;
+      } finally {
+        DEEP.loading = false;
+      }
+    }
+
+    function dequantizeEmb(b64) {
+      const binary = atob(b64);
+      const dim = binary.length;
+      const vec = new Float32Array(dim);
+      for (let i = 0; i < dim; i++) {
+        let b = binary.charCodeAt(i);
+        if (b >= 128) b -= 256;
+        vec[i] = b / 127.0;
+      }
+      let n = 0;
+      for (let i = 0; i < dim; i++) n += vec[i] * vec[i];
+      n = Math.sqrt(n) || 1;
+      for (let i = 0; i < dim; i++) vec[i] /= n;
+      return vec;
+    }
+
+    function cosineSim(a, b) {
+      let s = 0;
+      for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+      return s;
+    }
+
+    async function embedQuery(text) {
+      const key = _OPENAI_KEY;
+      if (!key) throw new Error('OpenAI API key missing — Deep Research 패널에서 키를 입력하세요.');
+      const resp = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({ input: text, model: 'text-embedding-3-small' }),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error('OpenAI embed ' + resp.status + ': ' + err.slice(0, 180));
+      }
+      const data = await resp.json();
+      const raw = data.data[0].embedding;
+      let n = 0;
+      for (const v of raw) n += v * v;
+      n = Math.sqrt(n) || 1;
+      return raw.map(v => v / n);
+    }
+
+    function parseTimeFilter(q) {
+      const now = new Date().getFullYear();
+      const P = [
+        [/(\\d{4})\\s*년\\s*이후|since\\s+(\\d{4})|after\\s+(\\d{4})/i, m => ({min: +(m[1]||m[2]||m[3])})],
+        [/(\\d{4})\\s*년\\s*이전|before\\s+(\\d{4})/i, m => ({max: +(m[1]||m[2])})],
+        [/최근\\s*(\\d+)\\s*년|last\\s+(\\d+)\\s+years?|past\\s+(\\d+)\\s+years?/i, m => ({min: now - +(m[1]||m[2]||m[3])})],
+        [/최근\\s*1\\s*년|last\\s+year/i, () => ({min: now - 1})],
+        [/(\\d{4})\\s*[-~]\\s*(\\d{4})/, m => ({min: +m[1], max: +m[2]})],
+      ];
+      for (const [re, fn] of P) {
+        const m = q.match(re);
+        if (m) return fn(m);
+      }
+      return null;
+    }
+
+    function detectLang(text) {
+      const ko = (text.match(/[\\u1100-\\u11FF\\u3130-\\u318F\\uAC00-\\uD7AF]/g) || []).length;
+      return (ko / (text.length || 1)) > 0.1 ? 'ko' : 'en';
+    }
+
+    function retrieveChunks(queryVec, index, timeFilter, k) {
+      const chunks = index.chunks, papers = index.papers;
+      const scored = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const c = chunks[i];
+        const paper = papers[c.slug];
+        if (!paper) continue;
+        if (timeFilter) {
+          const y = parseInt(paper.year);
+          if (timeFilter.min && (!y || y < timeFilter.min)) continue;
+          if (timeFilter.max && (!y || y > timeFilter.max)) continue;
+        }
+        const vec = dequantizeEmb(c.emb);
+        scored.push({ chunk: c, paper: paper, sim: cosineSim(queryVec, vec) });
+      }
+      scored.sort((a, b) => b.sim - a.sim);
+      const used = {};
+      const sel = [];
+      for (const s of scored) {
+        if (sel.length >= k) break;
+        used[s.chunk.slug] = (used[s.chunk.slug] || 0) + 1;
+        if (used[s.chunk.slug] > 3) continue;
+        sel.push(s);
+      }
+      return sel;
+    }
+
+    function mdToMarkup(md) {
+      if (window.marked) {
+        try { return window.marked.parse(md, { gfm: true, breaks: false }); }
+        catch (e) { /* fallthrough */ }
+      }
+      let h = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<figure><img src="$2" alt="$1"><figcaption>$1</figcaption></figure>')
+        .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>')
+        .replace(/\\n\\n+/g, '</p><p>');
+      return '<p>' + h + '</p>';
+    }
+
+    function postProcessRefs(markup, refs) {
+      return markup.replace(/\\[ref:(\\d+)\\]/g, (_, n) => {
+        const ref = refs[parseInt(n) - 1];
+        if (!ref) return '[ref:' + n + ']';
+        return '<a class="ref" href="' + ref.url + '" target="_blank">[' + n + ']</a>';
+      });
+    }
+
+    function escapeAttr(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function collectCitedNums(md) {
+      const cited = new Set();
+      for (const m of md.matchAll(/\\[ref:(\\d+)\\]/g)) cited.add(parseInt(m[1]));
+      return cited;
+    }
+
+    function collectInlineFigureUrls(md) {
+      const used = new Set();
+      for (const m of md.matchAll(/!\\[[^\\]]*\\]\\(([^)]+)\\)/g)) used.add(m[1]);
+      return used;
+    }
+
+    function buildPrompt(query, selected, lang, fullTexts) {
+      const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- 모든 주장에 [ref:N] 인용 (N은 아래 발췌문 번호)\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
+      const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- Cite every claim with [ref:N] where N is the excerpt number below\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
+      const lines = [];
+      for (let i = 0; i < selected.length; i++) {
+        const s = selected[i], n = i + 1, paper = s.paper;
+        const figs = (paper.figures && paper.figures.length)
+          ? '\\n  Figures:\\n' + paper.figures.map(f => '    - ' + f.url + '  (' + (f.caption || 'figure') + ')').join('\\n')
+          : '';
+        // s.chunks is now an array of {section, text} for this single paper
+        const sectionsBlock = s.chunks.map(function(c) {
+          return '  Section: ' + c.section + '\\n  Text:\\n' + c.text.split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
+        }).join('\\n');
+        let originalBlock = '';
+        if (fullTexts && fullTexts[s.slug]) {
+          originalBlock = '\\n  ORIGINAL EXCERPT (use for quantitative detail like reagents, amounts, conditions):\\n' + fullTexts[s.slug].split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
+        }
+        lines.push('[' + n + '] Paper: "' + paper.title + '" (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + figs + '\\n' + sectionsBlock + originalBlock);
+      }
+      const user = 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n') + '\\n\\n---\\nQuestion: ' + query;
+      return { system: lang === 'ko' ? systemKo : systemEn, user: user };
+    }
+
+    const LENGTH_SPEC = {
+      short:  { max_tokens: 4096,  thinking: 1500, ko: '2~5개 문단으로 간결하게 (약 400~900자)',       en: '2-5 concise paragraphs (roughly 300-700 words)' },
+      medium: { max_tokens: 6500,  thinking: 2500, ko: '5~10개 문단으로 충실하게 (약 900~1800자)',     en: '5-10 substantial paragraphs (roughly 700-1500 words)' },
+      long:   { max_tokens: 12000, thinking: 4000, ko: '10~20개 문단으로 상세하게 (약 1800~4500자)',   en: '10-20 detailed paragraphs (roughly 1500-3500 words)' },
+      ultra:  { max_tokens: 20000, thinking: 6000, ko: '20~40개 문단으로 심층적으로 (약 4500~9000자)', en: '20-40 in-depth paragraphs (roughly 3500-7000 words)' },
+    };
+
+    async function callClaude(query, selected, lang, model, length, fullTexts) {
+      const apiKey = _ANTHROPIC_KEY;
+      if (!apiKey) throw new Error('Anthropic API key missing — Deep Research 패널에서 키를 입력하세요.');
+      const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
+      // Haiku 4.5 caps output at ~8192 tokens; Sonnet can go higher.
+      let maxTokens = spec.max_tokens;
+      let thinkingBudget = spec.thinking;
+      if (model === 'claude-haiku-4-5' && maxTokens > 8000) {
+        maxTokens = 8000;
+        if (thinkingBudget > 2500) thinkingBudget = 2500;
+      }
+      const p = buildPrompt(query, selected, lang, fullTexts);
+      // Append length directive to the system prompt.
+      p.system += '\\n\\n' + (lang === 'ko'
+        ? '분량 지침: 답변을 ' + spec.ko + '로 작성하세요. 분량이 길수록 각 논문을 더 깊이 있게 다루고, 주제 그룹을 더 세분화하세요.'
+        : 'Length directive: write the answer as ' + spec.en + '. Longer lengths should cover each paper in more depth and introduce finer thematic subdivisions.');
+      const body = {
+        model: model,
+        max_tokens: maxTokens,
+        thinking: { type: 'enabled', budget_tokens: thinkingBudget },
+        system: p.system,
+        messages: [{ role: 'user', content: p.user }],
+        stream: true,
+      };
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error('Anthropic ' + resp.status + ': ' + err.slice(0, 300));
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\\n\\n')) !== -1) {
+          const block = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          for (const line of block.split('\\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6);
+            if (payload === '[DONE]') continue;
+            let ev;
+            try { ev = JSON.parse(payload); } catch { continue; }
+            if (ev.type === 'content_block_start') {
+              if (ev.content_block.type === 'thinking') deepSetStatus('\U0001F914 답변 계획 중...');
+              else if (ev.content_block.type === 'text') deepSetStatus('\u270D\uFE0F 답변 작성 중...');
+            } else if (ev.type === 'content_block_delta') {
+              if (ev.delta.type === 'text_delta') {
+                DEEP.currentAnswer += ev.delta.text;
+                renderDeepAnswer(DEEP.currentAnswer);
+              }
+            } else if (ev.type === 'error') {
+              throw new Error('Anthropic stream error: ' + (ev.error && ev.error.message || JSON.stringify(ev)));
+            }
+          }
+        }
+      }
+    }
+
+    function renderDeepAnswer(md) {
+      const el = document.getElementById('deep-answer');
+      if (!el) return;
+      let markup = mdToMarkup(md);
+      markup = postProcessRefs(markup, DEEP.currentRefs);
+      renderTo(el, markup);
+    }
+
+    function finalizeDeepAnswer() {
+      const cited = collectCitedNums(DEEP.currentAnswer);
+      const refsListEl = document.getElementById('deep-refs-list');
+      clearEl(refsListEl);
+      if (cited.size > 0) {
+        const ordered = [...cited].sort((a, b) => a - b);
+        for (const n of ordered) {
+          const ref = DEEP.currentRefs[n - 1];
+          if (!ref) continue;
+          const li = document.createElement('li');
+          li.appendChild(document.createTextNode('[' + n + '] '));
+          const link = document.createElement('a');
+          link.href = ref.url;
+          link.target = '_blank';
+          link.textContent = ref.title;
+          li.appendChild(link);
+          if (ref.year) li.appendChild(document.createTextNode(' (' + ref.year + ')'));
+          // Local-only: render a 'Open PDF' button when we have a Zotero itemKey
+          // for this paper. Clicking it triggers the zotero:// protocol handler
+          // and the Zotero desktop app pops the PDF immediately.
+          if (window._zoteroKeys && window._zoteroKeys[ref.slug]) {
+            const pdfLink = document.createElement('a');
+            pdfLink.href = 'zotero://open-pdf/library/items/' + window._zoteroKeys[ref.slug];
+            pdfLink.title = 'Open PDF in Zotero';
+            pdfLink.textContent = '\U0001F4C4 PDF';
+            pdfLink.style.marginLeft = '0.5rem';
+            pdfLink.style.fontSize = '0.75rem';
+            pdfLink.style.color = '#555';
+            pdfLink.style.textDecoration = 'none';
+            pdfLink.style.padding = '0.05rem 0.4rem';
+            pdfLink.style.borderRadius = '3px';
+            pdfLink.style.background = '#f0f0f0';
+            pdfLink.style.border = '1px solid #ddd';
+            li.appendChild(pdfLink);
+          }
+          refsListEl.appendChild(li);
+        }
+        document.getElementById('deep-refs').style.display = '';
+      }
+      const usedInBody = collectInlineFigureUrls(DEEP.currentAnswer);
+      const grid = document.getElementById('deep-figures-grid');
+      clearEl(grid);
+      let added = 0;
+      for (const n of [...cited].sort((a, b) => a - b)) {
+        const ref = DEEP.currentRefs[n - 1];
+        if (!ref || !ref.figures || !ref.figures.length) continue;
+        for (const fig of ref.figures) {
+          if (usedInBody.has(fig.url)) continue;
+          const div = document.createElement('div');
+          div.className = 'deep-fig-item';
+          const link = document.createElement('a');
+          link.href = ref.url;
+          link.target = '_blank';
+          link.title = ref.title + ' — ' + (fig.caption || '');
+          const img = document.createElement('img');
+          img.src = fig.url;
+          img.alt = fig.caption || '';
+          const cap = document.createElement('div');
+          cap.className = 'fig-cap';
+          cap.textContent = '[' + n + '] ' + (fig.caption || 'Figure');
+          link.appendChild(img);
+          link.appendChild(cap);
+          div.appendChild(link);
+          grid.appendChild(div);
+          added++;
+          if (added >= 20) break;
+        }
+        if (added >= 20) break;
+      }
+      document.getElementById('deep-figures').style.display = added > 0 ? '' : 'none';
+      deepUpdateButtons(true);
+    }
+
+    async function runDeepResearch(query) {
+      query = (query || '').trim();
+      if (!query) return;
+      DEEP.currentQuery = query;
+      deepShowPanel();
+      if (!_ANTHROPIC_KEY || !_OPENAI_KEY) {
+        const ak = prompt('Anthropic API Key를 입력하세요 (Deep Research에 필요합니다):');
+        if (!ak) { deepSetStatus('Anthropic API Key가 필요합니다.', true); return; }
+        const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다):');
+        if (!ok) { deepSetStatus('OpenAI API Key가 필요합니다.', true); return; }
+        _ANTHROPIC_KEY = ak; _OPENAI_KEY = ok;
+        localStorage.setItem('_ANTHROPIC_KEY', ak);
+        localStorage.setItem('_OPENAI_KEY', ok);
+      }
+      clearEl(document.getElementById('deep-answer'));
+      document.getElementById('deep-refs').style.display = 'none';
+      document.getElementById('deep-figures').style.display = 'none';
+      DEEP.currentAnswer = '';
+      DEEP.currentRefs = [];
+      deepUpdateButtons(false);
+      try {
+        const index = await deepLoadIndex();
+        deepSetStatus('\U0001F50D 질의 임베딩 중...');
+        const queryVec = await embedQuery(query);
+        deepSetStatus('\U0001F4DA 관련 논문 검색 중...');
+        const timeFilter = parseTimeFilter(query);
+        const selected = retrieveChunks(queryVec, index, timeFilter, 30);
+        if (selected.length === 0) {
+          deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
+          return;
+        }
+        // Group chunks by paper so each paper appears as a single reference
+        // entry. The retrieval step still uses chunk-level cosine similarity
+        // (so different sections can independently boost a paper into the
+        // top-k), but downstream prompt construction and references list
+        // operate on unique papers -- otherwise the same paper shows up as
+        // [1], [2], [3] when its Essence/How/Achievement chunks all match.
+        const byPaper = new Map();
+        for (const s of selected) {
+          const slug = s.chunk.slug;
+          if (!byPaper.has(slug)) {
+            byPaper.set(slug, { slug: slug, paper: s.paper, chunks: [] });
+          }
+          byPaper.get(slug).chunks.push({ section: s.chunk.section, text: s.chunk.text });
+        }
+        const dedupedSelected = Array.from(byPaper.values());
+
+        DEEP.currentRefs = dedupedSelected.map((s, i) => ({
+          n: i + 1,
+          slug: s.slug,
+          title: s.paper.title,
+          year: s.paper.year,
+          url: s.paper.url,
+          figures: s.paper.figures || [],
+        }));
+        // Local-only deep dive: try to fetch text.md (raw paper text) for the
+        // top distinct papers so Claude can quote concrete quantitative
+        // details (reagents, amounts, conditions). text.md is git-ignored,
+        // so on Cloudflare these fetches return 404 and we silently fall
+        // back to review-only context. On localhost / file:// they succeed
+        // and the LLM gets richer source material.
+        deepSetStatus('\U0001F4C4 원문 발췌 가져오는 중...');
+        const fullTexts = {};
+        const topSlugs = dedupedSelected.slice(0, 10).map(function(s) { return s.slug; });
+        await Promise.all(topSlugs.map(async function(slug) {
+          try {
+            const r = await fetch('../papers/' + slug + '/text.md');
+            if (!r.ok) return;
+            const t = await r.text();
+            fullTexts[slug] = t.slice(0, 30000);
+          } catch (e) { /* fetch error or missing file -- skip silently */ }
+        }));
+        const lang = detectLang(query);
+        const model = document.getElementById('deep-model').value || 'claude-haiku-4-5';
+        const length = document.getElementById('deep-length').value || 'short';
+        await callClaude(query, dedupedSelected, lang, model, length, fullTexts);
+        finalizeDeepAnswer();
+        deepSetStatus('\u2705 완료');
+        setTimeout(() => deepSetStatus(''), 2500);
+      } catch (e) {
+        console.error(e);
+        deepSetStatus('오류: ' + e.message, true);
+      }
+    }
+
+    function setSearchMode(mode) {
+      window._searchMode = mode;
+      const cb = document.getElementById('mode-classic');
+      const db = document.getElementById('mode-deep');
+      const input = document.getElementById('search-input');
+      const hint = document.getElementById('search-hint');
+      if (cb) cb.classList.toggle('active', mode === 'classic');
+      if (db) db.classList.toggle('active', mode === 'deep');
+      if (mode === 'deep') {
+        if (input) input.placeholder = 'Deep Research: 자유롭게 질의하세요 (예: 2023년 이후 LLM agent 동향)';
+        if (hint) hint.textContent = 'Press Enter to run Deep Research (API keys built into this page at build time).';
+      } else {
+        if (input) input.placeholder = 'Search papers by title, DOI, keyword...';
+        if (hint) hint.textContent = 'Enter title, DOI, author name, or keyword to filter';
+        deepHidePanel();
+      }
+    }
+
+
+    function buildFullMarkdown() {
+      const q = document.getElementById('search-input').value;
+      const lines = ['# Deep Research', '', '**Query**: ' + q, '**Generated**: ' + new Date().toISOString(), '', '---', '', DEEP.currentAnswer];
+      const cited = collectCitedNums(DEEP.currentAnswer);
+      if (cited.size > 0) {
+        lines.push('', '## References', '');
+        for (const n of [...cited].sort((a, b) => a - b)) {
+          const ref = DEEP.currentRefs[n - 1];
+          if (!ref) continue;
+          lines.push('[' + n + '] [' + ref.title + '](' + ref.url + ')' + (ref.year ? ' (' + ref.year + ')' : ''));
+        }
+      }
+      return lines.join('\\n');
+    }
+
+    function copyAnswerMd() {
+      if (!DEEP.currentAnswer) return;
+      const full = buildFullMarkdown();
+      navigator.clipboard.writeText(full).then(() => {
+        const btn = document.getElementById('deep-copy');
+        const orig = btn.textContent;
+        btn.textContent = '\u2713 Copied';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      });
+    }
+
+    function saveToObsidian() {
+      if (!DEEP.currentAnswer) return;
+      var query = document.getElementById('search-input').value || 'research-note';
+      var topic = window.location.pathname.split('/').filter(Boolean).pop() || 'notes';
+      var ts = new Date().toISOString().slice(0, 10);
+      var slug = query.slice(0, 40).replace(/[^a-zA-Z0-9\\u1100-\\u11FF\\u3130-\\u318F\\uAC00-\\uD7AF]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      var fileName = 'notes/' + topic + '/PCDR_' + ts + '-' + slug;
+      var lines = [
+        '# ' + query, '',
+        '> Deep Research (' + new Date().toLocaleString() + ')', '',
+        '## My Notes', '', '(\\uC5EC\\uAE30\\uC5D0 \\uC0DD\\uAC01\\uC744 \\uC801\\uC73C\\uC138\\uC694)', '',
+        '---', '',
+        '## Deep Research Answer', '',
+        DEEP.currentAnswer,
+      ];
+      var cited = collectCitedNums(DEEP.currentAnswer);
+      if (cited.size > 0) {
+        lines.push('', '## References', '');
+        var ordered = Array.from(cited).sort(function(a, b) { return a - b; });
+        for (var i = 0; i < ordered.length; i++) {
+          var n = ordered[i];
+          var ref = DEEP.currentRefs[n - 1];
+          if (!ref) continue;
+          lines.push('[' + n + '] [[papers/' + ref.slug + '/review|' + ref.title + ']]' + (ref.year ? ' (' + ref.year + ')' : ''));
+        }
+      }
+      var content = lines.join('\\n');
+      // Fix relative paths: LLM answers use ../papers/ which is correct
+      // from docs/{topic}/, but notes live one level deeper in
+      // docs/notes/{topic}/ so we need ../../papers/ instead.
+      content = content.replace(/\\.\\.\\//g, '../../');
+      var vault = 'docs';
+      var uri = 'obsidian://new?vault=' + encodeURIComponent(vault) + '&file=' + encodeURIComponent(fileName) + '&content=' + encodeURIComponent(content);
+      window.location.href = uri;
+    }
+
+    function downloadAnswerMd() {
+      if (!DEEP.currentAnswer) return;
+      const full = buildFullMarkdown();
+      const blob = new Blob([full], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = url;
+      a.download = 'deep-research-' + ts + '.md';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    }
+
+    function buildFullHtml() {
+      const q = document.getElementById('search-input').value;
+      let answerMarkup = mdToMarkup(DEEP.currentAnswer);
+      answerMarkup = postProcessRefs(answerMarkup, DEEP.currentRefs);
+      const cited = collectCitedNums(DEEP.currentAnswer);
+      let refsMarkup = '';
+      if (cited.size > 0) {
+        refsMarkup = '<h3>References</h3><ol>';
+        for (const n of [...cited].sort((a, b) => a - b)) {
+          const ref = DEEP.currentRefs[n - 1];
+          if (!ref) continue;
+          refsMarkup += '<li>[' + n + '] <a href="' + ref.url + '" target="_blank">' + escapeAttr(ref.title) + '</a>' + (ref.year ? ' (' + ref.year + ')' : '') + '</li>';
+        }
+        refsMarkup += '</ol>';
+      }
+      const base = new URL('.', window.location.href).href;
+      answerMarkup = answerMarkup.replace(/(src|href)="(\\.\\.\\/[^"]+)"/g, (_, attr, rel) => attr + '="' + new URL(rel, base).href + '"');
+      refsMarkup = refsMarkup.replace(/href="(\\.\\.\\/[^"]+)"/g, (_, rel) => 'href="' + new URL(rel, base).href + '"');
+      return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deep Research</title><style>' +
+        'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:760px;margin:2rem auto;padding:0 1.5rem;color:#222;line-height:1.75;}' +
+        'h1{font-size:1.35rem;margin-bottom:0.3rem;}' +
+        '.meta{color:#888;font-size:0.85rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid #eee;}' +
+        '.answer{font-size:0.96rem;}' +
+        '.answer p{margin:0.9rem 0;}' +
+        '.answer h1,.answer h2,.answer h3{color:#333;margin:1.2rem 0 0.5rem;}' +
+        '.answer a.ref{display:inline-block;color:#2563EB;text-decoration:none;font-weight:700;font-size:0.72rem;padding:0 0.3rem;border-radius:3px;background:#EBF2FF;vertical-align:super;margin:0 0.1rem;}' +
+        '.answer figure{margin:1rem 0;max-width:100%;}' +
+        '.answer img{width:100%;height:auto;display:block;margin:1rem 0;padding:0.5rem;background:#fafafa;border:1px solid #eee;border-radius:6px;box-sizing:border-box;}' +
+        '.answer figure img{margin:0;}' +
+        '.answer p img{margin:0.5rem 0;}' +
+        '.answer figure figcaption{font-size:0.78rem;color:#666;text-align:center;margin-top:0.4rem;font-style:italic;}' +
+        'h3{color:#333;margin:2rem 0 0.6rem;border-top:1px solid #eee;padding-top:1rem;}' +
+        'ol{font-size:0.85rem;color:#555;margin-left:1rem;}' +
+        'ol li{margin:0.3rem 0;}' +
+        'ol a{color:#2563EB;text-decoration:none;}' +
+        '@media print{body{max-width:none;}}' +
+        '</style></head><body>' +
+        '<h1>Deep Research</h1>' +
+        '<div class="meta"><strong>Query:</strong> ' + escapeAttr(q) + '<br><strong>Generated:</strong> ' + new Date().toLocaleString() + '</div>' +
+        '<div class="answer">' + answerMarkup + '</div>' +
+        refsMarkup +
+        '</body></html>';
+    }
+
+    function openAnswerInNewTab() {
+      if (!DEEP.currentAnswer) return;
+      const doc = buildFullHtml();
+      const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    function downloadAnswerHtml() {
+      if (!DEEP.currentAnswer) return;
+      const doc = buildFullHtml();
+      const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = url;
+      a.download = 'deep-research-' + ts + '.html';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      window._searchMode = 'classic';
+
+      // Same pattern for Zotero itemKey lookup. When present (local dev),
+      // the Deep Research References list adds a one-click 'Open PDF'
+      // button next to each citation. Git-ignored, so Cloudflare visitors
+      // get a 404 here and the button never appears for them.
+      fetch('../_zotero_keys.json').then(function(r) {
+        return r.ok ? r.json() : null;
+      }).then(function(keys) {
+        if (keys) window._zoteroKeys = keys;
+      }).catch(function() { /* no zotero keys; fine */ });
+
+      const cb = document.getElementById('mode-classic');
+      const db = document.getElementById('mode-deep');
+      if (cb) cb.addEventListener('click', () => setSearchMode('classic'));
+      if (db) db.addEventListener('click', () => setSearchMode('deep'));
+      const input = document.getElementById('search-input');
+      if (input) {
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && window._searchMode === 'deep') {
+            e.preventDefault();
+            runDeepResearch(this.value);
+          }
+        });
+      }
+      const close = document.getElementById('deep-close');
+      if (close) close.addEventListener('click', deepHidePanel);
+      const copy = document.getElementById('deep-copy');
+      if (copy) copy.addEventListener('click', copyAnswerMd);
+      const dl = document.getElementById('deep-download');
+      if (dl) dl.addEventListener('click', downloadAnswerMd);
+      const dlh = document.getElementById('deep-download-html');
+      if (dlh) dlh.addEventListener('click', downloadAnswerHtml);
+      const nt = document.getElementById('deep-newtab');
+      if (nt) nt.addEventListener('click', openAnswerInNewTab);
+      const ob = document.getElementById('deep-obsidian');
+      if (ob) ob.addEventListener('click', saveToObsidian);
+      const rerun = document.getElementById('deep-rerun');
+      if (rerun) rerun.addEventListener('click', function() {
+        const q = document.getElementById('search-input').value;
+        if (q && q.trim()) runDeepResearch(q);
+      });
+    });"""
+
+    # --- Build-time: inject API keys from env vars into JS ---
+    _cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+    _cfg_keys = {}
+    if _cfg_path.exists():
+        with open(_cfg_path, "r", encoding="utf-8") as _f:
+            _cfg_keys = json.load(_f)
+    _ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY") or _cfg_keys.get("anthropic_api_key", "")
+    _OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or _cfg_keys.get("openai_api_key", "")
+    _GEMINI_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+                   or _cfg_keys.get("gemini_api_key", "") or _cfg_keys.get("google_api_key", ""))
+    JS = ("let _ANTHROPIC_KEY = " + json.dumps(_ANTHROPIC_KEY) + " || localStorage.getItem('_ANTHROPIC_KEY') || '';\n"
+          "let _OPENAI_KEY = " + json.dumps(_OPENAI_KEY) + " || localStorage.getItem('_OPENAI_KEY') || '';\n" + JS)
+
+
+    def render_insights_section():
+        """_insights.json에서 cross-category insights 렌더링."""
+        cross = insights_data.get("cross_category", [])
+        if not cross:
+            return ""
+
+        # Build slug number → paper info lookup
+        num_to_paper = {}
+        for p in papers_index:
+            slug = p.get("slug", "")
+            title = p.get("title", "")
+            num = slug.split("_")[0] if "_" in slug else slug[:3]
+            num_to_paper[num] = (slug, title)
+
+        type_labels = {
+            "convergence": "융합",
+            "gap": "연구 갭",
+            "emerging": "신흥 트렌드",
+            "declining": "감소 추세",
+        }
+
+        cards = []
+        for ins in cross:
+            itype = ins.get("type", "gap")
+            label = type_labels.get(itype, itype)
+            title = escape(ins.get("title", ""))
+            desc = escape(ins.get("description", ""))
+            cats = ins.get("categories", [])
+            evidence = ins.get("evidence", [])
+            policy = ins.get("policy_implication", "")
+
+            cats_html = " · ".join(escape(c) for c in cats)
+            ev_links = []
+            for num in evidence:
+                matched = num_to_paper.get(num) or num_to_paper.get(str(num).zfill(3))
+                if matched:
+                    slug, ptitle = matched
+                    ev_links.append(
+                        f'<a href="../papers/{escape(slug)}/index.html" title="{escape(ptitle)}">[{num}]</a>'
+                    )
+                else:
+                    ev_links.append(f"[{num}]")
+            ev_html = " ".join(ev_links)
+
+            policy_html = ""
+            if policy:
+                policy_html = f'\n      <div class="insight-policy">&#x1F3DB; {escape(policy)}</div>'
+
+            cards.append(
+                f'    <div class="insight-card {itype}">\n'
+                f'      <div class="insight-type">{label}</div>\n'
+                f'      <div class="insight-title">{title}</div>\n'
+                f'      <div class="insight-desc">{desc}</div>\n'
+                f'      <div class="insight-meta">\n'
+                f'        <span class="cats">{cats_html}</span>\n'
+                f'        <span class="evidence">{ev_html}</span>\n'
+                f'      </div>{policy_html}\n'
+                f'    </div>'
+            )
+
+        return (
+            '<div class="insights-section">\n'
+            f'  <h2>Research Insights <span class="insight-count">{len(cross)} findings</span></h2>\n'
+            + "\n".join(cards) + "\n"
+            + '</div>\n\n'
+        )
+
+
+    def render_category_insight(cat_name):
+        """per_category insight를 카테고리 summary에 삽입할 HTML 반환."""
+        per_cat = insights_data.get("per_category", {}).get(cat_name, {})
+        if not per_cat:
+            return ""
+        parts = []
+        kf = per_cat.get("key_finding", "")
+        gap = per_cat.get("gap", "")
+        pi = per_cat.get("policy_implication", "")
+        if kf:
+            parts.append(f'<span class="ci-label">&#x1F4CC; 핵심:</span> {escape(kf)}')
+        if gap:
+            parts.append(f'<span class="ci-label ci-gap">&#x26A0; 갭:</span> {escape(gap)}')
+        if pi:
+            parts.append(f'<span class="ci-label ci-policy">&#x1F3DB; 정책:</span> {escape(pi)}')
+        if not parts:
+            return ""
+        return '<div class="cat-insight">' + "<br>".join(parts) + '</div>'
+
+
+    # Build topic groups
+    topic_groups_parts = []
+    global_num = 1
+    for cat_idx, cat_name in enumerate(cat_order):
+        papers = cat_papers.get(cat_name, [])
+        if not papers:
+            continue
+        topic_id = f"topic-{cat_idx}"
+        cat_slug = category_slug(cat_name)
+        narr_html = render_category_narrative(cat_name)
+
+        # Category timeline image (in topic dir)
+        cat_tl_file = f"category_timeline_{cat_slug}.png"
+        cat_tl_exists = os.path.exists(os.path.join(TOPIC_DIR, cat_tl_file))
+        cat_tl_html = ""
+        if cat_tl_exists:
+            cat_tl_html = (
+                f'\n<div class="category-timeline">'
+                f'<img data-src="{cat_tl_file}" alt="{esc(cat_name)} Timeline" class="lazy">'
+                f'</div>'
+            )
+
+        cat_insight_html = render_category_insight(cat_name)
+        summary_block = ""
+        if narr_html or cat_tl_html or cat_insight_html:
+            summary_block = f'\n<div class="category-summary">{cat_tl_html}{narr_html}{cat_insight_html}</div>'
+
+        # Group papers by sub_category (if >30 papers in category)
+        if len(papers) > 30:
+            sub_groups = OrderedDict()
+            for paper in papers:
+                sc = paper.get("sub_category", "General")
+                if sc not in sub_groups:
+                    sub_groups[sc] = []
+                sub_groups[sc].append(paper)
+
+            # Merge small sub-categories (<3 papers) into "Others"
+            small = [k for k, v in sub_groups.items() if len(v) < 3 and k != "Others"]
+            if small:
+                others = sub_groups.pop("Others", [])
+                for k in small:
+                    others.extend(sub_groups.pop(k))
+                if others:
+                    sub_groups["Others"] = others
+
+            cards_html = ""
+            for sc_idx, (sc_name, sc_papers) in enumerate(sub_groups.items()):
+                sc_id = f"{topic_id}-sub-{sc_idx}"
+                sc_cards = []
+                for paper in sc_papers:
+                    sc_cards.append(render_paper_card(paper, global_num, cat_slug))
+                    global_num += 1
+                cards_html += (
+                    f'\n<div class="sub-group">'
+                    f'\n  <div class="sub-header" onclick="toggleSub(\'{sc_id}\')">'
+                    f'\n    <span class="sub-name">{esc(sc_name)}</span>'
+                    f'\n    <span class="sub-count">{len(sc_papers)}</span>'
+                    f'\n    <span class="sub-toggle" id="toggle-{sc_id}">&#x25B6;</span>'
+                    f'\n  </div>'
+                    f'\n  <div class="sub-body collapsed" id="{sc_id}">'
+                    + "\n".join(sc_cards)
+                    + '\n  </div>'
+                    + '\n</div>'
+                )
+        else:
+            cards_html = ""
+            for paper in papers:
+                cards_html += render_paper_card(paper, global_num, cat_slug)
+                global_num += 1
+
+        group = (
+            f'<div class="topic-group" data-topic="{esc(cat_name)}">\n'
+            f'      <div class="topic-header" onclick="toggleTopic(\'{topic_id}\')">\n'
+            f'        <span class="topic-name">{esc(cat_name)}</span>\n'
+            f'        <span class="topic-count">{len(papers)}\ud3b8</span>\n'
+            f'        <span class="topic-toggle" id="toggle-{topic_id}">&#x25B6;</span>\n'
+            f'      </div>\n'
+            f'      <div class="topic-body collapsed" id="{topic_id}">{summary_block}\n'
+            + cards_html + "\n"
+            + '      </div>\n'
+            + '    </div>'
+        )
+        topic_groups_parts.append(group)
+
+    exec_html = render_exec_summary(executive_summary)
+    num_cats = len([c for c in cat_order if cat_papers.get(c)])
+
+    # Determine date range
+    dates = [p.get("date", "") for cat in cat_papers.values() for p in cat]
+    dates = [d for d in dates if d]
+    date_range = f"{min(dates)} ~ {max(dates)}" if dates else ""
+
+    # Research timeline
+    has_research_tl = os.path.exists(os.path.join(TOPIC_DIR, "research_timeline.png"))
+    research_tl_html = ""
+    if has_research_tl:
+        research_tl_html = (
+            '<div class="timeline-section">\n'
+            '  <h2>Research Timeline</h2>\n'
+            '  <div style="text-align:center;margin:1rem 0">'
+            '<img src="research_timeline.png" alt="Research Timeline"'
+            ' style="max-width:100%;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
+            '</div>\n'
+        )
+        if exec_html:
+            research_tl_html += f'  <div class="timeline-summary">\n    {exec_html}\n  </div>\n'
+        if os.path.exists(os.path.join(TOPIC_DIR, "network.html")):
+            research_tl_html += f'  <div style="text-align:right;margin-top:0.8rem"><a href="network.html" target="_blank" rel="noopener noreferrer" style="color:{accent};font-weight:600;text-decoration:none;font-size:0.9rem">&#x1F517; Interactive Paper Network &rarr;</a></div>\n'
+        research_tl_html += '</div>\n\n\n'
+
+    # Deep Research Audio Overview: context provider built live from the answer.
+    _AUDIO_PROVIDER_JS = (
+        "window._audioContextProvider = function() {\n"
+        "  return {\n"
+        "    title: (DEEP.currentQuery || 'deep-research'),\n"
+        "    review: '[질문]\\n' + (DEEP.currentQuery || '') + '\\n\\n[답변]\\n' + (DEEP.currentAnswer || ''),\n"
+        "    connections: (DEEP.currentRefs || []).map(function(r) { return {title: r.title, relation: '인용', reason: ''}; })\n"
+        "  };\n"
+        "};"
     )
-    if exec_html:
-        research_tl_html += f'  <div class="timeline-summary">\n    {exec_html}\n  </div>\n'
-    if os.path.exists(os.path.join(TOPIC_DIR, "network.html")):
-        research_tl_html += f'  <div style="text-align:right;margin-top:0.8rem"><a href="network.html" target="_blank" rel="noopener noreferrer" style="color:{accent};font-weight:600;text-decoration:none;font-size:0.9rem">&#x1F517; Interactive Paper Network &rarr;</a></div>\n'
-    research_tl_html += '</div>\n\n\n'
 
-# Deep Research Audio Overview: context provider built live from the answer.
-_AUDIO_PROVIDER_JS = (
-    "window._audioContextProvider = function() {\n"
-    "  return {\n"
-    "    title: (DEEP.currentQuery || 'deep-research'),\n"
-    "    review: '[질문]\\n' + (DEEP.currentQuery || '') + '\\n\\n[답변]\\n' + (DEEP.currentAnswer || ''),\n"
-    "    connections: (DEEP.currentRefs || []).map(function(r) { return {title: r.title, relation: '인용', reason: ''}; })\n"
-    "  };\n"
-    "};"
-)
+    HTML = (
+        '<!DOCTYPE html>\n'
+        '<html lang="ko">\n'
+        '<head>\n'
+        '<meta charset="UTF-8">\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1.0">\n'
+        f'<title>{esc(theme["title"])} &#8212; Paper Curation</title>\n'
+        '<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">\n'
+        '<script>window.MathJax={tex:{inlineMath:[[\'$\',\'$\'],[\'\\\\(\',\'\\\\)\']],displayMath:[[\'$$\',\'$$\'],[\'\\\\[\',\'\\\\]\']]}};</script>\n'
+        '<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>\n'
+        '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>\n'
+        f'<style>\n{CSS}\n</style>\n'
+        '</head>\n'
+        '<body>\n'
+        '<div class="container">\n'
+        '  <div class="hero">\n'
+        f'    <h1>{esc(theme["title"])} &#8212; Paper Curation</h1>\n'
+        '    <div class="stats">\n'
+        f'      <div class="stat"><div class="stat-num">{unique_papers}</div><div class="stat-label">\ub9ac\ubdf0 \uc644\ub8cc</div></div>\n'
+        f'      <div class="stat"><div class="stat-num">{num_cats}</div><div class="stat-label">MECE \uce74\ud14c\uace0\ub9ac</div></div>\n'
+        f'      <div class="stat"><div class="stat-num">{TODAY}</div><div class="stat-label">\ud050\ub808\uc774\uc158 \uc77c\uc790</div></div>\n'
+        '    </div>\n'
+        '  </div>\n\n\n'
+        + research_tl_html
+        + render_insights_section()
+        + '  <div class="search-box">\n'
+        '    <div class="search-row">\n'
+        '      <input type="text" id="search-input" placeholder="Search papers by title, DOI, keyword...">\n'
+        '      <div class="mode-toggle">\n'
+        '        <button class="mode-btn active" id="mode-classic" title="Substring search">Classic</button>\n'
+        '        <button class="mode-btn" id="mode-deep" title="Deep Research (uses your API keys)">&#x1F9E0; Deep</button>\n'
+        '      </div>\n'
+        '    </div>\n'
+        '    <div class="search-hint" id="search-hint">Enter title, DOI, author name, or keyword to filter</div>\n'
+        '    <div class="search-count" id="search-count"></div>\n'
+        '    <div id="deep-panel" class="deep-panel" style="display:none">\n'
+        '      <div class="deep-header">\n'
+        '        <h3>Deep Research</h3>\n'
+        '        <select id="deep-length" class="deep-model" title="답변 분량">\n'
+        '          <option value="short" selected>Short</option>\n'
+        '          <option value="medium">Medium (2x)</option>\n'
+        '          <option value="long">Long (5x)</option>\n'
+        '        </select>\n'
+        '        <select id="deep-model" class="deep-model">\n'
+        '          <option value="claude-haiku-4-5">Haiku 4.5 (fast &amp; cheap)</option>\n'
+        '          <option value="claude-sonnet-4-6">Sonnet 4.6 (best quality)</option>\n'
+        '        </select>\n'
+        '        <button class="deep-btn" id="deep-rerun" disabled title="현재 질의를 선택한 모델·분량으로 다시 실행">&#x21BB; 재시작</button>\n'
+        '        <div class="deep-actions">\n'
+        '          <button class="deep-btn" id="deep-copy" disabled title="Copy markdown">&#x1F4CB; Copy</button>\n'
+        '          <button class="deep-btn" id="deep-download" disabled title="Download .md">&#x2B07; MARKDOWN</button>\n'
+        '          <button class="deep-btn" id="deep-download-html" disabled title="Download .html">&#x2B07; HTML</button>\n'
+        '          <button class="deep-btn" id="deep-newtab" disabled title="Open in new tab">&#x1F517; New tab</button>\n'
+        '          <button class="deep-btn" id="deep-obsidian" disabled title="Save answer + your notes to Obsidian">&#x1F4DD; Obsidian</button>\n'
+        '          <button class="deep-btn" id="deep-audio" disabled title="이 답변을 팟캐스트형 오디오로 생성 (로컬 전용)" onclick="openAudioModal()">&#x1F3A7; Audio</button>\n'
+        '          <button class="deep-btn" id="deep-close" title="Close">&#x2715;</button>\n'
+        '        </div>\n'
+        '      </div>\n'
+        '      <div class="deep-status" id="deep-status"></div>\n'
+        '      <div class="deep-body" id="deep-body">\n'
+        '        <div class="deep-answer" id="deep-answer"></div>\n'
+        '        <div class="deep-refs" id="deep-refs" style="display:none">\n'
+        '          <h4>References</h4>\n'
+        '          <ol id="deep-refs-list"></ol>\n'
+        '        </div>\n'
+        '        <div class="deep-figures" id="deep-figures" style="display:none">\n'
+        '          <h4>Related Figures</h4>\n'
+        '          <div class="deep-figures-grid" id="deep-figures-grid"></div>\n'
+        '        </div>\n'
+        '      </div>\n'
+        '    </div>\n'
+        '  </div>\n\n'
+        + '  <div class="sort-bar">\n'
+        '    <button class="sort-btn" onclick="sortCards(\'date\',\'asc\')">\ucd9c\ud310\uc77c &#x25B2;</button>\n'
+        '    <button class="sort-btn" onclick="sortCards(\'date\',\'desc\')">\ucd9c\ud310\uc77c &#x25BC;</button>\n'
+        '    <button class="sort-btn" onclick="sortCards(\'score\',\'asc\')">\ud3c9\uc810 &#x25B2;</button>\n'
+        '    <button class="sort-btn" onclick="sortCards(\'score\',\'desc\')">\ud3c9\uc810 &#x25BC;</button>\n'
+        '  </div>\n\n'
+        '  <div id="cards">\n\n'
+        + "\n\n".join(topic_groups_parts) + "\n\n"
+        + '  </div>\n'
+        '  <div class="credit">\n'
+        f'    Generated by Claude Code &middot; {esc(theme["title"])} Paper Curation &middot; {TODAY}\n'
+        '  </div>\n\n'
+        '</div>\n\n'
+        '<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>\n\n'
+        f'<script>\n{JS}\n</script>\n\n'
+        + _audio_modal("이 Deep Research 답변을 팟캐스트형 오디오로 생성합니다. (Gemini · 로컬 전용)") + "\n"
+        + _audio_script(_GEMINI_KEY, mode="deep", provider_js=_AUDIO_PROVIDER_JS) + "\n"
+        + '<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">'
+        'Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com'
+        '</footer>\n\n'
+        '</body>\n</html>'
+    )
 
-HTML = (
-    '<!DOCTYPE html>\n'
-    '<html lang="ko">\n'
-    '<head>\n'
-    '<meta charset="UTF-8">\n'
-    '<meta name="viewport" content="width=device-width,initial-scale=1.0">\n'
-    f'<title>{esc(theme["title"])} &#8212; Paper Curation</title>\n'
-    '<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">\n'
-    '<script>window.MathJax={tex:{inlineMath:[[\'$\',\'$\'],[\'\\\\(\',\'\\\\)\']],displayMath:[[\'$$\',\'$$\'],[\'\\\\[\',\'\\\\]\']]}};</script>\n'
-    '<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>\n'
-    '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>\n'
-    f'<style>\n{CSS}\n</style>\n'
-    '</head>\n'
-    '<body>\n'
-    '<div class="container">\n'
-    '  <div class="hero">\n'
-    f'    <h1>{esc(theme["title"])} &#8212; Paper Curation</h1>\n'
-    '    <div class="stats">\n'
-    f'      <div class="stat"><div class="stat-num">{unique_papers}</div><div class="stat-label">\ub9ac\ubdf0 \uc644\ub8cc</div></div>\n'
-    f'      <div class="stat"><div class="stat-num">{num_cats}</div><div class="stat-label">MECE \uce74\ud14c\uace0\ub9ac</div></div>\n'
-    f'      <div class="stat"><div class="stat-num">{TODAY}</div><div class="stat-label">\ud050\ub808\uc774\uc158 \uc77c\uc790</div></div>\n'
-    '    </div>\n'
-    '  </div>\n\n\n'
-    + research_tl_html
-    + render_insights_section()
-    + '  <div class="search-box">\n'
-    '    <div class="search-row">\n'
-    '      <input type="text" id="search-input" placeholder="Search papers by title, DOI, keyword...">\n'
-    '      <div class="mode-toggle">\n'
-    '        <button class="mode-btn active" id="mode-classic" title="Substring search">Classic</button>\n'
-    '        <button class="mode-btn" id="mode-deep" title="Deep Research (uses your API keys)">&#x1F9E0; Deep</button>\n'
-    '      </div>\n'
-    '    </div>\n'
-    '    <div class="search-hint" id="search-hint">Enter title, DOI, author name, or keyword to filter</div>\n'
-    '    <div class="search-count" id="search-count"></div>\n'
-    '    <div id="deep-panel" class="deep-panel" style="display:none">\n'
-    '      <div class="deep-header">\n'
-    '        <h3>Deep Research</h3>\n'
-    '        <select id="deep-length" class="deep-model" title="답변 분량">\n'
-    '          <option value="short" selected>Short</option>\n'
-    '          <option value="medium">Medium (2x)</option>\n'
-    '          <option value="long">Long (5x)</option>\n'
-    '        </select>\n'
-    '        <select id="deep-model" class="deep-model">\n'
-    '          <option value="claude-haiku-4-5">Haiku 4.5 (fast &amp; cheap)</option>\n'
-    '          <option value="claude-sonnet-4-6">Sonnet 4.6 (best quality)</option>\n'
-    '        </select>\n'
-    '        <button class="deep-btn" id="deep-rerun" disabled title="현재 질의를 선택한 모델·분량으로 다시 실행">&#x21BB; 재시작</button>\n'
-    '        <div class="deep-actions">\n'
-    '          <button class="deep-btn" id="deep-copy" disabled title="Copy markdown">&#x1F4CB; Copy</button>\n'
-    '          <button class="deep-btn" id="deep-download" disabled title="Download .md">&#x2B07; MARKDOWN</button>\n'
-    '          <button class="deep-btn" id="deep-download-html" disabled title="Download .html">&#x2B07; HTML</button>\n'
-    '          <button class="deep-btn" id="deep-newtab" disabled title="Open in new tab">&#x1F517; New tab</button>\n'
-    '          <button class="deep-btn" id="deep-obsidian" disabled title="Save answer + your notes to Obsidian">&#x1F4DD; Obsidian</button>\n'
-    '          <button class="deep-btn" id="deep-audio" disabled title="이 답변을 팟캐스트형 오디오로 생성 (로컬 전용)" onclick="openAudioModal()">&#x1F3A7; Audio</button>\n'
-    '          <button class="deep-btn" id="deep-close" title="Close">&#x2715;</button>\n'
-    '        </div>\n'
-    '      </div>\n'
-    '      <div class="deep-status" id="deep-status"></div>\n'
-    '      <div class="deep-body" id="deep-body">\n'
-    '        <div class="deep-answer" id="deep-answer"></div>\n'
-    '        <div class="deep-refs" id="deep-refs" style="display:none">\n'
-    '          <h4>References</h4>\n'
-    '          <ol id="deep-refs-list"></ol>\n'
-    '        </div>\n'
-    '        <div class="deep-figures" id="deep-figures" style="display:none">\n'
-    '          <h4>Related Figures</h4>\n'
-    '          <div class="deep-figures-grid" id="deep-figures-grid"></div>\n'
-    '        </div>\n'
-    '      </div>\n'
-    '    </div>\n'
-    '  </div>\n\n'
-    + '  <div class="sort-bar">\n'
-    '    <button class="sort-btn" onclick="sortCards(\'date\',\'asc\')">\ucd9c\ud310\uc77c &#x25B2;</button>\n'
-    '    <button class="sort-btn" onclick="sortCards(\'date\',\'desc\')">\ucd9c\ud310\uc77c &#x25BC;</button>\n'
-    '    <button class="sort-btn" onclick="sortCards(\'score\',\'asc\')">\ud3c9\uc810 &#x25B2;</button>\n'
-    '    <button class="sort-btn" onclick="sortCards(\'score\',\'desc\')">\ud3c9\uc810 &#x25BC;</button>\n'
-    '  </div>\n\n'
-    '  <div id="cards">\n\n'
-    + "\n\n".join(topic_groups_parts) + "\n\n"
-    + '  </div>\n'
-    '  <div class="credit">\n'
-    f'    Generated by Claude Code &middot; {esc(theme["title"])} Paper Curation &middot; {TODAY}\n'
-    '  </div>\n\n'
-    '</div>\n\n'
-    '<div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>\n\n'
-    f'<script>\n{JS}\n</script>\n\n'
-    + _audio_modal("이 Deep Research 답변을 팟캐스트형 오디오로 생성합니다. (Gemini · 로컬 전용)") + "\n"
-    + _audio_script(_GEMINI_KEY, mode="deep", provider_js=_AUDIO_PROVIDER_JS) + "\n"
-    + '<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">'
-    'Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com'
-    '</footer>\n\n'
-    '</body>\n</html>'
-)
-
-out_path = os.path.join(TOPIC_DIR, "index.html")
-with open(out_path, "w", encoding="utf-8") as f:
-    f.write(HTML)
-print(f"Written: {out_path} ({len(HTML):,} chars)")
+    out_path = os.path.join(TOPIC_DIR, "index.html")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(HTML)
+    print(f"Written: {out_path} ({len(HTML):,} chars)")
 
 
-# Operator convenience: write docs/_zotero_keys.json (slug -> Zotero
-# itemKey). The Deep Research References list checks this on page load
-# and, if present, adds a one-click 'Open PDF' button next to each
-# reference. The button uses 'zotero://open-pdf/library/items/<KEY>'
-# which the Zotero desktop app handles directly. Git-ignored, so the
-# Cloudflare deployment never sees it.
-try:
-    import urllib.request as _urllib_request
-    _api_key = get_zotero_api_key()
-    _user_id = get_zotero_user_id()
-    if _api_key and _user_id:
-        _items = []
-        _start = 0
-        _limit = 100
-        while True:
-            _url = f"https://api.zotero.org/users/{_user_id}/items/top?format=json&limit={_limit}&start={_start}"
-            _req = _urllib_request.Request(_url, headers={
-                "Zotero-API-Key": _api_key,
-                "User-Agent": "Mozilla/5.0",
-            })
-            with _urllib_request.urlopen(_req, timeout=30) as _resp:
-                _batch = json.load(_resp)
-            if not _batch:
-                break
-            _items.extend(_batch)
-            if len(_batch) < _limit:
-                break
-            _start += _limit
+    # Operator convenience: write docs/_zotero_keys.json (slug -> Zotero
+    # itemKey). The Deep Research References list checks this on page load
+    # and, if present, adds a one-click 'Open PDF' button next to each
+    # reference. The button uses 'zotero://open-pdf/library/items/<KEY>'
+    # which the Zotero desktop app handles directly. Git-ignored, so the
+    # Cloudflare deployment never sees it.
+    try:
+        import urllib.request as _urllib_request
+        _api_key = get_zotero_api_key()
+        _user_id = get_zotero_user_id()
+        if _api_key and _user_id:
+            _items = []
+            _start = 0
+            _limit = 100
+            while True:
+                _url = f"https://api.zotero.org/users/{_user_id}/items/top?format=json&limit={_limit}&start={_start}"
+                _req = _urllib_request.Request(_url, headers={
+                    "Zotero-API-Key": _api_key,
+                    "User-Agent": "Mozilla/5.0",
+                })
+                with _urllib_request.urlopen(_req, timeout=30) as _resp:
+                    _batch = json.load(_resp)
+                if not _batch:
+                    break
+                _items.extend(_batch)
+                if len(_batch) < _limit:
+                    break
+                _start += _limit
 
-        def _norm_title(t):
-            return re.sub(r"\s+", " ", t.lower().strip()) if t else ""
+            def _norm_title(t):
+                return re.sub(r"\s+", " ", t.lower().strip()) if t else ""
 
-        _title_to_key = {}
-        for _it in _items:
-            _t = _it.get("data", {}).get("title", "")
-            _k = _it.get("key", "")
-            if _t and _k:
-                _title_to_key[_norm_title(_t)] = _k
+            _title_to_key = {}
+            for _it in _items:
+                _t = _it.get("data", {}).get("title", "")
+                _k = _it.get("key", "")
+                if _t and _k:
+                    _title_to_key[_norm_title(_t)] = _k
 
-        # Fetch attachment items so we can map parent -> PDF attachment
-        # key. zotero://open-pdf requires the *attachment* key, not the
-        # parent item key, to open the PDF directly.
-        print("  Fetching Zotero attachments for PDF key mapping...")
-        _attach_items = []
-        _start = 0
-        while True:
-            _url = f"https://api.zotero.org/users/{_user_id}/items?itemType=attachment&format=json&limit={_limit}&start={_start}"
-            _req = _urllib_request.Request(_url, headers={
-                "Zotero-API-Key": _api_key,
-                "User-Agent": "Mozilla/5.0",
-            })
-            with _urllib_request.urlopen(_req, timeout=30) as _resp:
-                _batch = json.load(_resp)
-            if not _batch:
-                break
-            _attach_items.extend(_batch)
-            if len(_batch) < _limit:
-                break
-            _start += _limit
+            # Fetch attachment items so we can map parent -> PDF attachment
+            # key. zotero://open-pdf requires the *attachment* key, not the
+            # parent item key, to open the PDF directly.
+            print("  Fetching Zotero attachments for PDF key mapping...")
+            _attach_items = []
+            _start = 0
+            while True:
+                _url = f"https://api.zotero.org/users/{_user_id}/items?itemType=attachment&format=json&limit={_limit}&start={_start}"
+                _req = _urllib_request.Request(_url, headers={
+                    "Zotero-API-Key": _api_key,
+                    "User-Agent": "Mozilla/5.0",
+                })
+                with _urllib_request.urlopen(_req, timeout=30) as _resp:
+                    _batch = json.load(_resp)
+                if not _batch:
+                    break
+                _attach_items.extend(_batch)
+                if len(_batch) < _limit:
+                    break
+                _start += _limit
 
-        # Build parent_key -> first PDF attachment_key map
-        _parent_to_pdf = {}
-        for _att in _attach_items:
-            _d = _att.get("data", {})
-            _parent = _d.get("parentItem", "")
-            _ct = _d.get("contentType", "") or ""
-            _att_key = _att.get("key", "")
-            if _parent and _att_key and "pdf" in _ct.lower() and _parent not in _parent_to_pdf:
-                _parent_to_pdf[_parent] = _att_key
-        print(f"  {len(_parent_to_pdf)} PDF attachments found")
+            # Build parent_key -> first PDF attachment_key map
+            _parent_to_pdf = {}
+            for _att in _attach_items:
+                _d = _att.get("data", {})
+                _parent = _d.get("parentItem", "")
+                _ct = _d.get("contentType", "") or ""
+                _att_key = _att.get("key", "")
+                if _parent and _att_key and "pdf" in _ct.lower() and _parent not in _parent_to_pdf:
+                    _parent_to_pdf[_parent] = _att_key
+            print(f"  {len(_parent_to_pdf)} PDF attachments found")
 
-        _slug_to_key = {}
-        _papers_index = Path(_PAPERS_DIR) / "_papers_index.json"
-        if _papers_index.exists():
-            with open(_papers_index, "r", encoding="utf-8") as _pf:
-                for _p in json.load(_pf):
-                    _t = _p.get("title", "")
-                    _s = _p.get("slug", "")
-                    _nt = _norm_title(_t)
-                    if _s and _nt in _title_to_key:
-                        _parent_key = _title_to_key[_nt]
-                        # Use PDF attachment key if available, fall back
-                        # to parent key (which at least selects the item)
-                        _slug_to_key[_s] = _parent_to_pdf.get(_parent_key, _parent_key)
-        if _slug_to_key:
-            _zk_path = Path(DOCS_DIR) / "_zotero_keys.json"
-            _zk_path.write_text(json.dumps(_slug_to_key), encoding="utf-8")
-            print(f"Zotero keys: {_zk_path} ({len(_slug_to_key)} matched, for localhost dev, git-ignored)")
-except Exception as _e:
-    print(f"Zotero keys skipped: {_e}")
+            _slug_to_key = {}
+            _papers_index = Path(_PAPERS_DIR) / "_papers_index.json"
+            if _papers_index.exists():
+                with open(_papers_index, "r", encoding="utf-8") as _pf:
+                    for _p in json.load(_pf):
+                        _t = _p.get("title", "")
+                        _s = _p.get("slug", "")
+                        _nt = _norm_title(_t)
+                        if _s and _nt in _title_to_key:
+                            _parent_key = _title_to_key[_nt]
+                            # Use PDF attachment key if available, fall back
+                            # to parent key (which at least selects the item)
+                            _slug_to_key[_s] = _parent_to_pdf.get(_parent_key, _parent_key)
+            if _slug_to_key:
+                _zk_path = Path(DOCS_DIR) / "_zotero_keys.json"
+                _zk_path.write_text(json.dumps(_slug_to_key), encoding="utf-8")
+                print(f"Zotero keys: {_zk_path} ({len(_slug_to_key)} matched, for localhost dev, git-ignored)")
+    except Exception as _e:
+        print(f"Zotero keys skipped: {_e}")
 
-# Verify no old-style paths
-old_paths = re.findall(r'(?:href|src)="(\d{3}_[^"]*)"', HTML)
-if old_paths:
-    print(f"WARNING: {len(old_paths)} old-style paths found (should use ../papers/ prefix):")
-    for p in old_paths[:5]:
-        print(f"  {p}")
-else:
-    print("OK: All paths use ../papers/ prefix")
+    # Verify no old-style paths
+    old_paths = re.findall(r'(?:href|src)="(\d{3}_[^"]*)"', HTML)
+    if old_paths:
+        print(f"WARNING: {len(old_paths)} old-style paths found (should use ../papers/ prefix):")
+        for p in old_paths[:5]:
+            print(f"  {p}")
+    else:
+        print("OK: All paths use ../papers/ prefix")
 
-# Validate category/sub-category descriptions
-print("\n=== Description Quality Check ===")
-all_issues = []
-for ca_name, ca_data in category_analyses.items():
-    # Validate overview
-    overview = ca_data.get("description_ko", "")
-    all_issues.extend(validate_description(overview, ca_name))
-    # Validate sub-theme descriptions
-    raw_stko = ca_data.get("sub_themes_ko", [])
-    if isinstance(raw_stko, list):
-        for st in raw_stko:
-            if isinstance(st, dict):
-                all_issues.extend(validate_description(
-                    st.get("description_ko", ""), ca_name, st.get("name", "")))
-    elif isinstance(raw_stko, dict):
-        for k, v in raw_stko.items():
-            all_issues.extend(validate_description(v, ca_name, k))
+    # Validate category/sub-category descriptions
+    print("\n=== Description Quality Check ===")
+    all_issues = []
+    for ca_name, ca_data in category_analyses.items():
+        # Validate overview
+        overview = ca_data.get("description_ko", "")
+        all_issues.extend(validate_description(overview, ca_name))
+        # Validate sub-theme descriptions
+        raw_stko = ca_data.get("sub_themes_ko", [])
+        if isinstance(raw_stko, list):
+            for st in raw_stko:
+                if isinstance(st, dict):
+                    all_issues.extend(validate_description(
+                        st.get("description_ko", ""), ca_name, st.get("name", "")))
+        elif isinstance(raw_stko, dict):
+            for k, v in raw_stko.items():
+                all_issues.extend(validate_description(v, ca_name, k))
 
-if all_issues:
-    print(f"WARNING: {len(all_issues)} issues found:")
-    for issue in all_issues:
-        print(f"  - {issue}")
-else:
-    print("OK: All descriptions pass quality check")
+    if all_issues:
+        print(f"WARNING: {len(all_issues)} issues found:")
+        for issue in all_issues:
+            print(f"  - {issue}")
+    else:
+        print("OK: All descriptions pass quality check")
+
+
+if __name__ == "__main__":
+    _run_topic_index()

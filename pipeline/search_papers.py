@@ -397,6 +397,90 @@ def deduplicate(papers: list) -> list:
 # 메인
 # ---------------------------------------------------------------------------
 
+def _run_search(topic, *, days=7, max_papers=100, threshold=0.3,
+                skip_arxiv=False, since=None, until=None, output=None):
+    """Programmatic entrypoint for search_papers."""
+    if topic not in SEARCH_KEYWORDS:
+        raise ValueError(f"unknown topic '{topic}' "
+                         f"(known: {list(SEARCH_KEYWORDS.keys())})")
+    since = since or ""
+    until = until or ""
+
+    now = datetime.now(timezone.utc)
+    if since:
+        since_date = since
+        since_dt = datetime.fromisoformat(since_date).replace(tzinfo=timezone.utc)
+    else:
+        since_dt = now - timedelta(days=days)
+        since_date = since_dt.strftime("%Y-%m-%d")
+    until_date = until
+    since_year = since_dt.year
+
+    if output:
+        output_path = Path(output)
+    else:
+        from config_loader import get_topic_dir
+        output_dir = get_topic_dir(topic)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "_search_results.json"
+
+    kw_config = SEARCH_KEYWORDS[topic]
+    primary_kws = kw_config["primary"]
+    secondary_kws = kw_config["secondary"]
+    all_keywords = primary_kws + secondary_kws
+
+    try:
+        email = get_unpaywall_email()
+    except Exception:
+        email = ""
+
+    window_desc = f"[{since_date}, {until_date or 'today'})"
+    print(f"\n논문 검색 시작: {topic} (윈도우 {window_desc})")
+    print(f"  키워드: {len(primary_kws)}개 주요 + {len(secondary_kws)}개 보조")
+
+    if skip_arxiv:
+        print("\n[1/3] arXiv 검색 건너뛰기 (--skip-arxiv)")
+        arxiv_papers = []
+    else:
+        print("\n[1/3] arXiv 검색 중...")
+        arxiv_papers = search_arxiv(all_keywords, since_date, max_per_keyword=100, until_date=until_date)
+        print(f"  arXiv: {len(arxiv_papers)}건 수집")
+
+    print("\n[2/3] Semantic Scholar 검색 중...")
+    ss_papers = search_semantic_scholar(all_keywords, since_year, max_per_keyword=100)
+    print(f"  Semantic Scholar: {len(ss_papers)}건 수집")
+
+    print("\n[3/3] OpenAlex 검색 중...")
+    oa_papers = search_openalex(all_keywords, since_date, email, max_per_keyword=100, until_date=until_date)
+    print(f"  OpenAlex: {len(oa_papers)}건 수집")
+
+    all_papers = arxiv_papers + ss_papers + oa_papers
+    unique_papers = deduplicate(all_papers)
+    print(f"\n중복 제거 후: {len(unique_papers)}건 고유 논문")
+
+    for p in unique_papers:
+        p["relevance_score"] = round(score_relevance(p, primary_kws, secondary_kws), 3)
+
+    filtered = [p for p in unique_papers if p["relevance_score"] >= threshold]
+    filtered.sort(key=lambda p: p["relevance_score"], reverse=True)
+    filtered = filtered[:max_papers]
+    print(f"필터링 후 (≥{threshold}): {len(filtered)}건")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(filtered, f, ensure_ascii=False, indent=2)
+
+    print(f"\n검색 완료: {topic} ({days}일)")
+    print(f"  arXiv: {len(arxiv_papers)}건")
+    print(f"  Semantic Scholar: {len(ss_papers)}건")
+    print(f"  OpenAlex: {len(oa_papers)}건")
+    print(f"  중복 제거 후: {len(unique_papers)}건 고유")
+    print(f"  필터링 후 (≥{threshold}): {len(filtered)}건")
+    print(f"  출력: {output_path}")
+    return {"output": str(output_path), "filtered": filtered,
+            "arxiv": len(arxiv_papers), "s2": len(ss_papers),
+            "openalex": len(oa_papers), "unique": len(unique_papers)}
+
+
 def main():
     parser = argparse.ArgumentParser(description="다중 소스 학술 논문 검색")
     parser.add_argument("--topic", required=True, choices=list(SEARCH_KEYWORDS.keys()),
@@ -411,93 +495,9 @@ def main():
                         help="arXiv 검색 건너뛰기. 한국 IP 에서 chronic 429/timeout 시 시간 절약 (~8분/호출). "
                              "OpenAlex+Semantic Scholar 만으로도 보통 충분히 broad coverage.")
     args = parser.parse_args()
-
-    topic = args.topic
-    days = args.days
-    max_papers = args.max_papers
-    threshold = args.threshold
-
-    # 날짜 계산 — --since 가 있으면 우선, 없으면 days로 fallback
-    now = datetime.now(timezone.utc)
-    if args.since:
-        since_date = args.since
-        since_dt = datetime.fromisoformat(since_date).replace(tzinfo=timezone.utc)
-    else:
-        since_dt = now - timedelta(days=days)
-        since_date = since_dt.strftime("%Y-%m-%d")
-    until_date = args.until  # 빈 문자열이면 상한 없음
-    since_year = since_dt.year
-
-    # 출력 경로
-    if args.output:
-        output_path = Path(args.output)
-    else:
-        from config_loader import get_topic_dir
-        output_dir = get_topic_dir(topic)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / "_search_results.json"
-
-    # 키워드 로드
-    kw_config = SEARCH_KEYWORDS[topic]
-    primary_kws = kw_config["primary"]
-    secondary_kws = kw_config["secondary"]
-    all_keywords = primary_kws + secondary_kws
-
-    # 이메일 (OpenAlex polite pool)
-    try:
-        email = get_unpaywall_email()
-    except Exception:
-        email = ""
-
-    window_desc = f"[{since_date}, {until_date or 'today'})"
-    print(f"\n논문 검색 시작: {topic} (윈도우 {window_desc})")
-    print(f"  키워드: {len(primary_kws)}개 주요 + {len(secondary_kws)}개 보조")
-
-    # --- arXiv ---
-    if args.skip_arxiv:
-        print("\n[1/3] arXiv 검색 건너뛰기 (--skip-arxiv)")
-        arxiv_papers = []
-    else:
-        print("\n[1/3] arXiv 검색 중...")
-        arxiv_papers = search_arxiv(all_keywords, since_date, max_per_keyword=100, until_date=until_date)
-        print(f"  arXiv: {len(arxiv_papers)}건 수집")
-
-    # --- Semantic Scholar ---
-    print("\n[2/3] Semantic Scholar 검색 중...")
-    ss_papers = search_semantic_scholar(all_keywords, since_year, max_per_keyword=100)
-    print(f"  Semantic Scholar: {len(ss_papers)}건 수집")
-
-    # --- OpenAlex ---
-    print("\n[3/3] OpenAlex 검색 중...")
-    oa_papers = search_openalex(all_keywords, since_date, email, max_per_keyword=100, until_date=until_date)
-    print(f"  OpenAlex: {len(oa_papers)}건 수집")
-
-    # --- 중복 제거 ---
-    all_papers = arxiv_papers + ss_papers + oa_papers
-    unique_papers = deduplicate(all_papers)
-    print(f"\n중복 제거 후: {len(unique_papers)}건 고유 논문")
-
-    # --- 관련성 점수 부여 및 필터링 ---
-    for p in unique_papers:
-        p["relevance_score"] = round(score_relevance(p, primary_kws, secondary_kws), 3)
-
-    filtered = [p for p in unique_papers if p["relevance_score"] >= threshold]
-    filtered.sort(key=lambda p: p["relevance_score"], reverse=True)
-    filtered = filtered[:max_papers]
-    print(f"필터링 후 (≥{threshold}): {len(filtered)}건")
-
-    # --- 저장 ---
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(filtered, f, ensure_ascii=False, indent=2)
-
-    # --- 요약 출력 ---
-    print(f"\n검색 완료: {topic} ({days}일)")
-    print(f"  arXiv: {len(arxiv_papers)}건")
-    print(f"  Semantic Scholar: {len(ss_papers)}건")
-    print(f"  OpenAlex: {len(oa_papers)}건")
-    print(f"  중복 제거 후: {len(unique_papers)}건 고유")
-    print(f"  필터링 후 (≥{threshold}): {len(filtered)}건")
-    print(f"  출력: {output_path}")
+    _run_search(topic=args.topic, days=args.days, max_papers=args.max_papers,
+                threshold=args.threshold, skip_arxiv=args.skip_arxiv,
+                since=args.since, until=args.until, output=args.output)
 
 
 if __name__ == "__main__":

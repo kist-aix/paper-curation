@@ -1269,12 +1269,8 @@ render();
 </html>"""
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate d3.js paper network")
-    parser.add_argument("--topic", default="ai4s")
-    args = parser.parse_args()
-
-    topic = args.topic
+def _run_network(topic="ai4s"):
+    """Programmatic entrypoint for generate_network."""
     topic_dir = str(get_topic_dir(topic))
 
     log(f"Building network for {topic}...")
@@ -1288,6 +1284,14 @@ def main():
         f.write(html)
     log(f"  Written: {out_path} ({len(html):,} chars)")
     log("Done!")
+    return out_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate d3.js paper network")
+    parser.add_argument("--topic", default="ai4s")
+    args = parser.parse_args()
+    _run_network(topic=args.topic)
 
 
 if __name__ == "__main__":

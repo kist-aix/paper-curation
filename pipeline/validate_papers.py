@@ -422,21 +422,14 @@ def check_duplicate_text_md(topic):
     return issues
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Post-build validation")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--fix", action="store_true", help="Auto-fix figure refs + Python list literals")
-    parser.add_argument("--strict", action="store_true",
-                        help="Exit non-zero if any issue is found (deploy gate).")
-    args = parser.parse_args()
-
-    # Load index
+def _run_validate(topic="ai4s", *, fix=False, strict=False):
+    """Programmatic entrypoint for validate_papers."""
     index_path = os.path.join(PAPERS_DIR, "_papers_index.json")
     with open(index_path, "r", encoding="utf-8") as f:
         papers = json.load(f)
 
-    topic_papers = [p for p in papers if args.topic in p.get("topics", [])]
-    log(f"Validating {len(topic_papers)} papers (topic: {args.topic})")
+    topic_papers = [p for p in papers if topic in p.get("topics", [])]
+    log(f"Validating {len(topic_papers)} papers (topic: {topic})")
 
     total_truncated = 0
     total_link = 0
@@ -465,7 +458,7 @@ def main():
         total_link += len(links)
 
         # 3. Figure refs
-        figs, fig_fixed = check_figure_refs(review_path, slug, fix=args.fix)
+        figs, fig_fixed = check_figure_refs(review_path, slug, fix=fix)
         paper_issues.extend(figs)
         total_fig += len(figs)
         if fig_fixed:
@@ -473,7 +466,7 @@ def main():
             slug_fixed = True
 
         # 4. Python list literals
-        pylist, pylist_fixed = check_python_list_literals(review_path, fix=args.fix)
+        pylist, pylist_fixed = check_python_list_literals(review_path, fix=fix)
         paper_issues.extend(pylist)
         total_pylist += len(pylist)
         if pylist_fixed:
@@ -489,7 +482,7 @@ def main():
                 log(issue)
 
     # 4.5 Re-render index.html for slugs whose review.md was auto-fixed
-    if args.fix and fixed_slugs:
+    if fix and fixed_slugs:
         log(f"\n[fix] Regenerating HTML for {len(fixed_slugs)} repaired slugs...")
         try:
             from review_to_html import convert_review, detect_topic
@@ -500,8 +493,8 @@ def main():
                 md_path = os.path.join(slug_dir, "review.md")
                 html_path = os.path.join(slug_dir, "index.html")
                 try:
-                    topic = detect_topic(slug, index_path) or args.topic
-                    html = convert_review(md_path, topic, slug_dir)
+                    detected_topic = detect_topic(slug, index_path) or topic
+                    html = convert_review(md_path, detected_topic, slug_dir)
                     with open(html_path, "w", encoding="utf-8") as f:
                         f.write(html)
                     ok += 1
@@ -513,35 +506,35 @@ def main():
             log(f"[fix] HTML regen import failed: {e}")
 
     # 5. Category ↔ timeline mismatch (topic-level)
-    timeline_issues = check_timeline_mismatch(args.topic)
+    timeline_issues = check_timeline_mismatch(topic)
     if timeline_issues:
-        log(f"\n[topic {args.topic}] timeline mismatch:")
+        log(f"\n[topic {topic}] timeline mismatch:")
         for i in timeline_issues:
             log(i)
 
     # 5b. classifications schema + 카테고리 화이트리스트
-    schema_issues = check_classifications_schema(args.topic)
+    schema_issues = check_classifications_schema(topic)
     if schema_issues:
-        log(f"\n[topic {args.topic}] classifications schema/whitelist:")
+        log(f"\n[topic {topic}] classifications schema/whitelist:")
         for i in schema_issues:
             log(i)
 
     # 5c. DOI 교차검증 (index.doi vs review.md DOI)
-    doi_issues = check_doi_cross_validation(args.topic)
+    doi_issues = check_doi_cross_validation(topic)
     if doi_issues:
-        log(f"\n[topic {args.topic}] DOI cross-validation mismatches:")
+        log(f"\n[topic {topic}] DOI cross-validation mismatches:")
         for i in doi_issues:
             log(i)
 
     # 6. Duplicate text.md (topic-level, PDF 오매칭)
-    dup_issues = check_duplicate_text_md(args.topic)
+    dup_issues = check_duplicate_text_md(topic)
     if dup_issues:
-        log(f"\n[topic {args.topic}] duplicate text.md groups:")
+        log(f"\n[topic {topic}] duplicate text.md groups:")
         for i in dup_issues:
             log(i)
 
     log(f"\n{'='*60}")
-    log(f"Validation Summary ({args.topic})")
+    log(f"Validation Summary ({topic})")
     log(f"{'='*60}")
     log(f"  Papers checked: {len(topic_papers)}")
     log(f"  Truncated sections: {total_truncated}")
@@ -552,7 +545,7 @@ def main():
     log(f"  Schema/whitelist issues: {len(schema_issues)}")
     log(f"  DOI mismatches: {len(doi_issues)}")
     log(f"  Duplicate text.md groups: {len(dup_issues)}")
-    if args.fix:
+    if fix:
         log(f"  Auto-fixed: {total_fixed} papers")
     total_all = (total_truncated + total_link + total_fig + total_pylist
                  + len(timeline_issues) + len(schema_issues)
@@ -562,9 +555,20 @@ def main():
     else:
         log(f"  Total issues: {total_all}")
 
-    if args.strict and total_all > 0:
+    if strict and total_all > 0:
         log(f"\n--strict: failing build due to {total_all} issue(s)")
         sys.exit(1)
+    return total_all
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Post-build validation")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--fix", action="store_true", help="Auto-fix figure refs + Python list literals")
+    parser.add_argument("--strict", action="store_true",
+                        help="Exit non-zero if any issue is found (deploy gate).")
+    args = parser.parse_args()
+    _run_validate(topic=args.topic, fix=args.fix, strict=args.strict)
 
 
 if __name__ == "__main__":

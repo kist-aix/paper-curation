@@ -464,6 +464,11 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
     print("Done.")
 
 
+def _run_search_index(topic, *, model="text-embedding-3-small", limit=None, dry_run=False):
+    """Programmatic entrypoint for build_search_index."""
+    return build_index(topic, model, limit, dry_run)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build Deep Research search index")
     parser.add_argument("--topic", required=True, help="topic alias (e.g. ai4s, scisci)")
@@ -471,7 +476,7 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="limit number of papers (debug)")
     parser.add_argument("--dry-run", action="store_true", help="chunk only, no API calls")
     args = parser.parse_args()
-    build_index(args.topic, args.model, args.limit, args.dry_run)
+    _run_search_index(topic=args.topic, model=args.model, limit=args.limit, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

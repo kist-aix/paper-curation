@@ -209,34 +209,24 @@ def group_duplicates(items):
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
-    ap = argparse.ArgumentParser(description="Zotero collection deduplication")
-    ap.add_argument("--topic", required=True)
-    ap.add_argument("--execute", action="store_true",
-                    help="Actually delete. Default is dry-run.")
-    ap.add_argument("--show-all", action="store_true",
-                    help="Print every duplicate group (verbose).")
-    ap.add_argument("--sleep", type=float, default=0.3,
-                    help="Per-request sleep (seconds) to be nice to Zotero API.")
-    args = ap.parse_args()
-
-    ck = get_collection_key(args.topic)
+def _run_dedup(topic, *, execute=False, show_all=False, sleep=0.3):
+    """Programmatic entrypoint for dedup_zotero."""
+    ck = get_collection_key(topic)
     if not ck:
-        print(f"ERROR: collection for topic {args.topic} not configured", file=sys.stderr)
+        print(f"ERROR: collection for topic {topic} not configured", file=sys.stderr)
         sys.exit(2)
 
-    print(f"[{datetime.now():%H:%M:%S}] Fetching collection '{args.topic}' ({ck})...")
+    print(f"[{datetime.now():%H:%M:%S}] Fetching collection '{topic}' ({ck})...")
     items = list_collection_items(ck)
     print(f"  {len(items)} top-level items")
 
-    # Prefetch children in bulk (one API call per item — batch size 1 is a Zotero constraint for /children)
     print(f"[{datetime.now():%H:%M:%S}] Fetching children for {len(items)} items...")
     t0 = time.time()
     for i, it in enumerate(items, 1):
         it["_children"] = list_children(it["key"])
         if i % 50 == 0 or i == len(items):
             print(f"  [{i}/{len(items)}] {time.time()-t0:.0f}s elapsed")
-        time.sleep(args.sleep)
+        time.sleep(sleep)
 
     groups = group_duplicates(items)
     print(f"\n[{datetime.now():%H:%M:%S}] Duplicate groups: {len(groups)}")
@@ -276,7 +266,7 @@ def main():
     print(f"  Items to delete: {total_to_delete}")
     print(f"  Items to keep  : {len(actions)}  (one per group)")
 
-    if args.show_all or not args.execute:
+    if show_all or not execute:
         for i, a in enumerate(actions, 1):
             print(f"\n  [group {i}] size={a['group_size']}")
             k = a["keep"]
@@ -284,26 +274,25 @@ def main():
             for r in a["remove"]:
                 print(f"    DELETE {r['key']} (pdf={r['has_pdf']}, score={r['score']}): {r['title']}")
 
-    # Write report
-    report_path = get_topic_dir(args.topic) / "_dedup_zotero_report.json"
+    report_path = get_topic_dir(topic) / "_dedup_zotero_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     from lib.atomic_io import atomic_write_json
     atomic_write_json(report_path, {
-        "topic": args.topic,
+        "topic": topic,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "total_items": len(items),
         "duplicate_groups": len(groups),
         "items_to_delete": total_to_delete,
         "actions": actions,
-        "mode": "execute" if args.execute else "dry-run",
+        "mode": "execute" if execute else "dry-run",
     })
     print(f"\n  Report: {report_path}")
 
-    if not args.execute:
+    if not execute:
         print("\n  (dry-run) No deletions performed. Run with --execute to apply.")
-        return
+        return {"groups": len(groups), "items_to_delete": total_to_delete,
+                "report_path": str(report_path)}
 
-    # Execute deletions
     print(f"\n[{datetime.now():%H:%M:%S}] Deleting {total_to_delete} items...")
     deleted = 0
     failed = []
@@ -320,11 +309,27 @@ def main():
             except Exception as e:
                 print(f"  FAIL {r['key']}: {e}")
                 failed.append({"key": r["key"], "error": str(e)})
-            time.sleep(args.sleep)
+            time.sleep(sleep)
 
     print(f"\nDone. Deleted {deleted}/{total_to_delete}")
     if failed:
         print(f"Failed: {len(failed)} — see {report_path}")
+    return {"groups": len(groups), "deleted": deleted, "failed": failed,
+            "report_path": str(report_path)}
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Zotero collection deduplication")
+    ap.add_argument("--topic", required=True)
+    ap.add_argument("--execute", action="store_true",
+                    help="Actually delete. Default is dry-run.")
+    ap.add_argument("--show-all", action="store_true",
+                    help="Print every duplicate group (verbose).")
+    ap.add_argument("--sleep", type=float, default=0.3,
+                    help="Per-request sleep (seconds) to be nice to Zotero API.")
+    args = ap.parse_args()
+    _run_dedup(topic=args.topic, execute=args.execute,
+               show_all=args.show_all, sleep=args.sleep)
 
 
 if __name__ == "__main__":

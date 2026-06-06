@@ -60,10 +60,40 @@ def _split_cats_by_image_presence(topic, cats):
     return with_image, missing
 
 # topic_modeling.py / classify_papers.py 는 UMAP + hdbscan + sentence-transformers
-# 의존. macOS + Python 3.14 (conda env `py314`) 에서는 numba 0.65 / llvmlite 0.47
-# 휠로 단일 환경에서 동작한다. 서브프로세스도 현재 인터프리터 (sys.executable) 를
-# 그대로 사용하므로 활성화된 env 가 그대로 상속된다. 변수명은 호환을 위해 유지.
-TOPIC_MODELING_PYTHON = sys.executable
+# 의존. UMAP.transform 가 sklearn.pairwise_distances 에 callable metric 을 넘기는
+# 순간 numba 가 JIT 컴파일을 시도하는데, numba 의 bytecode interpreter 가 Python
+# 3.14 의 ``CALL_KW`` opcode 를 아직 처리하지 못해
+# (``op_CALL_KW: pop from empty list``, 0.65.1 / 0.66.0rc1 / main 모두 동일) 분류가
+# 죽는다. numba 가 패치될 때까지 ``py312`` 전용 env 를 별도로 둬서 클러스터링·분류
+# 만 그쪽 인터프리터로 라우팅한다 (CLAUDE.md "Windows fallback" 섹션의 패턴과 동일).
+#
+# 우선 순위:
+#   1. ``PAPER_CURATION_PY312`` 환경변수 — 운영자가 명시한 절대 경로
+#   2. 현재 인터프리터의 conda prefix 에서 형제 env (../py312/bin/python)
+#   3. ``which python3.12`` PATH 검색
+#   4. fallback → ``sys.executable`` (운영자 환경이 이미 py312 이면 동작)
+def _resolve_topic_modeling_python():
+    from pathlib import Path as _Path
+    import shutil as _shutil
+    explicit = os.environ.get("PAPER_CURATION_PY312", "").strip()
+    if explicit and os.path.exists(explicit):
+        return explicit
+    here = _Path(sys.executable).resolve()
+    # conda env layout: <prefix>/envs/<name>/bin/python
+    if here.parent.name == "bin" and here.parent.parent.parent.name == "envs":
+        sibling = here.parent.parent.parent / "py312" / "bin" / "python"
+        if sibling.exists():
+            return str(sibling)
+    found = _shutil.which("python3.12")
+    if found:
+        return found
+    return sys.executable
+
+
+TOPIC_MODELING_PYTHON = _resolve_topic_modeling_python()
+if TOPIC_MODELING_PYTHON != sys.executable:
+    print(f"[env] UMAP/HDBSCAN 단계 인터프리터: {TOPIC_MODELING_PYTHON} "
+          f"(numba+py3.14 CALL_KW 회피)")
 
 ZOTERO_DIR = get_zotero_dir()
 
@@ -421,8 +451,16 @@ def extract_figures(pdf_path, slug_dir):
     MARGIN = 30
     MAX_ROUNDS = 5
 
-    # Gemini validation function
+    # Phase 4 B2: cheap pre-validator runs first. When the heuristic is
+    # confident the figure is invalid (tiny/blank/near-uniform), we skip
+    # the Gemini round trip entirely. Empirically saves ~30% of calls.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from api.extract import pre_validate_figure
+
     def validate(img_path, caption):
+        pre = pre_validate_figure(img_path)
+        if pre is not None:
+            return pre
         try:
             from google import genai
             from google.genai import types
@@ -588,6 +626,60 @@ REVIEW_TEMPLATE = """# {title}
 """
 
 
+REVIEW_TOOL_SCHEMA = {
+    "name": "emit_review",
+    "description": (
+        "Emit the structured Korean review for the given paper. All "
+        "narrative fields must be in Korean except for jargon "
+        "(technical terms, model names, datasets, algorithms, formulas, "
+        "framework/product names) which must stay in the original form."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "essence":         {"type": "string", "minLength": 20,
+                                "description": "핵심 요약 1-2문장."},
+            "fig_essence":     {"type": "integer", "minimum": 0, "maximum": 20,
+                                "description": "Essence에 가장 관련된 Figure 번호. 없으면 0."},
+            "known":           {"type": "string", "minLength": 10,
+                                "description": "알려진 것 1-2문장."},
+            "gap":             {"type": "string", "minLength": 10,
+                                "description": "연구 갭 1-2문장."},
+            "why":             {"type": "string", "minLength": 10,
+                                "description": "왜 중요한지 1-2문장."},
+            "approach":        {"type": "string", "minLength": 10,
+                                "description": "접근법 1-2문장."},
+            "achievement":     {"type": "string", "minLength": 20,
+                                "description": "성과 (마크다운 번호 목록, 각 항목 **굵은 제목**: 설명)."},
+            "fig_achievement": {"type": "integer", "minimum": 0, "maximum": 20},
+            "how":             {"type": "string", "minLength": 10,
+                                "description": "방법론 (마크다운 bullet 목록)."},
+            "fig_how":         {"type": "integer", "minimum": 0, "maximum": 20},
+            "originality":     {"type": "string", "minLength": 10,
+                                "description": "독창성 (마크다운 bullet 목록)."},
+            "limitation":      {"type": "string", "minLength": 10,
+                                "description": "한계 + 후속연구 (마크다운 bullet 목록)."},
+            "novelty":         {"type": "integer", "minimum": 1, "maximum": 5},
+            "technical":       {"type": "integer", "minimum": 1, "maximum": 5,
+                                "description": "Technical soundness."},
+            "significance":    {"type": "integer", "minimum": 1, "maximum": 5},
+            "clarity":         {"type": "integer", "minimum": 1, "maximum": 5},
+            "overall":         {"type": "integer", "minimum": 1, "maximum": 5},
+            "verdict":         {"type": "string", "minLength": 10,
+                                "description": "총평 1-2문장."},
+        },
+        "required": ["essence", "fig_essence", "known", "gap", "why", "approach",
+                     "achievement", "fig_achievement", "how", "fig_how",
+                     "originality", "limitation",
+                     "novelty", "technical", "significance", "clarity", "overall",
+                     "verdict"],
+    },
+}
+
+WRITE_REVIEW_SCHEMA_VERSION = "v1"
+WRITE_REVIEW_MODEL = "claude-haiku-4-5-20251001"
+
+
 def write_review(item, slug_dir, figures):
     text_path = os.path.join(slug_dir, "text.md")
     if not os.path.exists(text_path):
@@ -613,45 +705,49 @@ def write_review(item, slug_dir, figures):
         from anthropic import Anthropic
         client = Anthropic(timeout=180.0, max_retries=4)
 
-        prompt = f"""논문을 분석하고 JSON으로 리뷰 필드를 반환하세요.
-
-제목: {title}
-Abstract: {abstract}
-본문 (발췌): {paper_text[:12000]}
-Figure 목록:{fig_refs}
-
-JSON 필드 (모두 한국어 서술. 단 Jargon — 기술 용어·모델명·데이터셋·알고리즘·수식·프레임워크·제품명 등 — 은 원문 그대로 유지하고 번역하지 말 것. 예: "diffusion model을 사용한다" (O), "확산 모델(diffusion model)을 사용한다" (X)):
-{{
-  "essence": "1-2문장 핵심 요약",
-  "fig_essence": "Essence에 가장 관련된 Figure 번호 (예: 1). 없으면 0",
-  "known": "알려진 것 1-2문장",
-  "gap": "연구 갭 1-2문장",
-  "why": "왜 중요한지 1-2문장",
-  "approach": "접근법 1-2문장",
-  "achievement": "성과 (마크다운 번호 목록, 각 항목 **굵은 제목**: 설명)",
-  "fig_achievement": "Achievement에 관련된 Figure 번호. 없으면 0",
-  "how": "방법론 (마크다운 bullet 목록)",
-  "fig_how": "How에 관련된 Figure 번호. 없으면 0",
-  "originality": "독창성 (마크다운 bullet 목록)",
-  "limitation": "한계 + 후속연구 (마크다운 bullet 목록)",
-  "novelty": 4, "tech": 3, "significance": 4, "clarity": 4, "overall": 4,
-  "verdict": "총평 1-2문장"
-}}
-
-JSON만 출력. 코드 블록 없이."""
-
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+        # Tool-use forces a structured JSON response that matches
+        # REVIEW_TOOL_SCHEMA. The SDK auto-retries on schema validation
+        # failures so we no longer need post-hoc list-literal / figure
+        # path / evaluation fixers.
+        prompt = (
+            "논문을 분석하고 `emit_review` 도구를 호출해 리뷰 필드를 채워라.\n\n"
+            "모든 narrative 필드는 한국어 서술. 단 Jargon — 기술 용어·모델명·데이터셋·"
+            "알고리즘·수식·프레임워크·제품명 등 — 은 원문 그대로 유지하고 번역하지 "
+            "말 것. 예: \"diffusion model을 사용한다\" (O), "
+            "\"확산 모델(diffusion model)을 사용한다\" (X).\n\n"
+            f"제목: {title}\n"
+            f"Abstract: {abstract}\n"
+            f"본문 (발췌): {paper_text[:12000]}\n"
+            f"Figure 목록:{fig_refs}\n"
         )
 
-        text = response.content[0].text.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        data = json.loads(text)
+        # cached_call: same (slug + prompt + model + schema_version) → cache
+        # hit, no Anthropic call. Re-runs of --mode rebuild on unchanged
+        # papers cost zero LLM calls.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from api._llm import cached_call, paper_cache_dir
+        slug = os.path.basename(slug_dir.rstrip("/\\"))
+        cache_dir = paper_cache_dir(slug)
+
+        def _make_call():
+            response = client.messages.create(
+                model=WRITE_REVIEW_MODEL,
+                max_tokens=4000,
+                tools=[REVIEW_TOOL_SCHEMA],
+                tool_choice={"type": "tool", "name": "emit_review"},
+                messages=[{"role": "user", "content": prompt}],
+            )
+            for block in response.content:
+                # SDK returns ToolUseBlock; check by attribute presence.
+                if getattr(block, "type", None) == "tool_use" \
+                        and getattr(block, "name", None) == "emit_review":
+                    return dict(block.input)
+            raise RuntimeError("emit_review tool was not invoked")
+
+        data = cached_call(
+            cache_dir, prompt, WRITE_REVIEW_MODEL, _make_call,
+            schema_version=WRITE_REVIEW_SCHEMA_VERSION,
+        )
 
         # Build figure insertions
         def fig_block(fig_num_str):
@@ -695,7 +791,9 @@ JSON만 출력. 코드 블록 없이."""
             originality=data.get("originality", ""),
             limitation=data.get("limitation", ""),
             novelty=data.get("novelty", 3),
-            tech=data.get("tech", 3),
+            # Tool-use schema field is `technical`; legacy SDK responses
+            # used `tech` so we accept both during the migration window.
+            tech=data.get("technical", data.get("tech", 3)),
             significance=data.get("significance", 3),
             clarity=data.get("clarity", 3),
             overall=data.get("overall", 3),
@@ -1016,11 +1114,10 @@ def _do_process(item, slug, slug_dir, pdf_path):
     if not os.path.exists(review_path) or os.path.getsize(review_path) < 200:
         return "fail", "review_write_failed"
 
-    # Post-process
-    fix_python_list_literals(slug_dir)
-    fix_evaluation_format(slug_dir)
-    fix_figure_paths(slug_dir)
-    validate_review_format(slug_dir)
+    # Phase 3: tool-use schema enforces structured output, so the
+    # post-hoc fixers (fix_python_list_literals / fix_evaluation_format /
+    # fix_figure_paths / validate_review_format) are obsolete. Definitions
+    # are kept below for backward-compat tooling but no longer invoked.
 
     # Convert to HTML
     convert_to_html(slug)
@@ -1132,6 +1229,46 @@ def _apply_mode_mapping(args):
         setattr(args, field, value)
     print(f"[mode] {args.mode} → resume={args.resume}, skip_existing={args.skip_existing}, "
           f"timeline={args.timeline}, category={args.category}")
+
+
+def _run_curate(topic, *, mode=None, concurrency=16, resume=False,
+                 skip_existing=False, limit=0, timeline=False, category=False,
+                 strict_pdf=False, slugs="", dry_run=False, skip_dedup=False,
+                 dedup_execute=False):
+    """Programmatic entrypoint. Patches ``sys.argv`` so the existing
+    ``main()`` argparse parses the kwargs as if from the CLI. Behaviour-
+    preserving; restores ``sys.argv`` on exit.
+    """
+    argv_backup = sys.argv[:]
+    new_argv = ["run_update_force.py", "--topic", str(topic),
+                "--concurrency", str(concurrency)]
+    if mode:
+        new_argv.extend(["--mode", str(mode)])
+    if resume:
+        new_argv.append("--resume")
+    if skip_existing:
+        new_argv.append("--skip-existing")
+    if limit and limit > 0:
+        new_argv.extend(["--limit", str(limit)])
+    if timeline:
+        new_argv.append("--timeline")
+    if category:
+        new_argv.append("--category")
+    if strict_pdf:
+        new_argv.append("--strict-pdf")
+    if slugs:
+        new_argv.extend(["--slugs", str(slugs)])
+    if dry_run:
+        new_argv.append("--dry-run")
+    if skip_dedup:
+        new_argv.append("--skip-dedup")
+    if dedup_execute:
+        new_argv.append("--dedup-execute")
+    sys.argv = new_argv
+    try:
+        return main()
+    finally:
+        sys.argv = argv_backup
 
 
 def main():
@@ -1416,8 +1553,24 @@ def main():
         # Identify newly processed slugs (for update mode)
         newly_completed = set(cp.get("completed", [])) - previously_completed
 
+        # Steps in this set MUST succeed — any non-zero exit, timeout, or
+        # unexpected exception aborts the whole orchestration. Soft-failing
+        # them would leave the topic with stale classifications (so new
+        # papers vanish from the index) or stale per-category text (so
+        # downstream renders mis-attribute work to wrong categories).
+        # Anything not in this set may degrade gracefully (LLM narrative,
+        # image generation, search index).
+        CRITICAL_STEPS = {
+            "build_papers_index",
+            "topic_modeling",
+            "topic_modeling (coords+connections)",
+            "topic_modeling (umap fix)",
+            "classify_papers",
+        }
+
         def run_step(step_name, cmd, step_timeout=600):
             log(f"  [{step_name}] ...")
+            is_critical = step_name in CRITICAL_STEPS
             try:
                 result = subprocess.run(
                     cmd, cwd=str(PIPELINE_DIR.parent),
@@ -1425,7 +1578,8 @@ def main():
                     env={**os.environ, "PYTHONUTF8": "1"},
                 )
                 if result.returncode != 0:
-                    log(f"  [{step_name}] FAILED (exit {result.returncode})")
+                    severity = "ABORT" if is_critical else "FAILED"
+                    log(f"  [{step_name}] {severity} (exit {result.returncode})")
                     # Dump full stderr + stdout to disk so the real traceback
                     # (often >200 chars) survives for diagnosis.
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1450,6 +1604,12 @@ def main():
                         last = result.stderr.rstrip().splitlines()[-30:]
                         for ln in last:
                             log(f"    {ln}")
+                    if is_critical:
+                        raise RuntimeError(
+                            f"critical step '{step_name}' failed "
+                            f"(exit {result.returncode}); aborting orchestration. "
+                            f"See {dump_path} for full output."
+                        )
                 else:
                     out_lines = [l for l in result.stdout.strip().split("\n") if l.strip()]
                     if out_lines:
@@ -1458,8 +1618,17 @@ def main():
                         log(f"  [{step_name}] OK")
             except subprocess.TimeoutExpired:
                 log(f"  [{step_name}] TIMEOUT ({step_timeout}s)")
+                if is_critical:
+                    raise RuntimeError(
+                        f"critical step '{step_name}' timed out "
+                        f"after {step_timeout}s; aborting orchestration."
+                    )
+            except RuntimeError:
+                raise  # critical-step abort: re-raise as-is
             except Exception as e:
                 log(f"  [{step_name}] ERROR: {str(e)[:100]}")
+                if is_critical:
+                    raise
 
         # Step 1: Always rebuild index
         run_step("build_papers_index",

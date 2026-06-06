@@ -45,8 +45,50 @@ def collect_sub_themes_from_index(cat_name, papers, topic):
     ]
 
 
+def _call_with_invariant_gate(prompt, model, max_tokens, label, client,
+                                max_retries=1):
+    """Call Haiku and enforce ``validate_description`` invariants.
+
+    On a violation we retry once with a hint that explicitly names the
+    issue. If the retry still fails we return the best attempt and let
+    the caller decide whether to log/escalate. Returns (text, issue) —
+    ``issue`` is ``None`` on success.
+    """
+    last_text = ""
+    last_issue = None
+    for attempt in range(max_retries + 1):
+        local_prompt = prompt
+        if attempt > 0 and last_issue:
+            local_prompt = (
+                f"{prompt}\n\n[직전 출력의 문제]: {last_issue}\n"
+                "위 문제를 고치되 같은 규칙을 모두 지켜 다시 작성하세요."
+            )
+        try:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": local_prompt}],
+            )
+            text = resp.content[0].text.strip()
+            if text and text[-1] not in ".다":
+                text += "."
+        except Exception as e:
+            return "", f"{label}: 호출 실패 ({type(e).__name__})"
+
+        issue = validate_description(text, label)
+        if issue is None:
+            return text, None
+        last_text = text
+        last_issue = issue
+    return last_text, last_issue
+
+
 def generate_description_ko(cat_name, papers, sub_themes, client, topic="ai4s"):
-    """카테고리 overview 한글 설명 생성 ([NNN] 마커)."""
+    """카테고리 overview 한글 설명 생성 ([NNN] 마커).
+
+    invariant gate (length, korean ratio, [NNN] residue, terminal punct)
+    위반 시 1회 자동 재호출.
+    """
     top = sorted(papers, key=lambda x: -x.get("score", 0))[:20]
     refs = "\n".join(f"[{p['slug'].split('_')[0]}] {p['title'][:60]}" for p in top)
     sub_names = ", ".join(st["name"] for st in sub_themes)
@@ -64,23 +106,18 @@ Sub-themes: {sub_names}
 - 반드시 마침표(.)로 끝나는 완결된 문장
 - 텍스트만 출력"""
 
-    try:
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        ko = resp.content[0].text.strip()
-        if ko and ko[-1] not in ".다":
-            ko += "."
-        return ko
-    except Exception as e:
-        print(f"  ERR overview {cat_name}: {e}")
-        return ""
+    text, issue = _call_with_invariant_gate(
+        prompt, "claude-haiku-4-5-20251001", 1500, cat_name, client,
+    )
+    if issue is not None and text:
+        print(f"  WARN overview {cat_name}: {issue} (best-effort 반환)")
+    elif not text:
+        print(f"  ERR overview {cat_name}: {issue}")
+    return text
 
 
 def generate_sub_theme_ko(cat_name, st_name, st_desc, papers, client):
-    """Sub-theme 한글 설명 생성 ([NNN] 마커)."""
+    """Sub-theme 한글 설명 생성 ([NNN] 마커). invariant gate 적용."""
     refs = "\n".join(f"[{p['slug'].split('_')[0]}] {p['title'][:60]}"
                      for p in sorted(papers, key=lambda x: -x.get('score', 0))[:8])
     if not refs:
@@ -100,19 +137,16 @@ Sub-category: {st_name} ({len(papers)}편)
 - 반드시 마침표(.)로 끝나는 완결된 문장
 - 텍스트만 출력"""
 
-    try:
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        ko = resp.content[0].text.strip()
-        if ko and ko[-1] not in ".다":
-            ko += "."
-        return ko
-    except Exception as e:
-        print(f"  ERR sub-ko {cat_name}/{st_name}: {e}")
+    label = f"{cat_name}/{st_name}"
+    text, issue = _call_with_invariant_gate(
+        prompt, "claude-haiku-4-5-20251001", 1000, label, client,
+    )
+    if issue is not None and text:
+        print(f"  WARN sub-ko {label}: {issue} (best-effort 반환)")
+    elif not text:
+        print(f"  ERR sub-ko {label}: {issue}")
         return st_desc
+    return text
 
 
 def validate_description(text, label):
@@ -129,32 +163,28 @@ def validate_description(text, label):
     return None
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Build _category_summaries.json")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--regen-ko", action="store_true", help="한글 설명만 재생성")
-    parser.add_argument("--categories", nargs="+", help="Specific categories to regenerate (others preserved)")
-    args = parser.parse_args()
+def _run_category_summary(topic="ai4s", *, regen_ko=False, categories=None):
+    """Programmatic entrypoint for build_category_summaries.
 
-    topic_dir = str(get_topic_dir(args.topic))
+    `categories` is a list of category names to selectively regenerate.
+    """
+    topic_dir = str(get_topic_dir(topic))
     sum_path = os.path.join(topic_dir, "_category_summaries.json")
 
     with open(os.path.join(PAPERS_DIR, "_papers_index.json"), "r", encoding="utf-8") as f:
         papers = json.load(f)
 
-    # Filter papers belonging to this topic, read from classifications[topic]
-    topic_papers = [p for p in papers if args.topic in p.get("topics", [])]
-    print(f"Topic '{args.topic}': {len(topic_papers)} papers (of {len(papers)} total)")
+    topic_papers = [p for p in papers if topic in p.get("topics", [])]
+    print(f"Topic '{topic}': {len(topic_papers)} papers (of {len(papers)} total)")
 
     cat_papers = defaultdict(list)
     for p in topic_papers:
-        cls = p.get("classifications", {}).get(args.topic, {})
+        cls = p.get("classifications", {}).get(topic, {})
         cat_papers[cls.get("primary_category", "Other")].append(p)
 
-    # Sub-category papers mapping (from classifications[topic])
     sub_papers = defaultdict(list)
     for p in topic_papers:
-        cls = p.get("classifications", {}).get(args.topic, {})
+        cls = p.get("classifications", {}).get(topic, {})
         pc = cls.get("primary_category", "")
         sc = cls.get("sub_categories", {}).get(pc, cls.get("sub_category", ""))
         key = (pc, sc)
@@ -162,27 +192,25 @@ def main():
 
     client = Anthropic(timeout=180.0, max_retries=4)
 
-    # Load existing or start fresh
-    if args.regen_ko and os.path.exists(sum_path):
+    if regen_ko and os.path.exists(sum_path):
         with open(sum_path, "r", encoding="utf-8") as f:
             summaries = json.load(f)
     else:
         summaries = []
 
-    if not args.regen_ko:
-        # --categories: preserve existing, only regenerate specified categories
-        if args.categories and os.path.exists(sum_path):
+    if not regen_ko:
+        if categories and os.path.exists(sum_path):
             with open(sum_path, "r", encoding="utf-8") as f:
                 existing = json.load(f)
             current_cats = set(cat_papers.keys())
             preserved = [s for s in existing
-                         if s["category"] not in args.categories
+                         if s["category"] not in categories
                          and s["category"] in current_cats]
             dropped = [s["category"] for s in existing
-                       if s["category"] not in args.categories
+                       if s["category"] not in categories
                        and s["category"] not in current_cats]
             summaries = preserved
-            CATEGORIES = [c for c in args.categories if c in cat_papers]
+            CATEGORIES = [c for c in categories if c in cat_papers]
             print(f"  Selective update: {len(CATEGORIES)} categories to regenerate, {len(preserved)} preserved")
             if dropped:
                 print(f"  Dropped {len(dropped)} stale categories: {dropped}")
@@ -196,14 +224,12 @@ def main():
 
             print(f"\n{cat_name} ({len(plist)} papers)...")
 
-            # Collect sub-themes from classifications[topic] (canonical names)
             if len(plist) > 30:
-                sub_themes = collect_sub_themes_from_index(cat_name, plist, args.topic)
+                sub_themes = collect_sub_themes_from_index(cat_name, plist, topic)
                 print(f"  {len(sub_themes)} sub-themes (from index)")
             else:
                 sub_themes = []
 
-            # Top papers
             top = sorted(plist, key=lambda x: -x.get("score", 0))[:20]
 
             summaries.append({
@@ -216,41 +242,56 @@ def main():
                             "score": p.get("score", 0), "date": p.get("date", "")} for p in top],
             })
 
-    # Generate Korean descriptions
-    print("\nGenerating Korean descriptions...")
+    print("\nGenerating Korean descriptions (parallel per-category)...")
     issues = []
-    regen_set = set(args.categories) if args.categories else None
-    for s in summaries:
+    issues_lock = __import__("threading").Lock()
+    regen_set = set(categories) if categories else None
+
+    def _process_one(s):
+        """Generate KO description + sub-theme descriptions for a single
+        category. Mutates ``s`` in place; safe because each thread owns
+        its own ``s`` dict reference."""
         cat = s["category"]
-        # Skip categories not in regen set (already have description_ko)
         if regen_set and cat not in regen_set:
-            continue
+            return
         plist = cat_papers.get(cat, [])
 
-        # Overview
         existing_ko = s.get("description_ko", "")
-        if not existing_ko or args.regen_ko or validate_description(existing_ko, cat):
-            ko = generate_description_ko(cat, plist, s.get("sub_themes", []), client, topic=args.topic)
+        if not existing_ko or regen_ko or validate_description(existing_ko, cat):
+            ko = generate_description_ko(cat, plist, s.get("sub_themes", []), client, topic=topic)
             s["description_ko"] = ko
             issue = validate_description(ko, cat)
             if issue:
-                issues.append(issue)
+                with issues_lock:
+                    issues.append(issue)
             print(f"  {cat}: overview {len(ko)}chars")
 
-        # Sub-theme descriptions
         for st in s.get("sub_themes", []):
             existing_stko = st.get("description_ko", "")
             label = f"{cat}/{st['name']}"
-            if not existing_stko or args.regen_ko or validate_description(existing_stko, label):
+            if not existing_stko or regen_ko or validate_description(existing_stko, label):
                 sp = sub_papers.get((cat, st["name"]), [])
                 ko = generate_sub_theme_ko(cat, st["name"], st.get("description", ""), sp, client)
                 st["description_ko"] = ko
                 issue = validate_description(ko, label)
                 if issue:
-                    issues.append(issue)
+                    with issues_lock:
+                        issues.append(issue)
             print(f"    {st['name']}: {len(st.get('description_ko',''))}chars")
 
-    # Save
+    # ThreadPool: Haiku calls are I/O-bound. Anthropic Tier 4 (~5k RPM,
+    # 400k ITPM) easily handles 8 concurrent category workers.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    max_workers = int(os.environ.get("CAT_SUMMARY_PARALLEL", "8"))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(_process_one, s) for s in summaries]
+        for fut in as_completed(futures):
+            # Surface exceptions; per-category failure shouldn't kill the rest.
+            try:
+                fut.result()
+            except Exception as e:
+                print(f"  [category failed] {str(e)[:120]}")
+
     os.makedirs(topic_dir, exist_ok=True)
     from lib.atomic_io import atomic_write_json
     atomic_write_json(sum_path, summaries)
@@ -262,6 +303,17 @@ def main():
             print(f"  - {issue}")
     else:
         print("OK: All descriptions pass quality check")
+    return summaries
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build _category_summaries.json")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--regen-ko", action="store_true", help="한글 설명만 재생성")
+    parser.add_argument("--categories", nargs="+", help="Specific categories to regenerate (others preserved)")
+    args = parser.parse_args()
+    _run_category_summary(topic=args.topic, regen_ko=args.regen_ko,
+                          categories=args.categories)
 
 
 if __name__ == "__main__":

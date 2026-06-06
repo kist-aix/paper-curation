@@ -791,6 +791,94 @@ def save_results(topic, registered, duplicates, failed_pdf):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def _run_register(topic, *, input_path=None, dry_run=False):
+    """Programmatic entrypoint for register_zotero (normal register mode)."""
+    collection_key = get_collection_key(topic)
+    if not collection_key:
+        print(f"오류: 토픽 '{topic}'에 대한 컬렉션 키를 찾을 수 없습니다.")
+        return None
+
+    zotero_dir = ZOTERO_DIR or os.path.join(str(get_topic_dir(topic)), "_pdfs")
+    input_path = input_path or os.path.join(str(get_topic_dir(topic)), "_search_results.json")
+    if not os.path.exists(input_path):
+        print(f"오류: 검색 결과 파일이 없습니다: {input_path}")
+        return None
+
+    log(f"=== Zotero 등록 시작: {topic} ===")
+    if dry_run:
+        log("[dry-run 모드: 실제 등록/다운로드 없음]")
+
+    with open(input_path, "r", encoding="utf-8") as f:
+        papers = json.load(f)
+    log(f"입력 논문: {len(papers)}편")
+
+    new_papers, duplicates = check_duplicates(papers)
+
+    log(f"\n신규 등록: {len(new_papers)}편")
+    registered = register_items(new_papers, collection_key, dry_run=dry_run)
+
+    log(f"\nPDF 다운로드 + 첨부 시작")
+    failed_pdf = download_and_attach(registered, zotero_dir, dry_run=dry_run)
+
+    out_path = save_results(topic, registered, duplicates, failed_pdf)
+
+    pdf_success = sum(1 for r in registered if r.get("pdf"))
+    print(f"\nZotero 등록 완료: {topic}")
+    print(f"  입력: {len(papers)}편")
+    print(f"  중복 (건너뜀): {len(duplicates)}편")
+    print(f"  신규 등록: {len(registered)}편")
+    print(f"  PDF 다운로드: {pdf_success}/{len(registered)} 성공")
+    if failed_pdf:
+        print(f"  PDF 실패: {len(failed_pdf)}편 (수동 다운로드 필요)")
+    print(f"  결과: {out_path}")
+    return {"registered": len(registered), "duplicates": len(duplicates),
+            "pdf_success": pdf_success, "pdf_failed": len(failed_pdf),
+            "out_path": out_path}
+
+
+def _run_fix_pdfs(topic, *, dry_run=False):
+    """Programmatic entrypoint for register_zotero --fix-pdfs mode."""
+    collection_key = get_collection_key(topic)
+    if not collection_key:
+        print(f"오류: 토픽 '{topic}'에 대한 컬렉션 키를 찾을 수 없습니다.")
+        return None
+    zotero_dir = ZOTERO_DIR or os.path.join(str(get_topic_dir(topic)), "_pdfs")
+    log(f"=== PDF 재시도 모드: {topic} ===")
+    if dry_run:
+        log("[dry-run 모드]")
+    success, total, failed = fix_pdfs(collection_key, zotero_dir, dry_run=dry_run)
+    print(f"\nZotero PDF 재시도 완료: {topic}")
+    print(f"  대상: {total}편")
+    print(f"  성공: {success}편")
+    print(f"  실패: {len(failed)}편")
+    return {"success": success, "total": total, "failed": failed}
+
+
+def _run_fix_metadata(topic, *, dry_run=False, limit=None):
+    """Programmatic entrypoint for register_zotero --fix-metadata mode."""
+    collection_key = get_collection_key(topic)
+    if not collection_key:
+        print(f"오류: 토픽 '{topic}'에 대한 컬렉션 키를 찾을 수 없습니다.")
+        return None
+    log(f"=== Metadata 보강 모드: {topic} ===")
+    if dry_run:
+        log("[dry-run 모드]")
+    success, skip, failed, fail_log = fix_metadata(
+        collection_key, dry_run=dry_run, limit=limit,
+    )
+    print(f"\nZotero metadata 보강 완료: {topic}")
+    print(f"  보강 (PATCH): {success}편")
+    print(f"  변경 없음 (skip): {skip}편")
+    print(f"  실패: {failed}편")
+    if fail_log:
+        out_path = os.path.join(str(get_topic_dir(topic)),
+                                 "_fix_metadata_failures.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(fail_log, f, ensure_ascii=False, indent=2)
+        print(f"  실패 로그: {out_path}")
+    return {"success": success, "skip": skip, "failed": failed}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Zotero 논문 등록 + PDF 첨부")
     parser.add_argument("--topic", required=True, help="토픽 (ai4s 또는 scisci)")
@@ -803,85 +891,12 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="실제 등록/다운로드 없이 미리 보기")
     args = parser.parse_args()
 
-    topic = args.topic
-    collection_key = get_collection_key(topic)
-    if not collection_key:
-        print(f"오류: 토픽 '{topic}'에 대한 컬렉션 키를 찾을 수 없습니다.")
-        return
-
-    zotero_dir = ZOTERO_DIR or os.path.join(str(get_topic_dir(topic)), "_pdfs")
-
-    # ── --fix-metadata 모드 ──
     if args.fix_metadata:
-        log(f"=== Metadata 보강 모드: {topic} ===")
-        if args.dry_run:
-            log("[dry-run 모드]")
-        success, skip, failed, fail_log = fix_metadata(
-            collection_key, dry_run=args.dry_run, limit=args.limit,
-        )
-        print(f"\nZotero metadata 보강 완료: {topic}")
-        print(f"  보강 (PATCH): {success}편")
-        print(f"  변경 없음 (skip): {skip}편")
-        print(f"  실패: {failed}편")
-        if fail_log:
-            out_path = os.path.join(str(get_topic_dir(topic)),
-                                     "_fix_metadata_failures.json")
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(fail_log, f, ensure_ascii=False, indent=2)
-            print(f"  실패 로그: {out_path}")
-        return
-
-    # ── --fix-pdfs 모드 ──
-    if args.fix_pdfs:
-        log(f"=== PDF 재시도 모드: {topic} ===")
-        if args.dry_run:
-            log("[dry-run 모드]")
-        success, total, failed = fix_pdfs(collection_key, zotero_dir, dry_run=args.dry_run)
-        print(f"\nZotero PDF 재시도 완료: {topic}")
-        print(f"  대상: {total}편")
-        print(f"  성공: {success}편")
-        print(f"  실패: {len(failed)}편")
-        return
-
-    # ── 일반 등록 모드 ──
-    input_path = args.input or os.path.join(str(get_topic_dir(topic)), "_search_results.json")
-    if not os.path.exists(input_path):
-        print(f"오류: 검색 결과 파일이 없습니다: {input_path}")
-        return
-
-    log(f"=== Zotero 등록 시작: {topic} ===")
-    if args.dry_run:
-        log("[dry-run 모드: 실제 등록/다운로드 없음]")
-
-    # Step 1: 입력 로드
-    with open(input_path, "r", encoding="utf-8") as f:
-        papers = json.load(f)
-    log(f"입력 논문: {len(papers)}편")
-
-    # Step 2: 중복 검사
-    new_papers, duplicates = check_duplicates(papers)
-
-    # Step 3: Zotero 등록
-    log(f"\n신규 등록: {len(new_papers)}편")
-    registered = register_items(new_papers, collection_key, dry_run=args.dry_run)
-
-    # Step 4+5: PDF 다운로드 + 첨부
-    log(f"\nPDF 다운로드 + 첨부 시작")
-    failed_pdf = download_and_attach(registered, zotero_dir, dry_run=args.dry_run)
-
-    # Step 6: 결과 저장
-    out_path = save_results(topic, registered, duplicates, failed_pdf)
-
-    # 요약 출력
-    pdf_success = sum(1 for r in registered if r.get("pdf"))
-    print(f"\nZotero 등록 완료: {topic}")
-    print(f"  입력: {len(papers)}편")
-    print(f"  중복 (건너뜀): {len(duplicates)}편")
-    print(f"  신규 등록: {len(registered)}편")
-    print(f"  PDF 다운로드: {pdf_success}/{len(registered)} 성공")
-    if failed_pdf:
-        print(f"  PDF 실패: {len(failed_pdf)}편 (수동 다운로드 필요)")
-    print(f"  결과: {out_path}")
+        _run_fix_metadata(topic=args.topic, dry_run=args.dry_run, limit=args.limit)
+    elif args.fix_pdfs:
+        _run_fix_pdfs(topic=args.topic, dry_run=args.dry_run)
+    else:
+        _run_register(topic=args.topic, input_path=args.input, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

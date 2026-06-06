@@ -247,26 +247,101 @@ Output ONLY valid JSON in this exact format:
     log(f"  Cross-category insight extraction ({total} papers, {len(cat_papers)} categories, "
         f"~{_est_tokens(prompt)} tokens)...")
     _t0 = time.time()
-    log(f"    [insights] calling Sonnet 4.6 (max_tokens=8000)...")
-    resp = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = resp.content[0].text.strip()
-    log(f"    [insights] -> {len(text)} chars in {time.time()-_t0:.0f}s "
-        f"(stop_reason={getattr(resp, 'stop_reason', '?')})")
+    log(f"    [insights] calling Sonnet 4.6 via tool-use (max_tokens=8000)...")
 
-    # Parse JSON (handle markdown code block)
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
+    insight_schema = {
+        "name": "emit_insights",
+        "description": "Emit cross-category research insights.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cross_category": {
+                    "type": "array",
+                    "minItems": 3, "maxItems": 7,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"enum": ["convergence", "gap", "emerging", "declining"]},
+                            "title": {"type": "string", "maxLength": 30},
+                            "description": {"type": "string", "minLength": 30},
+                            "categories": {"type": "array", "items": {"type": "string"}},
+                            "evidence": {"type": "array",
+                                          "items": {"type": "string"}},
+                            "signal_strength": {"enum": ["strong", "weak"]},
+                            "policy_implication": {"type": "string", "minLength": 10},
+                        },
+                        "required": ["type", "title", "description", "categories",
+                                      "evidence", "signal_strength",
+                                      "policy_implication"],
+                    },
+                },
+                "per_category": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "trend": {"enum": ["ACCELERATING", "STABLE",
+                                                "EMERGING", "DECLINING"]},
+                            "key_finding": {"type": "string", "minLength": 10},
+                            "gap": {"type": "string", "minLength": 10},
+                            "policy_implication": {"type": "string", "minLength": 10},
+                        },
+                        "required": ["trend", "key_finding", "gap",
+                                      "policy_implication"],
+                    },
+                },
+                "meta": {
+                    "type": "object",
+                    "properties": {
+                        "underserved_domains": {"type": "array",
+                                                 "items": {"type": "string"}},
+                        "hot_combinations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "pair": {"type": "array", "minItems": 2,
+                                              "maxItems": 2,
+                                              "items": {"type": "string"}},
+                                    "description": {"type": "string"},
+                                },
+                                "required": ["pair", "description"],
+                            },
+                        },
+                    },
+                },
+            },
+            "required": ["cross_category", "per_category"],
+        },
+    }
+
+    # cached_call: same (prompt, model) hash → cache hit. Insights are
+    # stable for unchanged input; re-runs of --mode rebuild skip the call.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from api._llm import cached_call, topic_cache_dir
+    cache_dir = topic_cache_dir(topic)
+
+    def _make_call():
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8000,
+            tools=[insight_schema],
+            tool_choice={"type": "tool", "name": "emit_insights"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        log(f"    [insights] tool-use returned in {time.time()-_t0:.0f}s "
+            f"(stop_reason={getattr(resp, 'stop_reason', '?')})")
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use" \
+                    and getattr(block, "name", None) == "emit_insights":
+                return dict(block.input)
+        raise RuntimeError("emit_insights tool was not invoked")
+
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        log(f"  WARNING: JSON parse failed: {e}")
-        log(f"  Raw response (first 500 chars): {text[:500]}")
+        return cached_call(cache_dir, prompt, "claude-sonnet-4-6", _make_call,
+                            schema_version="v1")
+    except Exception as e:
+        log(f"  WARNING: insight tool-use failed: {e}")
         return {"cross_category": [], "per_category": {}, "meta": {}}
 
 
@@ -328,7 +403,60 @@ _cb_fails: dict[str, int] = {}
 _cb_lock = __import__("threading").Lock()
 
 
+_CONNECTIONS_TOOL_SCHEMA = {
+    "name": "emit_connections",
+    "description": (
+        "Emit paper connection recommendations. Each entry in "
+        "`connections` is one source paper plus 2+ related target papers."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "connections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "source": {"type": "string",
+                                    "description": "Source paper number (e.g. '045')."},
+                        "targets": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "target": {"type": "string",
+                                                "description": "Target paper number."},
+                                    "relation": {"enum": ["alternative", "extension",
+                                                           "foundation", "counterpoint",
+                                                           "application"]},
+                                    "reason": {"type": "string", "minLength": 5,
+                                                "description": "한국어로 왜 같이 읽어야 하는지 1문장."},
+                                },
+                                "required": ["target", "relation", "reason"],
+                            },
+                        },
+                    },
+                    "required": ["source", "targets"],
+                },
+            },
+        },
+        "required": ["connections"],
+    },
+}
+
+
 def _one_backend_call(backend: str, clients: dict, prompt: str) -> str:
+    """Call a single backend and return the JSON-encoded connection map
+    text. Both branches reach the same downstream ``json.loads`` so the
+    fallback contract is preserved.
+
+    Anthropic uses tool-use (forced ``emit_connections``) to eliminate
+    raw-text JSON parsing fragility; the tool result is converted to
+    the legacy ``{source_num: [{target, relation, reason}, ...]}`` dict
+    shape and re-serialised. OpenAI keeps ``response_format=json_object``
+    since that backend already returns deterministic JSON.
+    """
     if backend == "openai":
         resp = clients["openai"].chat.completions.create(
             model=_OPENAI_CONN_MODEL,
@@ -337,12 +465,32 @@ def _one_backend_call(backend: str, clients: dict, prompt: str) -> str:
             messages=[{"role": "user", "content": prompt}],
         )
         return (resp.choices[0].message.content or "").strip()
+
     resp = clients["anthropic"].messages.create(
         model="claude-sonnet-4-6",
         max_tokens=20000,
+        tools=[_CONNECTIONS_TOOL_SCHEMA],
+        tool_choice={"type": "tool", "name": "emit_connections"},
         messages=[{"role": "user", "content": prompt}],
     )
-    return resp.content[0].text.strip()
+    tool_input = None
+    for block in resp.content:
+        if getattr(block, "type", None) == "tool_use" \
+                and getattr(block, "name", None) == "emit_connections":
+            tool_input = dict(block.input)
+            break
+    if tool_input is None:
+        raise RuntimeError("emit_connections tool was not invoked")
+    # Tool emits `[{source, targets:[{target,relation,reason}]}]`; rewrite
+    # to the legacy `{source_num: [{target, relation, reason}]}` shape so
+    # the downstream json.loads parser sees the same structure as before.
+    legacy = {}
+    for entry in tool_input.get("connections", []) or []:
+        src = str(entry.get("source", "")).strip()
+        if not src:
+            continue
+        legacy[src] = entry.get("targets", []) or []
+    return json.dumps(legacy, ensure_ascii=False)
 
 
 def _conn_llm_text(clients: dict, prompt: str, label: str = "") -> tuple[str, str]:
@@ -577,36 +725,21 @@ def extract_paper_connections(topic, cat_papers, clients, all_topic_papers=None,
     return all_connections
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract cross-paper insights and connections")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--insights-only", action="store_true", help="Cross-category insights only")
-    parser.add_argument("--connections-only", action="store_true", help="Paper connections only")
-    parser.add_argument("--categories", nargs="+", help="Specific categories to process (others preserved)")
-    args = parser.parse_args()
-
-    topic = args.topic
+def _run_insights(topic="ai4s", *, insights_only=False, connections_only=False,
+                   categories=None):
+    """Programmatic entrypoint for extract_insights."""
     topic_dir = str(get_topic_dir(topic))
 
     log(f"Loading {topic} data...")
     topic_papers, cat_papers, cat_summaries = load_topic_data(topic)
 
-    # Filter to specific categories if requested
-    if args.categories:
-        cat_papers = {k: v for k, v in cat_papers.items() if k in args.categories}
-        cat_summaries = [s for s in cat_summaries if s.get("category") in args.categories]
+    if categories:
+        cat_papers = {k: v for k, v in cat_papers.items() if k in categories}
+        cat_summaries = [s for s in cat_summaries if s.get("category") in categories]
         log(f"  {len(topic_papers)} papers total, {len(cat_papers)} categories (filtered)")
     else:
         log(f"  {len(topic_papers)} papers, {len(cat_papers)} categories")
 
-    # Explicit timeout + retry: previously a single messages.create() in this
-    # script stalled for 1h22m with no log activity, suggesting an httpx read
-    # without a deadline. 5-min per-attempt cap × 2 retries = ~15 min worst
-    # case before the SDK raises, instead of hanging forever.
-    # Build a client per available backend. Connections use the fallback chain
-    # (_BACKENDS); cross-category insights stay on Anthropic (Anthropic-specific
-    # count_tokens / multi-block calls). Short timeout + low retries so a stalled
-    # backend fails fast and the fallback kicks in.
     clients: dict = {"anthropic": None, "openai": None}
     try:
         clients["anthropic"] = Anthropic(timeout=120.0, max_retries=1)
@@ -619,12 +752,11 @@ def main():
             clients["openai"] = OpenAI(api_key=_oai_key, timeout=120.0, max_retries=1)
     except Exception as e:
         log(f"  [backend] OpenAI init failed: {str(e)[:80]}")
-    client = clients["anthropic"] or clients["openai"]  # insights path (Anthropic preferred)
+    client = clients["anthropic"] or clients["openai"]
     log(f"  [backend] connection fallback chain: {' → '.join(b for b in _BACKENDS if clients.get(b))}")
-    run_insights = not args.connections_only
-    run_connections = not args.insights_only
+    run_insights = not connections_only
+    run_connections = not insights_only
 
-    # ── Cross-category insights ──
     if run_insights:
         log("\n" + "=" * 50)
         log("CROSS-CATEGORY INSIGHTS (Sonnet)")
@@ -636,12 +768,9 @@ def main():
         insights["paper_count"] = len(topic_papers)
 
         insights_path = os.path.join(topic_dir, "_insights.json")
-        # Merge with existing insights when --categories is used
-        if args.categories and os.path.exists(insights_path):
+        if categories and os.path.exists(insights_path):
             with open(insights_path, "r", encoding="utf-8") as f:
                 existing_insights = json.load(f)
-            # Merge per_category (overwrite updated categories, keep rest);
-            # drop entries whose category no longer exists in current cat_papers
             current_cats = set(cat_papers.keys())
             existing_per_cat = {k: v for k, v in existing_insights.get("per_category", {}).items()
                                 if k in current_cats}
@@ -654,7 +783,6 @@ def main():
         log(f"  {len(insights.get('cross_category', []))} cross-category insights")
         log(f"  {len(insights.get('per_category', {}))} per-category insights")
 
-    # ── Paper connections ──
     if run_connections:
         log("\n" + "=" * 50)
         log("PAPER CONNECTIONS (Sonnet)")
@@ -665,11 +793,21 @@ def main():
             topic, cat_papers, clients, topic_papers,
             topic_dir=topic_dir, topic_slugs=topic_slugs)
 
-        # Final write (also covers the no-incremental path)
         from lib.connections import sync_topic_connections
         sync_topic_connections(connections, topic, topic_slugs, topic_dir, log=log)
 
     log("\nDone!")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Extract cross-paper insights and connections")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--insights-only", action="store_true", help="Cross-category insights only")
+    parser.add_argument("--connections-only", action="store_true", help="Paper connections only")
+    parser.add_argument("--categories", nargs="+", help="Specific categories to process (others preserved)")
+    args = parser.parse_args()
+    _run_insights(topic=args.topic, insights_only=args.insights_only,
+                  connections_only=args.connections_only, categories=args.categories)
 
 
 if __name__ == "__main__":

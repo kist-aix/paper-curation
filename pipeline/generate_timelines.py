@@ -646,18 +646,14 @@ def deploy_candidate(results, deploy_path):
 # Main
 # ═══════════════════════════════════════════
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate timelines (bottom-up, 3-step)")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--candidates", type=int, default=3)
-    parser.add_argument("--narrative-only", action="store_true", help="Step 1 only: generate narratives")
-    parser.add_argument("--images-only", action="store_true", help="Step 2 only: generate images from existing narratives")
-    parser.add_argument("--main-only", action="store_true", help="Main timeline only (requires narratives)")
-    parser.add_argument("--category-only", action="store_true", help="Category timelines only")
-    parser.add_argument("--categories", nargs="+", help="Specific categories")
-    args = parser.parse_args()
+def _run_timeline(topic="ai4s", *, candidates=3, narrative_only=False,
+                   images_only=False, main_only=False, category_only=False,
+                   categories=None, mode="all"):
+    """Programmatic entrypoint for generate_timelines.
 
-    topic = args.topic
+    `mode` is reserved for the api facade (legacy compatibility); the
+    actual behavior is controlled by the boolean flags.
+    """
     topic_dir = str(get_topic_dir(topic))
     candidates_dir = os.path.join(os.path.dirname(__file__), "_img_timelines", topic)
     os.makedirs(candidates_dir, exist_ok=True)
@@ -683,12 +679,12 @@ def main():
         if p["primary_category"]:
             cat_papers[p["primary_category"]].append(p)
 
-    target_cats = args.categories if args.categories else sorted(k for k in cat_papers.keys() if k != "Other")
+    target_cats = categories if categories else sorted(k for k in cat_papers.keys() if k != "Other")
 
     # ═══════════════════════════════════════
     # STEP 1: Generate all narratives
     # ═══════════════════════════════════════
-    run_narratives = not args.images_only and not args.main_only
+    run_narratives = not images_only and not main_only
     category_summaries = []
 
     if run_narratives:
@@ -696,31 +692,43 @@ def main():
         log("STEP 1: NARRATIVE GENERATION (Opus streaming)")
         log("=" * 60)
 
-        for cat_name in target_cats:
+        # ThreadPool: Opus narrative calls are I/O-bound. 9 categories
+        # serial × ~2 min each = ~18 min; max_workers=8 → ~2-3 min.
+        # Streaming Opus is thread-safe (each call gets its own SSE
+        # session); SDK retry/backoff applies per-call.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        max_workers = int(os.environ.get("TIMELINE_NARRATIVE_PARALLEL", "8"))
+
+        def _build_one(cat_name):
             papers = cat_papers.get(cat_name, [])
             if not papers:
-                continue
-
+                return None
             slug = category_slug(cat_name)
-            log(f"\n--- {cat_name} ({len(papers)} papers) ---")
-
+            log(f"  [start] {cat_name} ({len(papers)} papers)")
             method_text, caption, summary = build_category_narrative(papers, topic, cat_name)
-
-            # Save method text
             with open(os.path.join(method_texts_dir, f"_method_text_{slug}.txt"), "w", encoding="utf-8") as f:
                 f.write(method_text)
             with open(os.path.join(method_texts_dir, f"_caption_{slug}.txt"), "w", encoding="utf-8") as f:
                 f.write(caption)
+            log(f"  [done]  {cat_name} (method={len(method_text)}c, summary keys={list(summary.keys())[:3]})")
+            return summary
 
-            category_summaries.append(summary)
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {ex.submit(_build_one, c): c for c in target_cats}
+            for fut in as_completed(futures):
+                c = futures[fut]
+                try:
+                    s = fut.result()
+                    if s is not None:
+                        category_summaries.append(s)
+                except Exception as e:
+                    log(f"  [category narrative failed] {c}: {str(e)[:150]}")
 
-        # Save narratives
         with open(narratives_path, "w", encoding="utf-8") as f:
             json.dump(category_summaries, f, ensure_ascii=False, indent=2)
         log(f"\nStep 1 done: {len(category_summaries)} narratives → {narratives_path}")
 
-        # Also generate main narrative
-        if not args.category_only:
+        if not category_only:
             log("\n--- Main narrative (from category summaries) ---")
             method_text, caption = build_main_narrative_from_summaries(category_summaries, topic)
             with open(os.path.join(method_texts_dir, "_method_text_main.txt"), "w", encoding="utf-8") as f:
@@ -729,13 +737,12 @@ def main():
                 f.write(caption)
             log("Main narrative saved.")
 
-        # Generate executive summary + _timeline_narrative.json
-        if not args.category_only:
+        if not category_only:
             log("\n--- Executive summary (Korean) ---")
             exec_summary = build_executive_summary(category_summaries, topic)
             save_timeline_narrative(topic_dir, exec_summary, category_summaries)
 
-    if args.narrative_only:
+    if narrative_only:
         log("\n--narrative-only: stopping after Step 1.")
         return
 
@@ -753,32 +760,43 @@ def main():
         log(f"Loaded {len(category_summaries)} narratives from {narratives_path}")
 
     # Category timelines
-    if not args.main_only:
-        for cat_name in target_cats:
+    if not main_only:
+        # ThreadPool: PaperBanana (Gemini image) calls per category.
+        # Default 4 workers to stay under Gemini image RPM caps.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        img_workers = int(os.environ.get("TIMELINE_IMAGE_PARALLEL", "4"))
+
+        def _gen_one_image(cat_name):
             slug = category_slug(cat_name)
             method_path = os.path.join(method_texts_dir, f"_method_text_{slug}.txt")
             caption_path = os.path.join(method_texts_dir, f"_caption_{slug}.txt")
-
             if not os.path.exists(method_path):
                 log(f"  SKIP {cat_name}: no method text (run without --images-only first)")
-                continue
-
+                return None
             with open(method_path, "r", encoding="utf-8") as f:
                 method_text = f.read()
             caption = ""
             if os.path.exists(caption_path):
                 with open(caption_path, "r", encoding="utf-8") as f:
                     caption = f.read()
-
-            log(f"\n--- {cat_name} ({len(method_text)} chars method) ---")
+            log(f"  [start] {cat_name} ({len(method_text)}c method)")
             results = generate_candidates(method_text, caption, f"category_{slug}",
-                                          candidates_dir, args.candidates)
-
+                                          candidates_dir, candidates)
             deploy_name = f"category_timeline_{category_slug(cat_name)}.png"
             deploy_candidate(results, os.path.join(topic_dir, deploy_name))
+            log(f"  [done]  {cat_name}")
+            return deploy_name
 
-    # Main timeline
-    if not args.category_only:
+        with ThreadPoolExecutor(max_workers=img_workers) as ex:
+            futures = {ex.submit(_gen_one_image, c): c for c in target_cats}
+            for fut in as_completed(futures):
+                c = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    log(f"  [image failed] {c}: {str(e)[:150]}")
+
+    if not category_only:
         method_path = os.path.join(method_texts_dir, "_method_text_main.txt")
         caption_path = os.path.join(method_texts_dir, "_caption_main.txt")
 
@@ -798,7 +816,7 @@ def main():
 
         log(f"\n--- Main timeline ({len(method_text)} chars method) ---")
         results = generate_candidates(method_text, caption, "research_timeline",
-                                      candidates_dir, args.candidates)
+                                      candidates_dir, candidates)
         deploy_candidate(results, os.path.join(topic_dir, "research_timeline.png"))
 
     log("\n" + "=" * 60)
@@ -807,6 +825,22 @@ def main():
     log(f"Candidates: {candidates_dir}")
     log(f"Deploy: {topic_dir}/*.png")
     log("=" * 60)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate timelines (bottom-up, 3-step)")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--candidates", type=int, default=3)
+    parser.add_argument("--narrative-only", action="store_true", help="Step 1 only: generate narratives")
+    parser.add_argument("--images-only", action="store_true", help="Step 2 only: generate images from existing narratives")
+    parser.add_argument("--main-only", action="store_true", help="Main timeline only (requires narratives)")
+    parser.add_argument("--category-only", action="store_true", help="Category timelines only")
+    parser.add_argument("--categories", nargs="+", help="Specific categories")
+    args = parser.parse_args()
+    _run_timeline(topic=args.topic, candidates=args.candidates,
+                  narrative_only=args.narrative_only,
+                  images_only=args.images_only, main_only=args.main_only,
+                  category_only=args.category_only, categories=args.categories)
 
 
 if __name__ == "__main__":

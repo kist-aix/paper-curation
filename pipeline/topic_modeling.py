@@ -672,17 +672,9 @@ Rules:
 # Main
 # ═══════════════════════════════════════════
 
-def main():
-    parser = argparse.ArgumentParser(description="BERTopic topic modeling + UMAP")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--skip-connections", action="store_true")
-    parser.add_argument("--skip-classification", action="store_true",
-                        help="Skip Steps 4-5 (naming/grouping/assignment). Run embedding, UMAP, connections only.")
-    parser.add_argument("--min-cats", type=int, default=8)
-    parser.add_argument("--max-cats", type=int, default=12)
-    args = parser.parse_args()
-
-    topic = args.topic
+def _run_topic_model(topic="ai4s", *, skip_connections=False,
+                      skip_classification=False, min_cats=8, max_cats=12):
+    """Programmatic entrypoint for topic_modeling."""
     topic_dir = str(get_topic_dir(topic))
 
     log(f"Loading {topic} data...")
@@ -716,7 +708,7 @@ def main():
     from anthropic import Anthropic
     client = Anthropic(timeout=180.0, max_retries=4)
 
-    if args.skip_classification:
+    if skip_classification:
         log("\n  [Steps 4-5] SKIP (--skip-classification: preserving existing categories)")
     else:
         # Step 4: Name sub-topics
@@ -732,7 +724,7 @@ def main():
         log("\n" + "=" * 50)
         log("STEP 4.5: GROUPING SUB-TOPICS INTO CATEGORIES (Sonnet)")
         log("=" * 50)
-        tid_to_cat, cat_info = group_into_categories(topic_names, topics, centroids, args.min_cats, args.max_cats, client)
+        tid_to_cat, cat_info = group_into_categories(topic_names, topics, centroids, min_cats, max_cats, client)
         for cat_name, desc in sorted(cat_info.items()):
             count = sum(1 for tid, cat in tid_to_cat.items() if cat == cat_name)
             log(f"  [{cat_name}] {count} sub-topics")
@@ -794,7 +786,7 @@ def main():
     #   3. centroids[sub_id] (768D) → outlier fallback + all_categories top-N
     # 즉 클러스터링은 density-faithful (HDBSCAN), centroid 는 outlier 와
     # 부차 카테고리 선정에만 사용한다 (원 설계 그대로).
-    if not args.skip_classification:
+    if not skip_classification:
         topic_info_data = {
             "generated_at": datetime.now().strftime("%Y-%m-%d"),
             "model": "SPECTER2 + hdbscan.HDBSCAN(prediction_data=True) + UMAP",
@@ -833,7 +825,7 @@ def main():
             f"({len(centroids)} sub-clusters, {len(tid_to_cat)} mapped)")
 
     # Step 6
-    if not args.skip_connections:
+    if not skip_connections:
         log("\n" + "=" * 50)
         log("STEP 6: RELATED PAPERS (Embedding + Sonnet)")
         log("=" * 50)
@@ -846,11 +838,26 @@ def main():
 
     log("\n" + "=" * 50)
     log("DONE!")
-    if not args.skip_classification:
+    if not skip_classification:
         log(f"  Topics: {len(topic_names)}")
     log(f"  UMAP: {umap_path}")
     log(f"  Cache: {cache_path}")
     log("=" * 50)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="BERTopic topic modeling + UMAP")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--skip-connections", action="store_true")
+    parser.add_argument("--skip-classification", action="store_true",
+                        help="Skip Steps 4-5 (naming/grouping/assignment). Run embedding, UMAP, connections only.")
+    parser.add_argument("--min-cats", type=int, default=8)
+    parser.add_argument("--max-cats", type=int, default=12)
+    args = parser.parse_args()
+    _run_topic_model(topic=args.topic,
+                     skip_connections=args.skip_connections,
+                     skip_classification=args.skip_classification,
+                     min_cats=args.min_cats, max_cats=args.max_cats)
 
 
 if __name__ == "__main__":

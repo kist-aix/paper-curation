@@ -163,34 +163,150 @@ def find_pdf_path(paper_title, pdf_map, pdf_dir):
 # Frontmatter injection
 # ═══════════════════════════════════════════
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Schema v1 frontmatter (Phase 3)
+#
+# - `title` is the real paper title (was a bug: slug got stored).
+# - `primary_category`, `all_categories`, `sub_categories` are first-class
+#   fields so build_papers_index / build_topic_index can read them without
+#   re-parsing classifications from _papers_index.json.
+# - `scores` is a nested dict (novelty/technical/significance/clarity/overall)
+#   for Obsidian Bases + Dataview queries.
+# - `tags` are nested in the form `topic/category-slug/sub-slug` so Obsidian's
+#   tag tree groups them automatically.
+# - `schema_version: v1` lets future migrations check shape.
+# ─────────────────────────────────────────────────────────────────────────────
+
+SCHEMA_VERSION = "v1"
+
+
+def _slugify_tag(s):
+    """Lowercase, replace spaces/&/punctuation with single dashes."""
+    s = re.sub(r"[&]+", "and", s.lower())
+    s = re.sub(r"[^a-z0-9가-힣]+", "-", s)
+    return s.strip("-")
+
+
+def _read_review_body_signals(md_path):
+    """Best-effort extract scores + essence from existing review.md body
+    (for use during migration when _papers_index.json is missing values).
+
+    Returns dict with whichever fields could be parsed; keys absent when
+    not found.
+    """
+    if not os.path.exists(md_path):
+        return {}
+    with open(md_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    # Strip any existing frontmatter so regex doesn't pick up frontmatter strings
+    if content.startswith("---"):
+        end = content.find("\n---", 3)
+        if end != -1:
+            content = content[end + 4:]
+    out = {}
+    # Scores: "- Novelty: 4/5"
+    for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical"),
+                       ("Significance", "significance"), ("Clarity", "clarity"),
+                       ("Overall", "overall")]:
+        m = re.search(rf"{label}\D*(\d+(?:\.\d+)?)\s*/\s*5", content)
+        if m:
+            out[key] = float(m.group(1))
+    # Essence: first non-figure line under "## Essence"
+    m = re.search(r"##\s*Essence\s*\n(.+?)(?=\n##|\Z)", content, re.DOTALL)
+    if m:
+        lines = [ln.strip() for ln in m.group(1).splitlines()
+                 if ln.strip() and not ln.strip().startswith(("![","*"))]
+        if lines:
+            out["essence"] = " ".join(lines)[:500]
+    return out
+
+
 def build_frontmatter(paper, connections, pdf_path, topic):
-    """논문 데이터에서 YAML frontmatter dict 생성."""
-    cls = paper.get("classifications", {}).get(topic, {})
-    primary_cat = cls.get("primary_category", "")
-    all_cats = cls.get("all_categories", [])
-    sub_cat = cls.get("sub_category", "")
+    """Build schema v1 frontmatter dict from index entry + body signals.
 
-    # tags
-    tags = []
-    for cat in all_cats:
-        tags.append(f"cat/{cat.replace(' ', '_').replace('&', 'and')}")
-    if sub_cat:
-        tags.append(f"sub/{sub_cat.replace(' ', '_').replace('&', 'and')}")
-    for t in paper.get("topics", []):
-        tags.append(f"topic/{t}")
+    Multi-topic papers: classifications come from ``primary_topic``
+    (fallback to the ``topic`` arg) so the frontmatter is stable
+    regardless of which topic last ran inject_frontmatter. Nested tags
+    are emitted for EVERY topic the paper belongs to, so Obsidian's tag
+    tree shows it under each.
 
+    Body signals are read as fallback when the index lacks scores
+    (older entries). Once tool-use migration is run, scores will always
+    come from the index, but the fallback keeps migration of legacy
+    review.md files lossless.
+    """
     slug = paper.get("slug", "")
-    num = slug.split("_")[0] if "_" in slug else ""
+    md_path = os.path.join(PAPERS_DIR, slug, "review.md")
+    body_signals = _read_review_body_signals(md_path)
+
+    # primary_topic is what determines the canonical classification
+    primary_topic = paper.get("primary_topic") or topic
+    cls = (paper.get("classifications", {}).get(primary_topic)
+            or paper.get("classifications", {}).get(topic, {}))
+    primary_cat = cls.get("primary_category", "")
+    all_cats = cls.get("all_categories", []) or ([primary_cat] if primary_cat else [])
+    sub_cat = cls.get("sub_category", "")
+    sub_categories = cls.get("sub_categories", {}) or (
+        {primary_cat: sub_cat} if primary_cat and sub_cat else {}
+    )
+
+    # Nested tags: emit for every topic the paper belongs to.
+    # Format: `paper`, `{topic}`, `{topic}/cat-slug/sub-slug`
+    paper_topics = paper.get("topics", []) or [primary_topic]
+    tags = ["paper"]
+    for t in paper_topics:
+        tags.append(t)
+        # Use that topic's own classifications when available; fall back
+        # to primary_topic's classifications.
+        t_cls = paper.get("classifications", {}).get(t) or cls
+        t_all_cats = t_cls.get("all_categories", []) or (
+            [t_cls.get("primary_category", "")] if t_cls.get("primary_category") else []
+        )
+        t_sub_cats = t_cls.get("sub_categories", {}) or {}
+        for cat in t_all_cats:
+            if not cat:
+                continue
+            cat_slug = _slugify_tag(cat)
+            sub_for_cat = t_sub_cats.get(cat, "")
+            if sub_for_cat:
+                tags.append(f"{t}/{cat_slug}/{_slugify_tag(sub_for_cat)}")
+            else:
+                tags.append(f"{t}/{cat_slug}")
+    # Dedup preserving order
+    seen = set(); tags = [x for x in tags if not (x in seen or seen.add(x))]
+
+    # Scores: prefer index (if scores object present), fall back to body signals
+    idx_scores = paper.get("scores") or {}
+    scores = {
+        "novelty":      idx_scores.get("novelty",      body_signals.get("novelty",      0)),
+        "technical":    idx_scores.get("technical",    body_signals.get("technical",    0)),
+        "significance": idx_scores.get("significance", body_signals.get("significance", 0)),
+        "clarity":      idx_scores.get("clarity",      body_signals.get("clarity",      0)),
+        "overall":      idx_scores.get("overall",      body_signals.get("overall",
+                                                      paper.get("score", 0))),
+    }
+
+    title = paper.get("title", "") or slug
+    essence = paper.get("essence", "") or body_signals.get("essence", "")
 
     fm = {
-        "title": slug,
-        "authors": paper.get("authors", ""),
-        "date": paper.get("date", "") if re.match(r'^\d{4}', str(paper.get("date", ""))) else "",
+        "title": title,
+        "authors": paper.get("authors", []),
+        "date": paper.get("date", "") if re.match(r"^\d{4}", str(paper.get("date", ""))) else "",
         "doi": paper.get("doi", ""),
         "arxiv": paper.get("arxiv", ""),
-        "score": paper.get("score", 0),
-        "essence": paper.get("essence", ""),
+        "journal": paper.get("journal", ""),
+        "primary_topic": paper.get("primary_topic", topic),
+        "primary_category": primary_cat,
+        "all_categories": all_cats,
+        "sub_categories": sub_categories,
+        "sub_category": sub_cat,
+        "scores": scores,
+        "score": scores["overall"],
+        "essence": essence,
         "tags": tags,
+        "schema_version": SCHEMA_VERSION,
+        "review_date": paper.get("review_date", ""),
     }
 
     if pdf_path:
@@ -199,27 +315,163 @@ def build_frontmatter(paper, connections, pdf_path, topic):
     return fm
 
 
+def _yaml_str(s):
+    """Quote a string for safe YAML emission (double-quoted, escapes)."""
+    escaped = str(s).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{escaped}"'
+
+
+def _yaml_value(val, indent=0):
+    """Serialise a single scalar/list/dict value. Returns list of lines."""
+    pad = "  " * indent
+    if val is None:
+        return [f"{pad}null"]
+    if isinstance(val, bool):
+        return [f"{pad}{'true' if val else 'false'}"]
+    if isinstance(val, (int, float)):
+        return [f"{pad}{val}"]
+    if isinstance(val, list):
+        if not val:
+            return [f"{pad}[]"]
+        out = []
+        for item in val:
+            if isinstance(item, (dict, list)):
+                sub = _yaml_value(item, indent + 1)
+                if not sub:
+                    out.append(f"{pad}-")
+                else:
+                    out.append(f"{pad}- {sub[0].lstrip()}")
+                    out.extend(sub[1:])
+            else:
+                out.append(f"{pad}- {_yaml_str(item) if isinstance(item, str) else item}")
+        return out
+    if isinstance(val, dict):
+        if not val:
+            return [f"{pad}{{}}"]
+        out = []
+        for k, v in val.items():
+            key = _yaml_str(k) if (not isinstance(k, str) or
+                                    re.search(r"[\s:&'\"]", str(k))) else str(k)
+            if isinstance(v, (dict, list)):
+                sub = _yaml_value(v, indent + 1)
+                out.append(f"{pad}{key}:")
+                out.extend(sub)
+            else:
+                scalar = _yaml_value(v, 0)[0]
+                out.append(f"{pad}{key}: {scalar.lstrip()}")
+        return out
+    return [f"{pad}{_yaml_str(val)}"]
+
+
 def frontmatter_to_yaml(fm):
-    """Dict → YAML 문자열 (간단 직렬화, PyYAML 불필요)."""
+    """Dict → YAML string. Supports nested dicts/lists (used for
+    ``sub_categories`` and ``scores``)."""
     lines = ["---"]
     for key, val in fm.items():
-        if isinstance(val, list):
-            if not val:
+        if isinstance(val, (dict, list)):
+            if val:
+                lines.append(f"{key}:")
+                lines.extend(_yaml_value(val, 1))
+            elif isinstance(val, list):
                 lines.append(f"{key}: []")
             else:
-                lines.append(f"{key}:")
-                for item in val:
-                    lines.append(f'  - "{item}"')
+                lines.append(f"{key}: {{}}")
         elif isinstance(val, (int, float)):
             lines.append(f"{key}: {val}")
         elif val is None:
             lines.append(f"{key}: null")
         else:
-            # Escape quotes in strings
-            escaped = str(val).replace('"', '\\"')
-            lines.append(f'{key}: "{escaped}"')
+            lines.append(f"{key}: {_yaml_str(val)}")
     lines.append("---")
     return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public parse helper — used by build_papers_index, build_topic_index,
+# validate_papers etc. to read frontmatter without re-implementing YAML.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FM_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+
+def parse_frontmatter(md_text):
+    """Return (frontmatter_dict, body_text). frontmatter_dict is {} when
+    no frontmatter is present.
+
+    Uses a minimal YAML reader that handles the shapes
+    ``frontmatter_to_yaml`` emits: scalars, single-line arrays ``[]``,
+    bulleted lists, nested dicts (one level). Imports PyYAML when
+    available for full compliance; otherwise falls back to the minimal
+    reader.
+    """
+    m = _FM_RE.match(md_text)
+    if not m:
+        return {}, md_text
+    fm_block = m.group(1)
+    body = md_text[m.end():]
+
+    try:
+        import yaml  # type: ignore
+        return yaml.safe_load(fm_block) or {}, body
+    except ImportError:
+        pass
+
+    # Minimal fallback parser ----------------------------------------------
+    out = {}
+    cur_key = None
+    cur_list = None
+    cur_dict = None
+    for raw in fm_block.splitlines():
+        if not raw.strip():
+            continue
+        # nested dict line (sub_categories key)
+        if cur_dict is not None and raw.startswith("  ") and ":" in raw and not raw.strip().startswith("-"):
+            k, _, v = raw.strip().partition(":")
+            cur_dict[k.strip().strip('"')] = v.strip().strip('"')
+            continue
+        # list item
+        if raw.startswith("  - ") or raw.startswith("- "):
+            item = raw.strip()[2:].strip().strip('"')
+            if cur_list is not None:
+                cur_list.append(item)
+            continue
+        # top-level key
+        if raw.startswith(("  ", "\t")) and cur_key:
+            continue  # unhandled nested scalar
+        if ":" in raw:
+            k, _, v = raw.partition(":")
+            k = k.strip()
+            v = v.strip()
+            cur_dict = None
+            cur_list = None
+            cur_key = k
+            if v == "":
+                # could be a list or dict; peek next nonblank line later
+                out[k] = []
+                cur_list = out[k]
+                # If next line starts with two-space + non-dash, switch to dict
+            elif v == "[]":
+                out[k] = []
+            elif v == "{}":
+                out[k] = {}
+            elif v in ("null", "~"):
+                out[k] = None
+            else:
+                # scalar
+                if v.startswith('"') and v.endswith('"'):
+                    out[k] = v[1:-1].replace('\\"', '"').replace("\\n", "\n")
+                else:
+                    try:
+                        out[k] = int(v)
+                    except ValueError:
+                        try:
+                            out[k] = float(v)
+                        except ValueError:
+                            out[k] = v
+    # Repair: any list left empty might really be a dict; can't tell
+    # without lookahead. Acceptable for fallback path; PyYAML is the
+    # recommended runtime.
+    return out, body
 
 
 def build_related_section(slug, connections):

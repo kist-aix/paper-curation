@@ -339,24 +339,15 @@ def _sync_gh_pages_stubs(topics, cf_url=CF_BASE_URL):
         )
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Prepare for GitHub Pages deployment")
-    parser.add_argument("--topic", default="ai4s")
-    parser.add_argument("--quality", type=int, default=90, help="WebP quality (1-100)")
-    parser.add_argument("--dry-run", action="store_true", help="Estimate only, no conversion")
-    parser.add_argument("--push", action="store_true", help="Git add + commit + push after conversion")
-    parser.add_argument("--topics", nargs="+", help="Only deploy these topics (exclude others from git add)")
-    parser.add_argument("--workers", type=int, default=8, help="Parallel workers for conversion")
-    args = parser.parse_args()
+def _run_deploy(topic="ai4s", *, quality=90, dry_run=False, push=False,
+                topics=None, workers=8):
+    """Programmatic entrypoint for prepare_deploy."""
+    topic_dir = str(get_topic_dir(topic))
 
-    topic_dir = str(get_topic_dir(args.topic))
-
-    # Step 1: .gitignore
     print("Step 1: .gitignore")
-    if not args.dry_run:
+    if not dry_run:
         ensure_gitignore()
 
-    # Step 2: Find all figure PNGs
     print("\nStep 2: Finding PNGs...")
     png_files = []
     for slug in os.listdir(PAPERS_DIR):
@@ -370,15 +361,13 @@ def main():
     total_png_size = sum(os.path.getsize(f) for f in png_files)
     print(f"  Found {len(png_files)} PNGs ({total_png_size / 1048576:.0f} MB)")
 
-    if args.dry_run:
-        # Estimate: sample 10 files
+    if dry_run:
         sample = png_files[:10]
         sample_orig = sum(os.path.getsize(f) for f in sample)
         sample_webp = 0
         for f in sample:
-            orig, webp, _ = convert_png_to_webp(f, args.quality)
+            orig, webp, _ = convert_png_to_webp(f, quality)
             sample_webp += webp
-            # Clean up test webp
             wp = f.replace(".png", ".webp")
             if os.path.exists(wp):
                 os.remove(wp)
@@ -389,14 +378,13 @@ def main():
             print(f"  Savings: {(total_png_size / 1048576) - est_total:.0f} MB")
         return
 
-    # Step 3: Convert PNGs to WebP (parallel)
-    print(f"\nStep 3: Converting to WebP (quality={args.quality})...")
+    print(f"\nStep 3: Converting to WebP (quality={quality})...")
     total_orig = 0
     total_webp = 0
     converted = 0
 
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = {executor.submit(convert_png_to_webp, f, args.quality): f for f in png_files}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(convert_png_to_webp, f, quality): f for f in png_files}
         for future in futures:
             orig, webp, webp_path = future.result()
             if webp_path:
@@ -507,17 +495,17 @@ def main():
     # working tree was modified by API-key strip in Step 6 so we still
     # need to restore it in the finally block.
     try:
-        if not args.push:
+        if not push:
             print("\n(--push 없이 실행됨. Cloudflare 업로드/gh-pages 동기화/master push 모두 스킵)")
         else:
             # Step 7: Upload full content to Cloudflare via wrangler
             print("\nStep 7: Deploying to Cloudflare (wrangler deploy)...")
             print("  [preflight] verifying topic indices before upload")
-            _preflight_topics(args.topics)
+            _preflight_topics(topics)
             _wrangler_deploy()
 
             # Step 8: Ensure gh-pages has redirect stubs for every deployed topic
-            topics_for_stubs = args.topics or _discover_deployable_topics()
+            topics_for_stubs = topics or _discover_deployable_topics()
             if topics_for_stubs:
                 print(f"\nStep 8: Syncing gh-pages redirect stubs "
                       f"({len(topics_for_stubs)} topics)...")
@@ -527,7 +515,7 @@ def main():
 
             # Step 9: Verify Cloudflare endpoints return 200
             print("\nStep 9: Verifying Cloudflare endpoints...")
-            _verify_cloudflare(args.topic)
+            _verify_cloudflare(topic)
 
             # Step 10: Commit + push master — only code/config changes.
             # docs/* content is gitignored, so this only captures genuine
@@ -567,6 +555,19 @@ def main():
             print(f"  Restored {len(_originals)} local HTML files (API keys preserved for local dev)")
 
     print(f"\nDone! Total savings: {(total_orig - total_webp) / 1048576:.0f} MB")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Prepare for GitHub Pages deployment")
+    parser.add_argument("--topic", default="ai4s")
+    parser.add_argument("--quality", type=int, default=90, help="WebP quality (1-100)")
+    parser.add_argument("--dry-run", action="store_true", help="Estimate only, no conversion")
+    parser.add_argument("--push", action="store_true", help="Git add + commit + push after conversion")
+    parser.add_argument("--topics", nargs="+", help="Only deploy these topics (exclude others from git add)")
+    parser.add_argument("--workers", type=int, default=8, help="Parallel workers for conversion")
+    args = parser.parse_args()
+    _run_deploy(topic=args.topic, quality=args.quality, dry_run=args.dry_run,
+                push=args.push, topics=args.topics, workers=args.workers)
 
 
 if __name__ == "__main__":

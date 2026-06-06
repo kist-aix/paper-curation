@@ -297,27 +297,21 @@ def audit_one(entry, topic):
     }
 
 
-def main():
-    ap = argparse.ArgumentParser(description="PDF↔review matching audit")
-    ap.add_argument("--topic", required=True)
-    ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--slug", help="Audit a single slug (smoke test)")
-    args = ap.parse_args()
-
+def _run_audit(topic, *, limit=0, slug=None):
+    """Programmatic entrypoint for audit_matching."""
     if not INDEX_PATH.exists():
         print(f"ERROR: {INDEX_PATH} missing", file=sys.stderr)
         sys.exit(2)
     index = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
 
-    if args.slug:
-        entries = [e for e in index if e["slug"].startswith(args.slug)]
+    if slug:
+        entries = [e for e in index if e["slug"].startswith(slug)]
     else:
-        entries = [e for e in index if args.topic in e.get("topics", [])]
-    if args.limit:
-        entries = entries[: args.limit]
+        entries = [e for e in index if topic in e.get("topics", [])]
+    if limit:
+        entries = entries[: limit]
 
-    # Pre-pass: duplicate text.md groups (authoritative mismatch signal)
-    dup_map = build_text_md_dup_map(args.topic, index)
+    dup_map = build_text_md_dup_map(topic, index)
     slug_to_group = {}
     for h, slugs in dup_map.items():
         for s in slugs:
@@ -329,11 +323,10 @@ def main():
     buckets = {"high": 0, "medium": 0, "clean": 0, "skipped": 0}
     t0 = datetime.now()
     for i, entry in enumerate(entries, 1):
-        res = audit_one(entry, args.topic)
+        res = audit_one(entry, topic)
         if res is None:
             buckets["skipped"] += 1
             continue
-        # Override confidence to 'high' when text.md is shared with another slug
         dup_info = slug_to_group.get(res["slug"])
         if dup_info:
             res["text_md_duplicate"] = dup_info
@@ -347,7 +340,7 @@ def main():
                   f"({el:.0f}s)", flush=True)
 
     report = {
-        "topic": args.topic,
+        "topic": topic,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "total": len(out),
         "buckets": buckets,
@@ -358,7 +351,7 @@ def main():
         },
         "results": out,
     }
-    out_path = get_topic_dir(args.topic) / "_audit_report.json"
+    out_path = get_topic_dir(topic) / "_audit_report.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     from lib.atomic_io import atomic_write_json
     atomic_write_json(out_path, report)
@@ -366,6 +359,16 @@ def main():
     print(f"  high-confidence mismatch : {buckets['high']}")
     print(f"  medium-confidence suspect: {buckets['medium']}")
     print(f"  clean                    : {buckets['clean']}")
+    return report
+
+
+def main():
+    ap = argparse.ArgumentParser(description="PDF↔review matching audit")
+    ap.add_argument("--topic", required=True)
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--slug", help="Audit a single slug (smoke test)")
+    args = ap.parse_args()
+    _run_audit(topic=args.topic, limit=args.limit, slug=args.slug)
 
 
 if __name__ == "__main__":

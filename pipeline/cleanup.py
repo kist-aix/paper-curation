@@ -228,25 +228,20 @@ def human_size(nbytes):
     return f"{nbytes:.1f}TB"
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Clean unused files before deploy")
-    parser.add_argument("--execute", action="store_true", help="Actually delete (default: dry-run)")
-    parser.add_argument("--purge-text", action="store_true", help="Also delete text.md (default: keep)")
-    args = parser.parse_args()
-
-    targets = collect_targets(purge_text=args.purge_text)
-    narrative_rows = prune_json_narratives(execute=args.execute)
+def _run_cleanup(*, execute=False, purge_text=False):
+    """Programmatic entrypoint for cleanup."""
+    targets = collect_targets(purge_text=purge_text)
+    narrative_rows = prune_json_narratives(execute=execute)
 
     if not targets and not narrative_rows:
         log("Nothing to clean!")
         return
 
     if narrative_rows:
-        log(f"\n{'PRUNED' if args.execute else 'would prune'}: stale category entries in narrative JSON")
+        log(f"\n{'PRUNED' if execute else 'would prune'}: stale category entries in narrative JSON")
         for path, n_removed, topic, fname in narrative_rows:
             log(f"  [{topic}/{fname}] {n_removed} stale categories")
 
-    # Group by category
     from collections import defaultdict
     by_cat = defaultdict(list)
     for path, cat, size in targets:
@@ -255,7 +250,7 @@ def main():
     total_size = sum(s for _, _, s in targets)
     total_count = len(targets)
 
-    log(f"{'DRY RUN' if not args.execute else 'EXECUTING'}: {total_count} items, {human_size(total_size)} total\n")
+    log(f"{'DRY RUN' if not execute else 'EXECUTING'}: {total_count} items, {human_size(total_size)} total\n")
 
     for cat in sorted(by_cat.keys()):
         items = by_cat[cat]
@@ -269,11 +264,10 @@ def main():
 
     print()
 
-    if not args.execute:
+    if not execute:
         log(f"Dry run complete. Run with --execute to delete {total_count} items ({human_size(total_size)})")
         return
 
-    # Execute deletion
     deleted = 0
     freed = 0
     for path, cat, size in targets:
@@ -289,6 +283,14 @@ def main():
             log(f"  ERROR: {path}: {e}")
 
     log(f"Done! Deleted {deleted}/{total_count} items, freed {human_size(freed)}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Clean unused files before deploy")
+    parser.add_argument("--execute", action="store_true", help="Actually delete (default: dry-run)")
+    parser.add_argument("--purge-text", action="store_true", help="Also delete text.md (default: keep)")
+    args = parser.parse_args()
+    _run_cleanup(execute=args.execute, purge_text=args.purge_text)
 
 
 if __name__ == "__main__":

@@ -653,47 +653,59 @@ def detect_topic(slug, index_path=None):
     return "ai4s"
 
 
+def _run_review_to_html(*, topic=None, slug=None, slugs=None, all_papers=False):
+    """Programmatic entrypoint for review_to_html.
+
+    - `slug` (str): one slug to convert (mutually exclusive with `slugs`).
+    - `slugs`: either a list of slugs or a 'start-end' numeric range string.
+    - `all_papers`: convert everything (same as default behavior).
+    """
+    index_path = os.path.join(PAPERS, "_papers_index.json")
+
+    all_slugs = sorted(d for d in os.listdir(PAPERS)
+                       if os.path.isdir(os.path.join(PAPERS, d)) and re.match(r'^\d{3,}_', d))
+
+    if slug:
+        target_slugs = [slug] if slug in all_slugs else [d for d in all_slugs if d.startswith(slug)]
+    elif isinstance(slugs, str) and "-" in slugs:
+        start, end = slugs.split('-')
+        def _slug_num(d):
+            m = re.match(r'^(\d+)_', d)
+            return int(m.group(1)) if m else 0
+        target_slugs = [d for d in all_slugs
+                        if _slug_num(d) >= int(start) and _slug_num(d) <= int(end)]
+    elif slugs:
+        target_slugs = [d for d in all_slugs
+                        if any(d == s or d.startswith(s) for s in slugs)]
+    else:
+        target_slugs = all_slugs
+
+    converted = 0
+    skipped = 0
+    for s in target_slugs:
+        md_path = os.path.join(PAPERS, s, "review.md")
+        html_path = os.path.join(PAPERS, s, "index.html")
+        if not os.path.exists(md_path):
+            skipped += 1
+            continue
+        slug_topic = topic or detect_topic(s, index_path)
+        slug_dir = os.path.join(PAPERS, s)
+        html = convert_review(md_path, slug_topic, slug_dir)
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        converted += 1
+
+    print(f"Converted: {converted}, Skipped: {skipped}")
+    return {"converted": converted, "skipped": skipped}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--topic', default=None, help='Force topic (ai4s/scisci)')
     parser.add_argument('--slugs', default=None, help='Slug range: 251-258')
     parser.add_argument('--all', action='store_true', help='Regenerate all')
     args = parser.parse_args()
-
-    index_path = os.path.join(PAPERS, "_papers_index.json")
-
-    # Determine which slugs to process
-    all_slugs = sorted(d for d in os.listdir(PAPERS)
-                       if os.path.isdir(os.path.join(PAPERS, d)) and re.match(r'^\d{3,}_', d))
-
-    if args.slugs:
-        start, end = args.slugs.split('-')
-        def _slug_num(d):
-            m = re.match(r'^(\d+)_', d)
-            return int(m.group(1)) if m else 0
-        slugs = [d for d in all_slugs if _slug_num(d) >= int(start) and _slug_num(d) <= int(end)]
-    elif args.all:
-        slugs = all_slugs
-    else:
-        slugs = all_slugs
-
-    converted = 0
-    skipped = 0
-    for slug in slugs:
-        md_path = os.path.join(PAPERS, slug, "review.md")
-        html_path = os.path.join(PAPERS, slug, "index.html")
-        if not os.path.exists(md_path):
-            skipped += 1
-            continue
-
-        topic = args.topic or detect_topic(slug, index_path)
-        slug_dir = os.path.join(PAPERS, slug)
-        html = convert_review(md_path, topic, slug_dir)
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html)
-        converted += 1
-
-    print(f"Converted: {converted}, Skipped: {skipped}")
+    _run_review_to_html(topic=args.topic, slugs=args.slugs, all_papers=args.all)
 
 
 if __name__ == "__main__":

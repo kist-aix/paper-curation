@@ -124,13 +124,8 @@ def match_paper(index_paper, zotero_items, zotero_doi_map, zotero_title_map):
     return None
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Sync deletions/renames from Zotero")
-    parser.add_argument("--topic", required=True)
-    parser.add_argument("--dry-run", action="store_true", help="Show changes, don't execute")
-    args = parser.parse_args()
-
-    topic = args.topic
+def _run_sync(topic, *, dry_run=False):
+    """Programmatic entrypoint for sync_zotero."""
     collection_key = COLLECTIONS.get(topic)
     if not collection_key:
         print(f"Unknown topic: {topic}")
@@ -203,7 +198,7 @@ def main():
         log("\nAll in sync. No changes needed.")
         return
 
-    if args.dry_run:
+    if dry_run:
         log("\n--dry-run: no changes made.")
         return
 
@@ -247,6 +242,14 @@ def main():
         json.dump(papers, f, ensure_ascii=False, indent=2)
 
     log(f"\nDone. {changes} changes applied. {len(papers)} papers remaining.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Sync deletions/renames from Zotero")
+    parser.add_argument("--topic", required=True)
+    parser.add_argument("--dry-run", action="store_true", help="Show changes, don't execute")
+    args = parser.parse_args()
+    _run_sync(topic=args.topic, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

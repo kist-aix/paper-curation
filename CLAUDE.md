@@ -133,7 +133,9 @@ Step 0 scripts are for full/update modes only (skipped in --local). Step 1 is th
 
 ## Python Environment
 
-**표준 환경: conda env `py314` (Python 3.14, macOS / Linux).** 파이프라인의 모든 스크립트(`topic_modeling.py`, `classify_papers.py` 포함)가 동일 env에서 동작한다. `run_update_force.py` 의 `TOPIC_MODELING_PYTHON = sys.executable` 이라, 활성화된 인터프리터가 그대로 서브프로세스에 상속된다 — 별도 라우팅 변수 관리 불필요.
+**표준 환경: conda env `py314` (Python 3.14, macOS / Linux)** — 오케스트레이터·LLM·웹·PDF·HTML 단계 모두 여기서 돌린다.
+
+**`py312` env 필수 — UMAP/HDBSCAN 라우팅**: numba 의 bytecode interpreter 가 Python 3.14 의 `CALL_KW` opcode 를 아직 처리하지 못해 `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` 경로에서 죽는다 (`op_CALL_KW: pop from empty list`; 0.65.1 / 0.66.0rc1 / main 모두 동일). `run_update_force._resolve_topic_modeling_python()` 가 자동으로 형제 env `py312` 의 인터프리터를 잡아 `topic_modeling.py` / `classify_papers.py` 서브프로세스만 그쪽으로 보낸다. 우선순위는 `PAPER_CURATION_PY312` 환경변수 → 형제 env `../py312/bin/python` → `which python3.12` → `sys.executable` (fallback). 두 env 모두 numba 0.65 / llvmlite 0.47 / numpy 2.x 동일 라인업.
 
 ### macOS / Linux (권장)
 
@@ -152,30 +154,26 @@ pip install anthropic openai google-genai pymupdf Pillow requests pyzotero \
 #    조용히 fallback 되어 표/구조 추출 품질이 떨어짐.
 brew install --cask temurin   # macOS Eclipse Temurin (OpenJDK)
 
-# 4) 새 셸이 열릴 때 자동 활성화하려면 ~/.zshrc 마지막에 추가
+# 4) UMAP/HDBSCAN 라우팅용 py312 env 도 만든다 (필수, 위 "Python Environment" 참조)
+conda create -n py312 -c conda-forge python=3.12 pip -y
+conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
+    joblib numpy scikit-learn anthropic openai
+
+# 5) 새 셸이 열릴 때 py314 자동 활성화
 echo 'conda activate py314' >> ~/.zshrc
 
-# 5) 평소 사용
+# 6) 평소 사용 — orchestrator 가 py312 를 자동으로 잡아 classify/topic_modeling 만 그쪽으로 보낸다
 PYTHONUTF8=1 python pipeline/run_full.py --topic ai4s --mode curate --source web --days 7
 ```
 
 ### Windows fallback (Smart App Control 환경)
 
-Windows Smart App Control(WDAC) 이 Python 3.14 의 numba/llvmlite DLL 을 차단하면 `umap-learn` 이 시스템 Python 에서 동작하지 않는다. 이 경우 UMAP/HDBSCAN 단계만 Python 3.12 전용 env 로 분리한다:
+Windows Smart App Control(WDAC) 이 Python 3.14 의 numba/llvmlite DLL 을 차단하는 경우도 위와 동일한 `py312` env 로 분리되어 자동 라우팅된다. 콘다 env 가 형제 위치 (`<base>/envs/py312`) 에 없으면 `PAPER_CURATION_PY312` 환경변수로 절대 경로를 지정:
 
 ```cmd
-:: 별도 env 생성
-conda create -n py312 -c conda-forge python=3.12 pip -y
-conda activate py312
-pip install umap-learn hdbscan joblib numpy scikit-learn sentence-transformers anthropic
-
-:: topic_modeling / classify_papers 만 py312 로 호출
-PYTHONUTF8=1 python pipeline\topic_modeling.py --topic ai4s   :: env=py312
-PYTHONUTF8=1 python pipeline\classify_papers.py --topic ai4s  :: env=py312
-PYTHONUTF8=1 python pipeline\build_topic_index.py ai4s        :: 나머지는 기본 env
+set PAPER_CURATION_PY312=C:\Users\<you>\miniconda3\envs\py312\python.exe
+PYTHONUTF8=1 python pipeline\run_full.py --topic ai4s --mode curate --source zotero
 ```
-
-`run_update_force.py` 가 자동으로 다른 env 로 라우팅하지 않으므로, Windows fallback 사용자는 분리된 env 에서 두 스크립트를 직접 실행해야 한다 (또는 `TOPIC_MODELING_PYTHON` 을 명시적으로 py312 경로로 패치).
 
 ### 한국 망 환경 우회 (SPECTER2 / arXiv)
 
