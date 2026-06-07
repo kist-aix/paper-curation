@@ -971,10 +971,48 @@ def _run_topic_index(topic=None):
     }
 
     function postProcessRefs(markup, refs) {
+      // On-page (live topic view): keep numeric [N] chip pointing at the
+      // local paper, which gives the curator quick navigation. Used for
+      // the topic page itself; HTML / Markdown export use the natural
+      // form (see naturalizeCitations below).
       return markup.replace(/\\[ref:(\\d+)\\]/g, (_, n) => {
         const ref = refs[parseInt(n) - 1];
         if (!ref) return '[ref:' + n + ']';
         return '<a class="ref" href="' + ref.url + '" target="_blank">[' + n + ']</a>';
+      });
+    }
+
+    function formatAuthorTag(ref) {
+      // "Smith et al." — collapsed first-author form. We avoid more than
+      // one name in the inline citation since most papers have many.
+      const a = ref && (ref.first_author || (ref.authors && ref.authors[0]));
+      if (!a) return ref && ref.title ? ('"' + ref.title.slice(0, 40) + '..."') : '';
+      const last = a.trim().split(/\\s+/).slice(-1)[0];
+      return last + ' et al.';
+    }
+
+    function naturalizeCitations(markup, refs) {
+      // Export form: replace [ref:N] with "Smith et al. (2024)" on first
+      // appearance per reference, then "Smith et al." for repeats. Each
+      // is wrapped in a small anchor pointing at the external (DOI /
+      // arXiv) URL so a recipient on any machine can resolve it. When
+      // no external URL exists (e.g. personal notes) we render plain
+      // text without the anchor.
+      const seen = new Set();
+      return markup.replace(/\\[ref:(\\d+)\\]/g, (_, n) => {
+        const idx = parseInt(n) - 1;
+        const ref = refs[idx];
+        if (!ref) return '';
+        const tag = formatAuthorTag(ref);
+        if (!tag) return '';
+        const first = !seen.has(idx);
+        seen.add(idx);
+        const text = first && ref.year ? tag + ' (' + ref.year + ')' : tag;
+        const href = ref.external_url || '';
+        if (href) {
+          return '<a class="cite" href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
+        }
+        return '<span class="cite cite-local">' + text + '</span>';
       });
     }
 
@@ -995,8 +1033,8 @@ def _run_topic_index(topic=None):
     }
 
     function buildPrompt(query, selected, lang, fullTexts) {
-      const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- 모든 주장에 [ref:N] 인용 (N은 아래 발췌문 번호)\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
-      const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- Cite every claim with [ref:N] where N is the excerpt number below\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
+      const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- **인용 형식**: 모든 주장 뒤에 ``[ref:N]`` 마커를 붙이세요 (N은 아래 발췌문 번호). 본문에서는 발췌문 헤더에 적힌 1저자명/제목을 자연스럽게 호명하면서 흐름을 만드세요 — 예: "He et al.[ref:1] 는 universal teleoperation 을 보였고, 이는 이어진 \\"Expressive Whole-Body Control\\" 연구[ref:3] 에서 더 확장됐다." 표현이 어색하면 작가명만으로도 OK. ``[ref:N]`` 마커는 반드시 유지 — 후처리에서 "He et al. (2024)" 같은 정식 형태로 자동 변환합니다.\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
+      const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- **Citation form**: append a ``[ref:N]`` marker after every claim (N = excerpt number). In the prose, name the first author / paper title naturally — e.g., "He et al.[ref:1] showed universal teleoperation, later extended in the \\"Expressive Whole-Body Control\\" work[ref:3]." If naming feels awkward, the author tag alone is fine. Always keep the ``[ref:N]`` marker — a post-processor turns it into "He et al. (2024)" form automatically.\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
       const lines = [];
       for (let i = 0; i < selected.length; i++) {
         const s = selected[i], n = i + 1, paper = s.paper;
@@ -1011,7 +1049,10 @@ def _run_topic_index(topic=None):
         if (fullTexts && fullTexts[s.slug]) {
           originalBlock = '\\n  ORIGINAL EXCERPT (use for quantitative detail like reagents, amounts, conditions):\\n' + fullTexts[s.slug].split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
         }
-        lines.push('[' + n + '] Paper: "' + paper.title + '" (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + figs + '\\n' + sectionsBlock + originalBlock);
+        const fa = paper.first_author || '';
+        const authorTag = fa ? (' — ' + fa.split(/\\s+/).slice(-1)[0] + ' et al.') : '';
+        const idTag = paper.doi ? (' [DOI: ' + paper.doi + ']') : (paper.arxiv ? (' [arXiv:' + paper.arxiv + ']') : '');
+        lines.push('[' + n + '] Paper: "' + paper.title + '"' + authorTag + ' (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + idTag + figs + '\\n' + sectionsBlock + originalBlock);
       }
       const user = 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n') + '\\n\\n---\\nQuestion: ' + query;
       return { system: lang === 'ko' ? systemKo : systemEn, user: user };
@@ -1024,28 +1065,44 @@ def _run_topic_index(topic=None):
       ultra:  { max_tokens: 20000, thinking: 6000, ko: '20~40개 문단으로 심층적으로 (약 4500~9000자)', en: '20-40 in-depth paragraphs (roughly 3500-7000 words)' },
     };
 
-    async function callClaude(query, selected, lang, model, length, fullTexts) {
-      const apiKey = _ANTHROPIC_KEY;
-      if (!apiKey) throw new Error('Anthropic API key missing — Deep Research 패널에서 키를 입력하세요.');
-      const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
-      // Haiku 4.5 caps output at ~8192 tokens; Sonnet can go higher.
+    // ── Backend detection + model mapping ─────────────────────────────
+    // Web visitors give us ONE key. We sniff the prefix to pick the
+    // backend, then map the selected tier (fast / smart) to that
+    // provider's equivalent model.
+    function detectBackend(key) {
+      if (!key) return '';
+      const k = String(key).trim();
+      if (k.startsWith('sk-ant-')) return 'anthropic';
+      if (k.startsWith('sk-')) return 'openai';
+      if (k.startsWith('AIza')) return 'google';
+      return '';
+    }
+
+    const MODEL_MAP = {
+      anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-6' },
+      openai:    { fast: 'gpt-4.1',                   smart: 'gpt-5.5' },
+      google:    { fast: 'gemini-3.1-flash-lite',     smart: 'gemini-3.5-flash' },
+    };
+
+    function resolveModel(backend, tier) {
+      const m = MODEL_MAP[backend];
+      if (!m) return '';
+      return tier === 'smart' ? m.smart : m.fast;
+    }
+
+    async function callAnthropic(apiKey, model, prompt, spec, onDelta) {
       let maxTokens = spec.max_tokens;
       let thinkingBudget = spec.thinking;
-      if (model === 'claude-haiku-4-5' && maxTokens > 8000) {
+      if (model.indexOf('haiku') !== -1 && maxTokens > 8000) {
         maxTokens = 8000;
         if (thinkingBudget > 2500) thinkingBudget = 2500;
       }
-      const p = buildPrompt(query, selected, lang, fullTexts);
-      // Append length directive to the system prompt.
-      p.system += '\\n\\n' + (lang === 'ko'
-        ? '분량 지침: 답변을 ' + spec.ko + '로 작성하세요. 분량이 길수록 각 논문을 더 깊이 있게 다루고, 주제 그룹을 더 세분화하세요.'
-        : 'Length directive: write the answer as ' + spec.en + '. Longer lengths should cover each paper in more depth and introduce finer thematic subdivisions.');
       const body = {
         model: model,
         max_tokens: maxTokens,
         thinking: { type: 'enabled', budget_tokens: thinkingBudget },
-        system: p.system,
-        messages: [{ role: 'user', content: p.user }],
+        system: prompt.system,
+        messages: [{ role: 'user', content: prompt.user }],
         stream: true,
       };
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1083,16 +1140,146 @@ def _run_topic_index(topic=None):
               if (ev.content_block.type === 'thinking') deepSetStatus('\U0001F914 답변 계획 중...');
               else if (ev.content_block.type === 'text') deepSetStatus('\u270D\uFE0F 답변 작성 중...');
             } else if (ev.type === 'content_block_delta') {
-              if (ev.delta.type === 'text_delta') {
-                DEEP.currentAnswer += ev.delta.text;
-                renderDeepAnswer(DEEP.currentAnswer);
-              }
+              if (ev.delta.type === 'text_delta') onDelta(ev.delta.text);
             } else if (ev.type === 'error') {
               throw new Error('Anthropic stream error: ' + (ev.error && ev.error.message || JSON.stringify(ev)));
             }
           }
         }
       }
+    }
+
+    async function callOpenAI(apiKey, model, prompt, spec, onDelta) {
+      const body = {
+        model: model,
+        messages: [
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
+        ],
+        max_completion_tokens: spec.max_tokens,
+        stream: true,
+      };
+      if (model.indexOf('gpt-5') === 0) {
+        body.reasoning_effort = 'high';
+      }
+      deepSetStatus('\u270D\uFE0F 답변 작성 중...');
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer ' + apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error('OpenAI ' + resp.status + ': ' + err.slice(0, 300));
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\\n\\n')) !== -1) {
+          const block = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          for (const line of block.split('\\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6).trim();
+            if (payload === '[DONE]') continue;
+            let ev;
+            try { ev = JSON.parse(payload); } catch { continue; }
+            const ch = ev.choices && ev.choices[0];
+            if (!ch) continue;
+            const txt = ch.delta && ch.delta.content;
+            if (txt) onDelta(txt);
+            if (ch.finish_reason === 'length') {
+              throw new Error('OpenAI: response truncated (max_completion_tokens).');
+            }
+          }
+        }
+      }
+    }
+
+    async function callGoogle(apiKey, model, prompt, spec, onDelta) {
+      const body = {
+        systemInstruction: { parts: [{ text: prompt.system }] },
+        contents: [{ role: 'user', parts: [{ text: prompt.user }] }],
+        generationConfig: { maxOutputTokens: spec.max_tokens, temperature: 0.7 },
+      };
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+        + encodeURIComponent(model) + ':streamGenerateContent?alt=sse&key=' + encodeURIComponent(apiKey);
+      deepSetStatus('\u270D\uFE0F 답변 작성 중...');
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error('Google ' + resp.status + ': ' + err.slice(0, 300));
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\\n\\n')) !== -1) {
+          const block = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          for (const line of block.split('\\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6).trim();
+            if (!payload || payload === '[DONE]') continue;
+            let ev;
+            try { ev = JSON.parse(payload); } catch { continue; }
+            const cand = ev.candidates && ev.candidates[0];
+            if (!cand) continue;
+            const parts = cand.content && cand.content.parts;
+            if (parts) {
+              for (const p of parts) {
+                if (p.text) onDelta(p.text);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    async function callLLM(query, selected, lang, tier, length, fullTexts) {
+      const apiKey = _LLM_KEY || _ANTHROPIC_KEY;
+      if (!apiKey) throw new Error('API key missing — Deep Research \uD328\uB110\uC5D0\uC11C \uD0A4\uB97C \uC785\uB825\uD558\uC138\uC694 (Anthropic / OpenAI / Google \uC911 \uD558\uB098).');
+      const backend = detectBackend(apiKey);
+      if (!backend) throw new Error('\uC54C \uC218 \uC5C6\uB294 API key \uD615\uC2DD\uC785\uB2C8\uB2E4 (Anthropic\uC740 sk-ant-, OpenAI\uB294 sk-, Google\uC740 AIza \uB85C \uC2DC\uC791).');
+      const model = resolveModel(backend, tier);
+      const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
+      const p = buildPrompt(query, selected, lang, fullTexts);
+      p.system += '\\n\\n' + (lang === 'ko'
+        ? '\uBD84\uB7C9 \uC9C0\uCE68: \uB2F5\uBCC0\uC744 ' + spec.ko + '\uB85C \uC791\uC131\uD558\uC138\uC694. \uBD84\uB7C9\uC774 \uAE38\uC218\uB85D \uAC01 \uB17C\uBB38\uC744 \uB354 \uAE4A\uC774 \uC788\uAC8C \uB2E4\uB8E8\uACE0, \uC8FC\uC81C \uADF8\uB8F9\uC744 \uB354 \uC138\uBD84\uD654\uD558\uC138\uC694.'
+        : 'Length directive: write the answer as ' + spec.en + '. Longer lengths should cover each paper in more depth and introduce finer thematic subdivisions.');
+      const onDelta = (txt) => {
+        DEEP.currentAnswer += txt;
+        renderDeepAnswer(DEEP.currentAnswer);
+      };
+      DEEP.lastBackend = backend;
+      DEEP.lastModel = model;
+      if (backend === 'anthropic') return callAnthropic(apiKey, model, p, spec, onDelta);
+      if (backend === 'openai')    return callOpenAI(apiKey, model, p, spec, onDelta);
+      if (backend === 'google')    return callGoogle(apiKey, model, p, spec, onDelta);
+      throw new Error('Unsupported backend: ' + backend);
+    }
+
+    // Backward-compat alias for existing callers (e.g. localhost dev
+    // entry points that still reference callClaude).
+    async function callClaude(query, selected, lang, model, length, fullTexts) {
+      const tier = (model && model.indexOf('haiku') !== -1) ? 'fast' : 'smart';
+      return callLLM(query, selected, lang, tier, length, fullTexts);
     }
 
     function renderDeepAnswer(md) {
@@ -1181,14 +1368,26 @@ def _run_topic_index(topic=None):
       if (!query) return;
       DEEP.currentQuery = query;
       deepShowPanel();
-      if (!_ANTHROPIC_KEY || !_OPENAI_KEY) {
-        const ak = prompt('Anthropic API Key를 입력하세요 (Deep Research에 필요합니다):');
-        if (!ak) { deepSetStatus('Anthropic API Key가 필요합니다.', true); return; }
-        const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다):');
-        if (!ok) { deepSetStatus('OpenAI API Key가 필요합니다.', true); return; }
-        _ANTHROPIC_KEY = ak; _OPENAI_KEY = ok;
-        localStorage.setItem('_ANTHROPIC_KEY', ak);
-        localStorage.setItem('_OPENAI_KEY', ok);
+      if (!_LLM_KEY || !_OPENAI_KEY) {
+        if (!_LLM_KEY) {
+          const lk = prompt('답변 생성용 API Key를 입력하세요 (Anthropic sk-ant-… / OpenAI sk-… / Google AIza… 중 하나):');
+          if (!lk) { deepSetStatus('API Key가 필요합니다.', true); return; }
+          const _b = detectBackend(lk);
+          if (!_b) { deepSetStatus('알 수 없는 키 형식입니다 (Anthropic은 sk-ant-, OpenAI는 sk-, Google은 AIza 로 시작).', true); return; }
+          _LLM_KEY = lk;
+          localStorage.setItem('_LLM_KEY', lk);
+          if (_b === 'anthropic') {
+            _ANTHROPIC_KEY = lk;
+            localStorage.setItem('_ANTHROPIC_KEY', lk);
+          }
+          deepSetStatus('✓ ' + _b + ' 키 감지됨');
+        }
+        if (!_OPENAI_KEY) {
+          const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다 — 답변 생성과 별개):');
+          if (!ok) { deepSetStatus('OpenAI API Key가 필요합니다 (임베딩용).', true); return; }
+          _OPENAI_KEY = ok;
+          localStorage.setItem('_OPENAI_KEY', ok);
+        }
       }
       clearEl(document.getElementById('deep-answer'));
       document.getElementById('deep-refs').style.display = 'none';
@@ -1229,6 +1428,11 @@ def _run_topic_index(topic=None):
           title: s.paper.title,
           year: s.paper.year,
           url: s.paper.url,
+          external_url: s.paper.external_url || '',
+          authors: s.paper.authors || [],
+          first_author: s.paper.first_author || '',
+          doi: s.paper.doi || '',
+          arxiv: s.paper.arxiv || '',
           figures: s.paper.figures || [],
         }));
         // Local-only deep dive: try to fetch text.md (raw paper text) for the
@@ -1249,9 +1453,9 @@ def _run_topic_index(topic=None):
           } catch (e) { /* fetch error or missing file -- skip silently */ }
         }));
         const lang = detectLang(query);
-        const model = document.getElementById('deep-model').value || 'claude-haiku-4-5';
+        const tier = document.getElementById('deep-model').value || 'fast';
         const length = document.getElementById('deep-length').value || 'short';
-        await callClaude(query, dedupedSelected, lang, model, length, fullTexts);
+        await callLLM(query, dedupedSelected, lang, tier, length, fullTexts);
         finalizeDeepAnswer();
         deepSetStatus('\u2705 완료');
         setTimeout(() => deepSetStatus(''), 2500);
@@ -1280,16 +1484,44 @@ def _run_topic_index(topic=None):
     }
 
 
+    function naturalizeCitationsMd(answerMd, refs) {
+      // Markdown form of naturalizeCitations: replace [ref:N] with
+      // "[Smith et al. (2024)](external_url)" so a recipient can click
+      // through from anywhere.
+      const seen = new Set();
+      return answerMd.replace(/\\[ref:(\\d+)\\]/g, (_, n) => {
+        const idx = parseInt(n) - 1;
+        const ref = refs[idx];
+        if (!ref) return '';
+        const tag = formatAuthorTag(ref);
+        if (!tag) return '';
+        const first = !seen.has(idx);
+        seen.add(idx);
+        const text = first && ref.year ? tag + ' (' + ref.year + ')' : tag;
+        const href = ref.external_url || '';
+        return href ? ('[' + text + '](' + href + ')') : text;
+      });
+    }
+
     function buildFullMarkdown() {
       const q = document.getElementById('search-input').value;
-      const lines = ['# Deep Research', '', '**Query**: ' + q, '**Generated**: ' + new Date().toISOString(), '', '---', '', DEEP.currentAnswer];
+      const naturalised = naturalizeCitationsMd(DEEP.currentAnswer, DEEP.currentRefs);
+      const lines = ['# Deep Research', '', '**Query**: ' + q, '**Generated**: ' + new Date().toISOString(), '', '---', '', naturalised];
       const cited = collectCitedNums(DEEP.currentAnswer);
       if (cited.size > 0) {
         lines.push('', '## References', '');
         for (const n of [...cited].sort((a, b) => a - b)) {
           const ref = DEEP.currentRefs[n - 1];
           if (!ref) continue;
-          lines.push('[' + n + '] [' + ref.title + '](' + ref.url + ')' + (ref.year ? ' (' + ref.year + ')' : ''));
+          const href = ref.external_url || ref.url;
+          const authorBits = ref.first_author
+            ? ref.first_author.split(/\\s+/).slice(-1)[0] + ' et al. '
+            : '';
+          const yearBits = ref.year ? '(' + ref.year + '). ' : '';
+          const idBits = ref.doi
+            ? ' DOI: https://doi.org/' + ref.doi
+            : (ref.arxiv ? ' arXiv:' + ref.arxiv : '');
+          lines.push('- ' + authorBits + yearBits + '[' + ref.title + '](' + href + ').' + idBits);
         }
       }
       return lines.join('\\n');
@@ -1356,10 +1588,53 @@ def _run_topic_index(topic=None):
       setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
     }
 
-    function buildFullHtml() {
+    async function fetchImageAsDataUri(url) {
+      // Convert a relative or absolute image URL into a self-contained
+      // data: URI so the exported HTML renders on any machine. Returns
+      // the original URL on failure (the export remains a degraded
+      // image but the rest of the document survives).
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) return url;
+        const blob = await resp.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        return url;
+      }
+    }
+
+    async function inlineImages(markup) {
+      // Walk every <img src> in the markup and replace the src with a
+      // base64 data URI. The download path is synchronous; this helper
+      // pre-resolves everything so the resulting string is plain text
+      // ready to write to a Blob.
+      const srcRe = /<img\\s+[^>]*src="([^"]+)"/g;
+      const seen = new Map();
+      const matches = [...markup.matchAll(srcRe)];
+      for (const m of matches) {
+        const src = m[1];
+        if (seen.has(src)) continue;
+        if (src.startsWith('data:')) { seen.set(src, src); continue; }
+        const dataUri = await fetchImageAsDataUri(src);
+        seen.set(src, dataUri);
+      }
+      return markup.replace(srcRe, (full, src) => full.replace(src, seen.get(src) || src));
+    }
+
+    async function buildFullHtml() {
       const q = document.getElementById('search-input').value;
       let answerMarkup = mdToMarkup(DEEP.currentAnswer);
-      answerMarkup = postProcessRefs(answerMarkup, DEEP.currentRefs);
+      // Use naturalised citations for export so the prose reads as
+      // "Smith et al. (2024)" rather than numeric [1] [2] chips. Each
+      // citation links to the paper's external URL (DOI / arXiv) so
+      // the export resolves anywhere.
+      answerMarkup = naturalizeCitations(answerMarkup, DEEP.currentRefs);
+
       const cited = collectCitedNums(DEEP.currentAnswer);
       let refsMarkup = '';
       if (cited.size > 0) {
@@ -1367,13 +1642,33 @@ def _run_topic_index(topic=None):
         for (const n of [...cited].sort((a, b) => a - b)) {
           const ref = DEEP.currentRefs[n - 1];
           if (!ref) continue;
-          refsMarkup += '<li>[' + n + '] <a href="' + ref.url + '" target="_blank">' + escapeAttr(ref.title) + '</a>' + (ref.year ? ' (' + ref.year + ')' : '') + '</li>';
+          const href = ref.external_url || '';
+          const titleHtml = href
+            ? '<a href="' + href + '" target="_blank" rel="noopener">' + escapeAttr(ref.title) + '</a>'
+            : escapeAttr(ref.title);
+          const authorBits = ref.first_author
+            ? escapeAttr(ref.first_author.split(/\\s+/).slice(-1)[0]) + ' et al. '
+            : '';
+          const yearBits = ref.year ? '(' + ref.year + '). ' : '';
+          const idBits = ref.doi
+            ? ' DOI: <a href="https://doi.org/' + encodeURIComponent(ref.doi) + '" target="_blank" rel="noopener">' + escapeAttr(ref.doi) + '</a>'
+            : (ref.arxiv ? ' arXiv:<a href="https://arxiv.org/abs/' + encodeURIComponent(ref.arxiv) + '" target="_blank" rel="noopener">' + escapeAttr(ref.arxiv) + '</a>' : '');
+          refsMarkup += '<li>' + authorBits + yearBits + titleHtml + '.' + idBits + '</li>';
         }
         refsMarkup += '</ol>';
       }
-      const base = new URL('.', window.location.href).href;
-      answerMarkup = answerMarkup.replace(/(src|href)="(\\.\\.\\/[^"]+)"/g, (_, attr, rel) => attr + '="' + new URL(rel, base).href + '"');
-      refsMarkup = refsMarkup.replace(/href="(\\.\\.\\/[^"]+)"/g, (_, rel) => 'href="' + new URL(rel, base).href + '"');
+
+      // Strip out leftover local relative paths so nothing remains that
+      // would only resolve on the original host. Images are converted
+      // to base64 below; here we just remove dangling href targets that
+      // point at the on-site review (the cite anchor already points at
+      // the external URL).
+      answerMarkup = answerMarkup.replace(/\\shref="\\.\\.\\/papers\\/[^"]+"/g, '');
+
+      // Inline every figure as a data: URI so the file is fully
+      // self-contained.
+      answerMarkup = await inlineImages(answerMarkup);
+
       return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deep Research</title><style>' +
         'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:760px;margin:2rem auto;padding:0 1.5rem;color:#222;line-height:1.75;}' +
         'h1{font-size:1.35rem;margin-bottom:0.3rem;}' +
@@ -1381,7 +1676,9 @@ def _run_topic_index(topic=None):
         '.answer{font-size:0.96rem;}' +
         '.answer p{margin:0.9rem 0;}' +
         '.answer h1,.answer h2,.answer h3{color:#333;margin:1.2rem 0 0.5rem;}' +
-        '.answer a.ref{display:inline-block;color:#2563EB;text-decoration:none;font-weight:700;font-size:0.72rem;padding:0 0.3rem;border-radius:3px;background:#EBF2FF;vertical-align:super;margin:0 0.1rem;}' +
+        '.answer a.cite{color:#2563EB;text-decoration:none;border-bottom:1px dotted #2563EB;}' +
+        '.answer a.cite:hover{background:#EBF2FF;}' +
+        '.answer .cite-local{color:#555;font-style:italic;}' +
         '.answer figure{margin:1rem 0;max-width:100%;}' +
         '.answer img{width:100%;height:auto;display:block;margin:1rem 0;padding:0.5rem;background:#fafafa;border:1px solid #eee;border-radius:6px;box-sizing:border-box;}' +
         '.answer figure img{margin:0;}' +
@@ -1400,18 +1697,18 @@ def _run_topic_index(topic=None):
         '</body></html>';
     }
 
-    function openAnswerInNewTab() {
+    async function openAnswerInNewTab() {
       if (!DEEP.currentAnswer) return;
-      const doc = buildFullHtml();
+      const doc = await buildFullHtml();
       const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
-    function downloadAnswerHtml() {
+    async function downloadAnswerHtml() {
       if (!DEEP.currentAnswer) return;
-      const doc = buildFullHtml();
+      const doc = await buildFullHtml();
       const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1478,8 +1775,18 @@ def _run_topic_index(topic=None):
     _OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or _cfg_keys.get("openai_api_key", "")
     _GEMINI_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
                    or _cfg_keys.get("gemini_api_key", "") or _cfg_keys.get("google_api_key", ""))
+    # ── Deep Research multi-backend keys ──────────────────────────────
+    # We baked these at build time for local dev (where prepare_deploy
+    # strips them on the way to Cloudflare). At runtime the modal
+    # accepts any one of the three; we sniff the prefix to pick the
+    # backend (sk-ant-* → Anthropic, sk-* → OpenAI, AIza* → Google).
+    # `_LLM_KEY` is the unified slot; `_ANTHROPIC_KEY` is kept for
+    # backward-compat with any code still referencing it. The embedding
+    # step (Deep Research RAG) continues to require an OpenAI key —
+    # that's a separate slot.
     JS = ("let _ANTHROPIC_KEY = " + json.dumps(_ANTHROPIC_KEY) + " || localStorage.getItem('_ANTHROPIC_KEY') || '';\n"
-          "let _OPENAI_KEY = " + json.dumps(_OPENAI_KEY) + " || localStorage.getItem('_OPENAI_KEY') || '';\n" + JS)
+          "let _OPENAI_KEY = " + json.dumps(_OPENAI_KEY) + " || localStorage.getItem('_OPENAI_KEY') || '';\n"
+          "let _LLM_KEY = localStorage.getItem('_LLM_KEY') || _ANTHROPIC_KEY || '';\n" + JS)
 
 
     def render_insights_section():
@@ -1734,9 +2041,9 @@ def _run_topic_index(topic=None):
         '          <option value="medium">Medium (2x)</option>\n'
         '          <option value="long">Long (5x)</option>\n'
         '        </select>\n'
-        '        <select id="deep-model" class="deep-model">\n'
-        '          <option value="claude-haiku-4-5">Haiku 4.5 (fast &amp; cheap)</option>\n'
-        '          <option value="claude-sonnet-4-6">Sonnet 4.6 (best quality)</option>\n'
+        '        <select id="deep-model" class="deep-model" title="모델 등급. 키에 따라 Anthropic Haiku/Sonnet, OpenAI GPT-4.1/GPT-5.5, Google Gemini 3.1 Flash-Lite/3.5 Flash 로 자동 매핑">\n'
+        '          <option value="fast">Fast (cheap)</option>\n'
+        '          <option value="smart">Smart (best)</option>\n'
         '        </select>\n'
         '        <button class="deep-btn" id="deep-rerun" disabled title="현재 질의를 선택한 모델·분량으로 다시 실행">&#x21BB; 재시작</button>\n'
         '        <div class="deep-actions">\n'

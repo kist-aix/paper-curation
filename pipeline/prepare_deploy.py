@@ -469,6 +469,14 @@ def _run_deploy(topic="ai4s", *, quality=90, dry_run=False, push=False,
             lambda m: (m.group(1) or "") + '_GEMINI_KEY = ""',
             new_text,
         )
+        # _LLM_KEY (Deep Research unified slot — Anthropic / OpenAI / Google).
+        # The build chooses one of the three to bake in; this catches any
+        # remnant regardless of provider prefix.
+        new_text = _re.sub(
+            r'(const|let|var)\s+_LLM_KEY\s*=\s*"(sk-[^"]*|AIza[^"]*)"',
+            r'\1 _LLM_KEY = ""',
+            new_text,
+        )
         if new_text != text:
             _originals[html_path] = text
             html_path.write_text(new_text, encoding="utf-8")

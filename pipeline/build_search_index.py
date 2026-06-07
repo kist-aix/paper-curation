@@ -198,19 +198,59 @@ def clean_chunk_text(text: str) -> str:
 
 
 def parse_review(md_path: Path, slug: str) -> dict:
-    """Return {title, year, figures, chunks:[{section, text}]} for a review.md."""
+    """Return {title, year, figures, chunks, authors, first_author, doi, arxiv} for a review.md.
+
+    Authors / DOI / arXiv come from the schema v1 frontmatter when
+    present (cheapest + most accurate). Falls back to body-blockquote
+    regex parsing for any review.md not yet migrated.
+    """
     try:
         text = md_path.read_text(encoding="utf-8")
     except Exception as e:
         print(f"  WARN: {slug}: cannot read review.md ({e})")
         return None
 
-    title_m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+    # ── Frontmatter fast path (schema v1) ────────────────────────────────
+    authors: list[str] = []
+    doi = ""
+    arxiv = ""
+    body = text
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            try:
+                import yaml as _yaml  # PyYAML
+                fm = _yaml.safe_load(text[3:end]) or {}
+                if isinstance(fm.get("authors"), list):
+                    authors = [str(a).strip() for a in fm["authors"] if str(a).strip()]
+                doi = str(fm.get("doi") or "").strip()
+                arxiv = str(fm.get("arxiv") or "").strip()
+            except Exception:
+                pass
+            body = text[end + 4:]
+
+    # ── Body-blockquote fallback ─────────────────────────────────────────
+    if not authors:
+        am = re.search(r"\*\*저자\*\*:\s*([^|*\n]+?)(?:\s*\|)", body)
+        if am:
+            authors = [a.strip() for a in am.group(1).split(",") if a.strip()]
+    if not doi:
+        dm = re.search(r"\*\*DOI\*\*:\s*\[?([^\]\s\)]+)", body)
+        if dm:
+            doi = dm.group(1).strip()
+    if not arxiv:
+        xm = re.search(r"arxiv\.org/abs/([0-9.]+)", body)
+        if xm:
+            arxiv = xm.group(1).strip()
+
+    first_author = authors[0] if authors else ""
+
+    title_m = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
     title = title_m.group(1).strip() if title_m else slug
 
     # Year: first 4-digit looking date in the first 800 chars
     year = None
-    ym = re.search(r"\b(20\d{2}|19\d{2})\b", text[:800])
+    ym = re.search(r"\b(20\d{2}|19\d{2})\b", body[:800])
     if ym:
         year = int(ym.group(0))
 
@@ -247,6 +287,10 @@ def parse_review(md_path: Path, slug: str) -> dict:
     return {
         "title": title,
         "year": year,
+        "authors": authors[:8],          # cap at 8 to keep index small
+        "first_author": first_author,
+        "doi": doi,
+        "arxiv": arxiv,
         "figures": figures,
         "chunks": chunks,
     }
@@ -328,11 +372,29 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
             or ""
         )
 
+        # External URL preference: DOI > arXiv > local relative path. The
+        # local relative path only works on the live topic page; HTML
+        # exports / shared answers need an external URL that resolves
+        # from anywhere.
+        _doi = (parsed.get("doi") or p.get("doi") or "").strip()
+        _arxiv = (parsed.get("arxiv") or p.get("arxiv") or "").strip()
+        if _doi:
+            _ext_url = f"https://doi.org/{_doi}" if not _doi.startswith("http") else _doi
+        elif _arxiv:
+            _ext_url = f"https://arxiv.org/abs/{_arxiv}"
+        else:
+            _ext_url = ""
+
         papers_meta[slug] = {
             "title": parsed["title"],
             "year": parsed["year"] or p.get("date") or "",
             "category": category,
-            "url": f"../papers/{slug}/",
+            "url": f"../papers/{slug}/",         # local (Cloudflare-hosted)
+            "external_url": _ext_url,            # DOI/arXiv (portable)
+            "authors": parsed.get("authors", []),
+            "first_author": parsed.get("first_author", ""),
+            "doi": _doi,
+            "arxiv": _arxiv,
             "figures": parsed["figures"],
         }
         for ch in parsed["chunks"]:
