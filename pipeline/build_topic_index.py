@@ -1329,7 +1329,7 @@ def _run_topic_index(topic=None):
       if (!markup) {
         const escaped = String(md || '')
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        markup = '<p>' + escaped.replace(/\n\n+/g, '</p><p>') + '</p>';
+        markup = '<p>' + escaped.replace(/\\n\\n+/g, '</p><p>') + '</p>';
       }
       // deepShowPanel is idempotent — call it here so the body stays
       // visible even if a prior error path removed the .active class.
