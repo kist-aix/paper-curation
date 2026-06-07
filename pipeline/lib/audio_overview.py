@@ -127,13 +127,33 @@ AUDIO_JS = r"""
 // a one-time prompt the first time they click the button. The key
 // stays in their browser only — it is never sent anywhere except
 // google's TTS / Gemini endpoints.
+// Read the Gemini key from any slot the user might have used in this
+// browser before — direct _GEMINI_KEY, or _LLM_KEY if they typed a
+// Gemini key into the Deep Research prompt (AIza-prefixed). This lets
+// Audio Overview pick up keys that Deep Research stored, and vice
+// versa, without a second prompt.
 let GKEY = (window._GEMINI_KEY || "") || (function() {
-  try { return localStorage.getItem("_GEMINI_KEY") || ""; } catch (e) { return ""; }
+  try {
+    const direct = localStorage.getItem("_GEMINI_KEY") || "";
+    if (direct) return direct;
+    const llm = localStorage.getItem("_LLM_KEY") || "";
+    if (llm && String(llm).startsWith("AIza")) return llm;
+    return "";
+  } catch (e) { return ""; }
 })();
 function rememberGeminiKey(k) {
   GKEY = k || "";
   window._GEMINI_KEY = GKEY;
-  try { if (GKEY) localStorage.setItem("_GEMINI_KEY", GKEY); } catch (e) {}
+  try {
+    if (GKEY) {
+      localStorage.setItem("_GEMINI_KEY", GKEY);
+      // Also seed the Deep Research unified slot so users who started
+      // here don't get re-prompted on the topic page. Only fill it when
+      // empty — never overwrite an existing Anthropic/OpenAI key.
+      const existing = localStorage.getItem("_LLM_KEY") || "";
+      if (!existing) localStorage.setItem("_LLM_KEY", GKEY);
+    }
+  } catch (e) {}
 }
 function ensureGeminiKey() {
   if (GKEY) return GKEY;
@@ -678,11 +698,21 @@ async function sendAudioEmail(blob, filename, title, lang, recipients) {
 document.addEventListener("DOMContentLoaded", function() {
   // Button always enabled — clicking will trigger ensureGeminiKey()
   // which prompts the user when the page was deployed without a baked
-  // key. We keep a hint in the button tooltip when no key is cached so
-  // the visitor knows what to expect.
+  // key. We keep a hint in the button tooltip and a small inline note
+  // when no key is cached so the visitor knows what to expect (some
+  // browsers hide tooltips on mobile / dark mode, hence the visible
+  // text fallback).
   const ob = document.getElementById("audio-open");
   if (ob && !GKEY) {
     ob.title = "클릭 시 Gemini API Key 입력 창이 뜹니다 (브라우저에만 저장)";
+    const bar = ob.parentElement;
+    if (bar && !bar.querySelector(".audio-hint")) {
+      const hint = document.createElement("span");
+      hint.className = "audio-hint";
+      hint.textContent = "Gemini API Key 필요 (첫 클릭 시 입력)";
+      hint.style.cssText = "margin-left:0.6rem;font-size:0.78rem;color:#888;";
+      bar.appendChild(hint);
+    }
   }
   if (!document.getElementById("audio-modal-bg")) return;
   wireAudioModal();

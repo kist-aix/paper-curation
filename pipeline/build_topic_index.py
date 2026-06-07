@@ -1090,6 +1090,35 @@ def _run_topic_index(topic=None):
       return tier === 'smart' ? m.smart : m.fast;
     }
 
+    // Short, human-friendly model labels for the Fast/Smart dropdown so
+    // the user sees what they're picking. Keyed by the same backend
+    // names detectBackend() returns.
+    const MODEL_LABEL = {
+      anthropic: { fast: 'Haiku 4.5', smart: 'Sonnet 4.6' },
+      openai:    { fast: 'GPT-4.1',   smart: 'GPT-5.5'    },
+      google:    { fast: 'Gemini 3.1 Flash-Lite', smart: 'Gemini 3.5 Flash' },
+    };
+
+    function updateDeepModelLabels() {
+      // Refresh the Fast/Smart dropdown labels based on whatever key is
+      // currently cached. Called on page load and after any key prompt
+      // so the user sees concrete model names like "Fast (cost: Haiku 4.5)".
+      const sel = document.getElementById('deep-model');
+      if (!sel) return;
+      const key = _LLM_KEY || _ANTHROPIC_KEY || _OPENAI_KEY ||
+        (window._GEMINI_KEY || '');
+      const backend = detectBackend(key);
+      const labels = MODEL_LABEL[backend];
+      const fastOpt = sel.querySelector('option[value="fast"]');
+      const smartOpt = sel.querySelector('option[value="smart"]');
+      if (fastOpt) fastOpt.textContent = labels
+        ? 'Fast (cost: ' + labels.fast + ')'
+        : 'Fast (cost: 모델 자동 선택)';
+      if (smartOpt) smartOpt.textContent = labels
+        ? 'Smart (quality: ' + labels.smart + ')'
+        : 'Smart (quality: 모델 자동 선택)';
+    }
+
     async function callAnthropic(apiKey, model, prompt, spec, onDelta) {
       let maxTokens = spec.max_tokens;
       let thinkingBudget = spec.thinking;
@@ -1285,8 +1314,27 @@ def _run_topic_index(topic=None):
     function renderDeepAnswer(md) {
       const el = document.getElementById('deep-answer');
       if (!el) return;
-      let markup = mdToMarkup(md);
-      markup = postProcessRefs(markup, DEEP.currentRefs);
+      // Defend against every step in the markup pipeline. A failure in
+      // mdToMarkup (e.g. marked.js throws on weird input) or in
+      // postProcessRefs (e.g. refs array out of sync) used to silently
+      // wipe the visible answer mid-stream — DEEP.currentAnswer still
+      // held the raw text but the user saw an empty panel. Now we fall
+      // back to escaped raw markdown so something always shows, and
+      // surface the error to the console for debugging.
+      let markup = '';
+      try { markup = mdToMarkup(md) || ''; }
+      catch (e) { console.warn('mdToMarkup failed:', e); markup = ''; }
+      try { markup = postProcessRefs(markup, DEEP.currentRefs); }
+      catch (e) { console.warn('postProcessRefs failed:', e); }
+      if (!markup) {
+        const escaped = String(md || '')
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        markup = '<p>' + escaped.replace(/\n\n+/g, '</p><p>') + '</p>';
+      }
+      // deepShowPanel is idempotent — call it here so the body stays
+      // visible even if a prior error path removed the .active class.
+      const body = document.getElementById('deep-body');
+      if (body && !body.classList.contains('active')) body.classList.add('active');
       renderTo(el, markup);
     }
 
@@ -1379,8 +1427,14 @@ def _run_topic_index(topic=None):
           if (_b === 'anthropic') {
             _ANTHROPIC_KEY = lk;
             localStorage.setItem('_ANTHROPIC_KEY', lk);
+          } else if (_b === 'google') {
+            // Same key works for Audio Overview (Gemini). Seed _GEMINI_KEY
+            // so the audio modal doesn't re-prompt for the same key.
+            window._GEMINI_KEY = lk;
+            try { localStorage.setItem('_GEMINI_KEY', lk); } catch (e) {}
           }
           deepSetStatus('✓ ' + _b + ' 키 감지됨');
+          updateDeepModelLabels();
         }
         if (!_OPENAI_KEY) {
           const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다 — 답변 생성과 별개):');
@@ -1718,6 +1772,10 @@ def _run_topic_index(topic=None):
 
     document.addEventListener('DOMContentLoaded', function() {
       window._searchMode = 'classic';
+
+      // Refresh Fast/Smart dropdown labels based on any cached API key
+      // so the user sees concrete model names from page load.
+      updateDeepModelLabels();
 
       // Same pattern for Zotero itemKey lookup. When present (local dev),
       // the Deep Research References list adds a one-click 'Open PDF'
