@@ -14,13 +14,14 @@
 |------|------|
 | **구조화 리뷰** | PDF에서 텍스트/Figure를 추출하고, Claude가 Essence-Motivation-Achievement-How-Originality-Evaluation 6개 섹션의 한국어 리뷰를 자동 작성 |
 | **자동 분류** | Bottom-up 토픽 모델링(HDBSCAN + UMAP)으로 카테고리를 자동 생성하고 논문을 분류 |
-| **Deep Research** | 자연어 질의 + 임베딩 검색 + Claude 답변. 논문 원문까지 참조하여 정량적 디테일 포함 |
+| **Deep Research (멀티 백엔드)** | 자연어 질의 + 임베딩 검색 + LLM 답변. 키 prefix 자동 감지로 **Anthropic(Haiku/Sonnet) · OpenAI(GPT-4.1/GPT-5.5) · Google(Gemini Flash-Lite/Flash) 중 하나**를 자동 사용. 자연어 본문 + 클릭 가능한 `[N]` 인용 |
+| **Audio Overview** | 리뷰 또는 Deep Research 답변을 **2-3인 팟캐스트형 한국어 오디오 (Gemini TTS)** 로 생성. 페이지에서 직접 → 브라우저 안에서 MP3 인코딩 → 다운로드 + (배포 시) **이메일 발송 자동 첨부** |
 | **타임라인 시각화** | 카테고리별 연구 동향 내러티브 + 다이어그램 자동 생성 (PaperBanana) |
 | **네트워크 시각화** | UMAP 2D/3D 인터랙티브 네트워크. 카테고리 필터, Ego Network, Hub/Bridge 하이라이트 |
 | **지식 축적** | Obsidian 연동으로 메모가 다음 질의에 반영되는 compounding knowledge |
 | **논문 검색/등록** | arXiv, Semantic Scholar, OpenAlex 병렬 검색 + Zotero 자동 등록 (선택) |
 
-**필요한 것**: Zotero 컬렉션 + PDF + API 키 (Anthropic, Google, OpenAI)
+**필요한 것**: Zotero 컬렉션 + PDF + API 키 (Anthropic, Google, OpenAI 중 최소 한 개 + 임베딩용 OpenAI)
 
 ---
 
@@ -68,13 +69,21 @@ flowchart TB
       S3[3 · 토픽 모델링 + 분류<br/>_new_classification.json]
       S4[4 · 인사이트 + 타임라인<br/>narrative + timeline.png]
       S5[5 · Deep Research 인덱스<br/>_search_index.json]
-      S6[6 · 인덱스 + 네트워크<br/>index.html + network.html]
+      S6[6 · 인덱스 + 네트워크<br/>index.html + network.html<br/>+ Audio Overview 모달]
     end
     S1 --> S2 --> S3 --> S4 --> S6
     S2 --> S5 --> S6
     S6 --> OUT{로컬 열람 또는 배포}
     OUT -->|로컬| LOCAL[python -m http.server]
-    OUT -->|배포| DEPLOY[Cloudflare + gh-pages 스텁]
+    OUT -->|배포| DEPLOY[Cloudflare Workers<br/>정적 자산 + /api/audio-email Worker 함수<br/>+ gh-pages 리다이렉트 스텁]
+    DEPLOY -.이메일 발송.-> RESEND[Resend API<br/>noreply@사용자도메인 → 수신자]
+    subgraph Browser[브라우저 안에서 동작]
+      DR[Deep Research<br/>Anthropic / OpenAI / Google<br/>키 자동 감지]
+      AO[Audio Overview<br/>Gemini TTS → MP3]
+    end
+    LOCAL --> Browser
+    DEPLOY --> Browser
+    AO -.MP3 첨부.-> DEPLOY
 ```
 
 ### 1. 데이터 수집
@@ -117,16 +126,16 @@ flowchart TB
 | **입력** | 전체 리뷰 + 개인 메모(<code>notes/</code>) |
 | **처리** | <ul><li>Section-aware chunking</li><li>OpenAI <code>text-embedding-3-small</code> 임베딩 (int8 L2 양자화)</li><li>개인 메모도 인덱싱되어 다음 질의에 반영</li></ul> |
 | **출력** | <code>_search_index.json</code> |
-| **활용** | 토픽 페이지에서 자연어 질의 → 임베딩 유사도 검색 → Claude(Extended Thinking)가 논문 근거 답변 생성 |
+| **활용** | 토픽 페이지에서 자연어 질의 → 임베딩 유사도 검색 → 사용자 키 prefix 자동 감지 → **Anthropic / OpenAI / Google 중 하나**가 논문 근거 답변 스트리밍. 응답은 자연어 본문 + 클릭 가능 `[N]` 인용 + 자동 figure 인라인. Fast/Smart 토글 라벨은 감지된 백엔드의 실제 모델명을 표시 (예: `Fast (cost: Haiku 4.5)`) |
 
 ### 6. 인덱스 + 네트워크
 
 | | 설명 |
 |---|---|
 | **입력** | 전체 분류 + 리뷰 + 타임라인 + UMAP 좌표 |
-| **처리** | <ul><li>카테고리 카드·검색·타임라인·Deep Research UI를 하나의 HTML로 조립</li><li>UMAP 2D/3D 좌표로 D3.js + Three.js 인터랙티브 네트워크 생성</li></ul> |
+| **처리** | <ul><li>카테고리 카드·검색·타임라인·Deep Research UI·Audio Overview 모달을 하나의 HTML로 조립</li><li>UMAP 2D/3D 좌표로 D3.js + Three.js 인터랙티브 네트워크 생성</li></ul> |
 | **출력** | <ul><li><code>{topic}/index.html</code></li><li><code>{topic}/network.html</code></li></ul> |
-| **활용** | <code>cd docs && python -m http.server 8000</code> → 브라우저에서 바로 사용 |
+| **활용** | <code>cd docs && python -m http.server 8000</code> → 브라우저에서 바로 사용. 개별 논문 페이지 / Deep Research 답변 양쪽에서 🎧 **Audio Overview** 버튼으로 팟캐스트형 한국어 오디오 생성 (Gemini TTS, 브라우저 안에서 MP3 인코딩 → 즉시 다운로드). 배포 환경에선 완성된 MP3 가 이메일로도 자동 발송됨 |
 
 ### 배포 (선택)
 
@@ -134,8 +143,8 @@ flowchart TB
 
 | 계층 | 역할 | 내용 |
 |------|------|------|
-| **Cloudflare Workers (Static Assets)** | 사용자 콘텐츠 서빙 | `docs/` 전체 업로드 (`docs/.assetsignore`로 로컬 전용 토픽 제외) |
-| **GitHub `gh-pages` 브랜치** | 진입 URL → Cloudflare 리다이렉트 | 토픽별 리다이렉트 스텁 (1KB 미만), `jehyunlee.github.io/paper-curation/{topic}/` → `workers.dev/{topic}/` |
+| **Cloudflare Workers (Static Assets + Function)** | 사용자 콘텐츠 서빙 + `/api/audio-email` 라우트 | `docs/` 전체 업로드 (`docs/.assetsignore`로 로컬 전용 토픽 제외) + `worker/index.js` (Audio Overview 이메일 발송 핸들러) |
+| **GitHub `gh-pages` 브랜치** | 진입 URL → Cloudflare 리다이렉트 | 토픽별 리다이렉트 스텁 (1KB 미만), `jehyunlee.github.io/paper-curation/{topic}/` → 운영자가 설정한 Cloudflare URL |
 | **GitHub `master` 브랜치** | 코드·설정·README | 대용량 `docs/papers/`, `docs/{topic}/` 콘텐츠는 `.gitignore`로 제외 |
 
 ```bash
@@ -145,8 +154,8 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
 
 자동 처리:
 - PNG → WebP 변환 (용량 ~60% 절감)
-- 배포용 HTML에서 API 키 제거 후 로컬 working tree 자동 복원
-- `npx wrangler deploy` → Cloudflare 업로드 (해시 기반 증분 업로드)
+- 배포용 HTML에서 API 키·로컬 이메일 제거 후 로컬 working tree 자동 복원
+- `npx wrangler deploy` → Cloudflare 업로드 (해시 기반 증분 업로드) + Worker 함수 동시 배포
 - gh-pages 리다이렉트 스텁 idempotent 동기화 (새 토픽 자동 감지, 변경 없으면 푸시 스킵)
 - Cloudflare 200 OK 검증 (최대 5분 폴링)
 - master에는 **코드·설정 변경만** commit + push (대용량 콘텐츠는 `.gitignore`)
@@ -156,6 +165,20 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
 setx CF_API_TOKEN "..."
 setx CLOUDFLARE_ACCOUNT_ID "..."
 ```
+
+**Custom domain (권장)** — `wrangler.toml` 의 `[[routes]]` 블록에 `pattern = "your-subdomain.your-domain.tld"` + `custom_domain = true` + `zone_name = "your-domain.tld"` 를 박으면 `wrangler deploy` 가 Cloudflare DNS · SSL · 라우팅까지 자동 설정합니다. 동시에 `prepare_deploy.py` 의 `CF_BASE_URL` 도 같은 값으로 갱신해야 gh-pages 스텁이 새 도메인을 가리킵니다. workers.dev 기본 도메인으로도 동작은 하지만 메일 도메인 일관성을 위해 custom domain 권장.
+
+**Audio Overview 이메일 발송 — Cloudflare Worker secrets** — `worker/index.js` 가 [Resend](https://resend.com) API 로 MP3 첨부 메일을 보냅니다. 세 가지 시크릿을 `wrangler secret put` 으로 등록:
+
+```bash
+npx wrangler secret put RESEND_API_KEY    # Resend 대시보드의 re_xxx 키 (필수)
+npx wrangler secret put AUDIO_FROM        # 예: "Paper Curation <noreply@your-domain.tld>" (도메인 verify 필요)
+npx wrangler secret put AUDIO_REPLY_TO    # 답장이 갈 운영자 메일, 예: "you@gmail.com" (선택)
+```
+
+- `RESEND_API_KEY` 가 비어 있으면 `/api/audio-email` 이 503 을 반환하고, 클라이언트는 다운로드만으로 fallback 합니다.
+- `AUDIO_FROM` 의 도메인은 Resend 에서 SPF/DKIM/DMARC TXT 3개를 등록해 verify 해두어야 임의 수신자에게 발송할 수 있습니다 (verify 전엔 Resend 계정 메일 1명만 가능).
+- 로컬 빌드 시 운영자 본인 메일을 미리 박아두려면 `config.json` 에 `"local_emails": ["a@b.com", ...]` 또는 환경변수 `PAPER_CURATION_LOCAL_EMAILS="a@b.com,c@d.com"`. 배포 시 자동 strip 됩니다.
 
 ---
 
@@ -454,13 +477,14 @@ Turn hundreds of papers into structured Korean reviews, auto-classify them with 
 |---------|-------------|
 | **Structured Review** | Extracts text/figures from PDF. Claude generates 6-section Korean reviews (Essence-Motivation-Achievement-How-Originality-Evaluation) |
 | **Auto-Classification** | Bottom-up topic modeling (HDBSCAN + UMAP) creates categories and assigns papers automatically |
-| **Deep Research** | Natural-language Q&A with embedding search + Claude answers grounded in paper text. Includes quantitative details |
+| **Deep Research (multi-backend)** | Natural-language Q&A with embedding search + LLM answers grounded in paper text. Prefix-detects the key and routes to **Anthropic (Haiku/Sonnet) · OpenAI (GPT-4.1/GPT-5.5) · Google (Gemini Flash-Lite/Flash)** automatically. Natural prose + clickable `[N]` citation chips |
+| **Audio Overview** | Generates a **2-3 speaker Korean podcast (Gemini TTS)** from any review or Deep Research answer. Runs in-browser → MP3 encoded client-side → download + (when deployed) **automatic email delivery with attachment** |
 | **Timeline Visualization** | Per-category research trend narratives + auto-generated diagrams (PaperBanana) |
 | **Network Visualization** | Interactive UMAP 2D/3D network with category filters, ego network, hub/bridge highlighting |
 | **Knowledge Compounding** | Obsidian integration: your notes feed back into future queries |
 | **Paper Discovery** | Parallel search across arXiv, Semantic Scholar, OpenAlex + auto-registration to Zotero (optional) |
 
-**What you need**: A Zotero collection with PDFs + API keys (Anthropic, Google, OpenAI)
+**What you need**: A Zotero collection with PDFs + API keys (at least one of Anthropic / Google / OpenAI for answers + OpenAI for embeddings)
 
 ---
 
@@ -510,13 +534,21 @@ flowchart TB
       S3[3 · Topic Modeling + Classification<br/>_new_classification.json]
       S4[4 · Insights + Timelines<br/>narrative + timeline.png]
       S5[5 · Deep Research Index<br/>_search_index.json]
-      S6[6 · Index + Network<br/>index.html + network.html]
+      S6[6 · Index + Network<br/>index.html + network.html<br/>+ Audio Overview modal]
     end
     S1 --> S2 --> S3 --> S4 --> S6
     S2 --> S5 --> S6
     S6 --> OUT{Local browse or deploy}
     OUT -->|local| LOCAL[python -m http.server]
-    OUT -->|deploy| DEPLOY[Cloudflare + gh-pages stubs]
+    OUT -->|deploy| DEPLOY[Cloudflare Workers<br/>static assets + /api/audio-email function<br/>+ gh-pages redirect stubs]
+    DEPLOY -.email send.-> RESEND[Resend API<br/>noreply@your-domain → recipient]
+    subgraph Browser[in-browser at use time]
+      DR[Deep Research<br/>Anthropic / OpenAI / Google<br/>key auto-detected]
+      AO[Audio Overview<br/>Gemini TTS → MP3]
+    end
+    LOCAL --> Browser
+    DEPLOY --> Browser
+    AO -.MP3 attachment.-> DEPLOY
 ```
 
 ### 1. Data Collection
@@ -559,16 +591,16 @@ flowchart TB
 | **Input** | All reviews + personal notes (<code>notes/</code>) |
 | **Processing** | <ul><li>Section-aware chunking</li><li>OpenAI <code>text-embedding-3-small</code> embeddings (int8 L2 quantized)</li><li>Personal notes are indexed and reflected in future queries</li></ul> |
 | **Output** | <code>_search_index.json</code> |
-| **Usage** | Natural-language query on topic page → embedding similarity search → Claude (Extended Thinking) generates grounded answer |
+| **Usage** | Natural-language query on topic page → embedding similarity search → user-key prefix auto-detected → **Anthropic / OpenAI / Google** streams a grounded answer. Output is natural prose + clickable `[N]` citation chips + auto-inlined figures. The Fast/Smart toggle labels show the actual model resolved for the detected backend (e.g. `Fast (cost: Haiku 4.5)`) |
 
 ### 6. Index + Network
 
 | | Description |
 |---|---|
 | **Input** | All classifications + reviews + timelines + UMAP coordinates |
-| **Processing** | <ul><li>Assembles category cards, search, timeline narratives, and Deep Research UI into a single HTML</li><li>D3.js + Three.js interactive network from UMAP 2D/3D coordinates</li></ul> |
+| **Processing** | <ul><li>Assembles category cards, search, timeline narratives, Deep Research UI, and the Audio Overview modal into a single HTML</li><li>D3.js + Three.js interactive network from UMAP 2D/3D coordinates</li></ul> |
 | **Output** | <ul><li><code>{topic}/index.html</code></li><li><code>{topic}/network.html</code></li></ul> |
-| **Usage** | <code>cd docs && python -m http.server 8000</code> — browse locally |
+| **Usage** | <code>cd docs && python -m http.server 8000</code> — browse locally. On both per-paper pages and Deep Research answers, the 🎧 **Audio Overview** button generates a Korean podcast (Gemini TTS, MP3 encoded in-browser → instant download). On the deployed site the finished MP3 is also delivered by email automatically |
 
 ### Deployment (Optional)
 
@@ -576,8 +608,8 @@ Local use is the default. For sharing, a **3-tier split-host** architecture depl
 
 | Tier | Role | Contents |
 |------|------|----------|
-| **Cloudflare Workers (Static Assets)** | Serves user-facing content | Full `docs/` uploaded (local-only topics excluded via `docs/.assetsignore`) |
-| **GitHub `gh-pages` branch** | Entry-URL → Cloudflare redirect | Per-topic redirect stubs (<1KB), `jehyunlee.github.io/paper-curation/{topic}/` → `workers.dev/{topic}/` |
+| **Cloudflare Workers (Static Assets + Function)** | Serves user-facing content + the `/api/audio-email` route | Full `docs/` uploaded (local-only topics excluded via `docs/.assetsignore`) + `worker/index.js` (Audio Overview email handler) |
+| **GitHub `gh-pages` branch** | Entry-URL → Cloudflare redirect | Per-topic redirect stubs (<1KB), `jehyunlee.github.io/paper-curation/{topic}/` → the operator-configured Cloudflare URL |
 | **GitHub `master` branch** | Code / config / README only | Large `docs/papers/`, `docs/{topic}/` content is `.gitignore`'d |
 
 ```bash
@@ -587,8 +619,8 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode deploy
 
 Automatic:
 - PNG → WebP conversion (~60% size reduction)
-- API keys stripped from deployed HTML, local working tree restored after push
-- `npx wrangler deploy` → Cloudflare (hash-based incremental upload)
+- API keys and local-only emails stripped from deployed HTML; local working tree restored after push
+- `npx wrangler deploy` → Cloudflare (hash-based incremental upload) + Worker function deployed in the same step
 - gh-pages redirect stub idempotent sync (auto-discovers new topics; no-op when unchanged)
 - Cloudflare 200 OK verification (polls up to 5 min)
 - Only code/config changes pushed to master (content is gitignored)
@@ -598,6 +630,20 @@ Token setup: Cloudflare Dashboard → My Profile → API Tokens → "Edit Cloudf
 setx CF_API_TOKEN "..."
 setx CLOUDFLARE_ACCOUNT_ID "..."
 ```
+
+**Custom domain (recommended)** — drop a `[[routes]]` block into `wrangler.toml` with `pattern = "your-subdomain.your-domain.tld"`, `custom_domain = true`, and `zone_name = "your-domain.tld"`. `wrangler deploy` then provisions DNS, SSL, and routing in Cloudflare for you. Update `prepare_deploy.py`'s `CF_BASE_URL` constant to match so the gh-pages stubs point at the new domain. The default `*.workers.dev` URL works too, but a custom domain matters for email consistency.
+
+**Audio Overview email — Cloudflare Worker secrets** — `worker/index.js` ships finished MP3s through the [Resend](https://resend.com) API. Register three secrets with `wrangler secret put`:
+
+```bash
+npx wrangler secret put RESEND_API_KEY    # the re_xxx key from Resend (required)
+npx wrangler secret put AUDIO_FROM        # e.g. "Paper Curation <noreply@your-domain.tld>" (domain must be verified)
+npx wrangler secret put AUDIO_REPLY_TO    # operator inbox replies land in, e.g. "you@gmail.com" (optional)
+```
+
+- When `RESEND_API_KEY` is unset, `/api/audio-email` returns 503 and the client falls back to download-only.
+- `AUDIO_FROM` requires the domain to be SPF/DKIM/DMARC-verified in Resend before it can send to arbitrary recipients (without verification, only the Resend account's own address works).
+- To bake operator addresses for localhost builds, add `"local_emails": ["a@b.com", ...]` to `config.json` or set `PAPER_CURATION_LOCAL_EMAILS="a@b.com,c@d.com"`. These are stripped at deploy time.
 
 ---
 

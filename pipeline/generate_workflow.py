@@ -81,6 +81,18 @@ def build_method_text():
     # 5. Key Design Decisions (CLAUDE.md)
     design_section = _extract_section(claude, "Key Design Decisions")
 
+    # 6. Workflow mermaid block (English version preferred — has the latest
+    #    multi-backend + Audio Overview + Worker function nodes the table
+    #    above doesn't surface). Strip the ```mermaid fences so the LLM
+    #    sees raw nodes/edges.
+    mermaid_section = _extract_section(readme, "Workflow")
+    if not mermaid_section:
+        mermaid_section = _extract_section(readme, "워크플로우")
+    mermaid_block = ""
+    m = re.search(r'```mermaid\s*\n(.*?)\n```', mermaid_section, re.DOTALL)
+    if m:
+        mermaid_block = m.group(1).strip()
+
     method = f"""## Paper Curation Pipeline — Zotero + Claude Code + Deep Research + Obsidian
 
 ### TOOL ECOSYSTEM (show as interconnected logos/icons at the top)
@@ -110,6 +122,29 @@ Each tool MUST be represented by its recognizable logo/icon. Show Claude Code as
 
 ### KEY DESIGN PRINCIPLES
 {design_section}
+
+### CANONICAL WORKFLOW GRAPH (use this as the source of truth — every
+### node and edge here MUST appear in the diagram, including the
+### in-browser Deep Research multi-backend choice, the Audio Overview
+### node, the Cloudflare Worker `/api/audio-email` function, the Resend
+### email send, and the Local-vs-Deploy fork)
+{mermaid_block}
+
+### IN-BROWSER FEATURES (must be visible in the diagram, separate from
+### the build-time pipeline above)
+- Deep Research: client-side natural-language Q&A. Detects user-pasted
+  API key by prefix and routes to ONE OF Anthropic (sk-ant-…) /
+  OpenAI (sk-…) / Google (AIza…) — three logos shown as a fan-in choice.
+- Audio Overview: in-browser podcast generation. Calls Gemini TTS,
+  encodes MP3 client-side, downloads locally AND (on deployed Worker)
+  POSTs to /api/audio-email → Resend → email with MP3 attachment.
+
+### DELIVERY FORK (must appear as a clear branching point)
+- LOCAL: `python -m http.server` — full text.md available, richer Deep
+  Research, no email delivery.
+- DEPLOY: Cloudflare Workers serves docs/ + Worker function handles
+  /api/audio-email. gh-pages redirect stubs forward visitors from
+  jehyunlee.github.io/paper-curation/{{topic}}/ to the Worker URL.
 """
     return method
 
