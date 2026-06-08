@@ -1429,6 +1429,75 @@ def _run_topic_index(topic=None):
       deepUpdateButtons(true);
     }
 
+    // Detect provider-side auth failures. Each provider returns a
+    // different shape -- Anthropic uses 401 + 'authentication_error',
+    // OpenAI uses 401 + 'invalid_api_key', Google returns 400 with
+    // 'API_KEY_INVALID' / 'API key not valid'. We check all of them so
+    // a single bad-key path catches any backend.
+    function isAuthError(err) {
+      if (!err || !err.message) return false;
+      const m = err.message;
+      if (/\\b(401|403)\\b/.test(m)) return true;
+      if (/invalid[_ ]?api[_ ]?key/i.test(m)) return true;
+      if (/incorrect api key/i.test(m)) return true;
+      if (/api key not valid/i.test(m)) return true;
+      if (/API_KEY_INVALID/i.test(m)) return true;
+      if (/authentication_error/i.test(m)) return true;
+      if (/unauthorized/i.test(m)) return true;
+      return false;
+    }
+
+    // Which key just failed -- the LLM key (answer-generation) or the
+    // OpenAI embedding key (used only by embedQuery)? embedQuery
+    // tags its errors with the 'OpenAI embed' prefix; everything else
+    // is an answer-generation backend.
+    function authErrorScope(err) {
+      if (err && err.message && err.message.indexOf('OpenAI embed') === 0) return 'embedding';
+      return 'llm';
+    }
+
+    // Wipe the offending key from BOTH globals and localStorage, then
+    // pop a fresh prompt with the "API Key Invalid. Try with another
+    // one" prefix. Returns the new key, or null if the user cancels.
+    function clearKeyAndRePrompt(scope) {
+      if (scope === 'embedding') {
+        _OPENAI_KEY = '';
+        try { localStorage.removeItem('_OPENAI_KEY'); } catch (e) {}
+        const nk = prompt('API Key Invalid. Try with another one.\\n\\nOpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다):');
+        if (!nk) return null;
+        _OPENAI_KEY = nk;
+        try { localStorage.setItem('_OPENAI_KEY', nk); } catch (e) {}
+        return nk;
+      }
+      // LLM (answer-generation) scope -- also drop the cached
+      // Anthropic/Gemini aliases so a Google key isn't silently
+      // re-used for audio after the user replaces a bad LLM key.
+      _LLM_KEY = '';
+      _ANTHROPIC_KEY = '';
+      try {
+        localStorage.removeItem('_LLM_KEY');
+        localStorage.removeItem('_ANTHROPIC_KEY');
+      } catch (e) {}
+      const nk = prompt('API Key Invalid. Try with another one.\\n\\n답변 생성용 API Key를 입력하세요 (Anthropic sk-ant-… / OpenAI sk-… / Google AIza… 중 하나):');
+      if (!nk) return null;
+      const b = detectBackend(nk);
+      if (!b) {
+        deepSetStatus('알 수 없는 키 형식입니다 (sk-ant- / sk- / AIza 중 하나로 시작).', true);
+        return null;
+      }
+      _LLM_KEY = nk;
+      try { localStorage.setItem('_LLM_KEY', nk); } catch (e) {}
+      if (b === 'anthropic') {
+        _ANTHROPIC_KEY = nk;
+        try { localStorage.setItem('_ANTHROPIC_KEY', nk); } catch (e) {}
+      } else if (b === 'google') {
+        window._GEMINI_KEY = nk;
+        try { localStorage.setItem('_GEMINI_KEY', nk); } catch (e) {}
+      }
+      updateDeepModelLabels();
+      return nk;
+    }
+
     async function runDeepResearch(query) {
       query = (query || '').trim();
       if (!query) return;
@@ -1533,10 +1602,29 @@ def _run_topic_index(topic=None):
         const length = document.getElementById('deep-length').value || 'short';
         await callLLM(query, dedupedSelected, lang, tier, length, fullTexts);
         finalizeDeepAnswer();
+        DEEP._authRetry = 0;
         deepSetStatus('\u2705 완료');
         setTimeout(() => deepSetStatus(''), 2500);
       } catch (e) {
         console.error(e);
+        // Auth failure path: clear the offending key, re-prompt with
+        // "API Key Invalid. Try with another one", retry. Cap at 3
+        // attempts so a user mashing Enter on a bad key doesn't
+        // recurse forever.
+        if (isAuthError(e)) {
+          const scope = authErrorScope(e);
+          DEEP._authRetry = (DEEP._authRetry || 0) + 1;
+          if (DEEP._authRetry <= 3) {
+            const nk = clearKeyAndRePrompt(scope);
+            if (nk) {
+              await runDeepResearch(query);
+              return;
+            }
+          }
+          deepSetStatus('API Key Invalid. Try with another one.', true);
+          DEEP._authRetry = 0;
+          return;
+        }
         deepSetStatus('오류: ' + e.message, true);
       }
     }
