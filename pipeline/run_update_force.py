@@ -689,95 +689,90 @@ def extract_figures(pdf_path, slug_dir):
                 full_page_image = r
                 break
 
+        # Pass 1: collect EVERY caption line on the page first, so each
+        # graphic rect can be assigned to the caption it actually belongs to.
+        # A caption is the first line of a text block that STARTS with
+        # "Figure/Fig/FIG N". Scan all lines of the block (Nature/Science merge
+        # a trailing fragment above the caption into one block, so it may be
+        # line #1+). Case-insensitive for physics/PRL "FIG. 1.".
+        caps = []  # each: dict(fig_num, caption, x0, top, x1, bottom)
         for tb in txt_blocks:
-            # Find the caption LINE inside this block. Usually it's the first
-            # line, but Nature/Science-style layouts merge a trailing text
-            # fragment above the caption into the same block, so the "Figure N"
-            # line is line #1+. Scan all lines and key on the first that STARTS
-            # with "Figure N". Tolerate trailing punctuation/colon ("Figure 2:");
-            # ignore appendix letters ("Figure A1"). Anchored re.match rejects
-            # mid-sentence mentions; body-text mentions that happen to start a
-            # line are filtered by the adjacent-graphic requirement below.
-            cap_line = None
             for ln in tb["lines"]:
                 lt = "".join(s["text"] for s in ln["spans"]).strip()
-                # Case-insensitive: physics/PRL papers caption as "FIG. 1."
-                # (uppercase), not just "Figure 1" / "Fig. 1".
                 m = re.match(r"(?:Figure|Fig\.?)\s*([0-9]+)", lt, re.I)
                 if m:
-                    cap_line = (ln, lt, int(m.group(1)))
+                    lb = ln["bbox"]
+                    caps.append({
+                        "fig_num": int(m.group(1)), "caption": lt[:120],
+                        "x0": lb[0], "top": lb[1], "x1": lb[2],
+                        "bottom": max(lb[3], tb["bbox"][3]),
+                    })
                     break
-            if cap_line is None:
-                continue
-            cap_ln, lt, fig_num = cap_line
+        if not caps:
+            continue
 
-            # Anchor on the caption line's own bbox (precise) for the top edge
-            # and column; use the block bottom so a multi-line caption's full
-            # vertical extent still bounds a figure that sits BELOW the caption.
-            lb = cap_ln["bbox"]
-            cap_x0 = lb[0]
-            cap_top = lb[1]
-            cap_x1 = lb[2]
-            cap_bottom = max(lb[3], tb["bbox"][3])
-            cap_w = cap_x1 - cap_x0
-            caption = lt[:120]
+        # Figures sit ABOVE their caption (dominant convention), so a tall
+        # figure's TOP panels can be far above the caption — allow a generous
+        # gap there. The figure-BELOW-caption case is rare; keep its gap tight
+        # so the block of body text under a caption isn't vacuumed into the crop.
+        gap_above = ph * 0.6
+        gap_below = ph * 0.12
 
-            if full_page_image is not None:
-                # Legitimate full-page scanned figure for this caption.
-                adj_rects = [full_page_image]
-            else:
-                # Keep graphic rects that are vertically adjacent to the
-                # caption (gap within ~ph*0.6 above OR below) AND horizontally
-                # overlap the caption's column. This rejects body-text
-                # "as shown in Figure 1" mentions (no adjacent graphic) and
-                # grabs only this caption's own figure on a multi-figure page.
-                gap_tol = ph * 0.6
-                adj_rects = []
-                for r in graphic_rects:
-                    rx0, ry0, rx1, ry1 = r
-                    # vertical adjacency: rect bottom above caption top
-                    # (figure-above-caption) or rect top below caption bottom
-                    # (figure-below-caption), within tolerance
-                    above = (ry1 <= cap_bottom) and (cap_top - ry1) <= gap_tol
-                    below = (ry0 >= cap_top) and (ry0 - cap_bottom) <= gap_tol
-                    if not (above or below):
+        # Pass 2: assign each graphic rect to its OWNING caption. The figure
+        # width is derived from the rects themselves, NEVER from the caption's
+        # column — a single-column caption legitimately owns a full-width
+        # figure's far panels (common in Nature/Science). Ranking, best first:
+        #   (1) caption BELOW the rect (figure-above-caption, the dominant
+        #       convention) beats a caption above it;
+        #   (2) a caption that horizontally OVERLAPS the rect beats one that
+        #       does not — this keeps SIDE-BY-SIDE figures separate;
+        #   (3) nearest vertical gap.
+        assigned = {id(c): [] for c in caps}
+        if full_page_image is not None:
+            assigned[id(caps[0])].append(full_page_image)
+        else:
+            for r in graphic_rects:
+                rx0, ry0, rx1, ry1 = r
+                best_key = None
+                best_cap = None
+                for c in caps:
+                    if c["top"] >= ry1 - 2 and (c["top"] - ry1) <= gap_above:
+                        direction, vgap = 0, c["top"] - ry1   # figure above caption
+                    elif c["bottom"] <= ry0 + 2 and (ry0 - c["bottom"]) <= gap_below:
+                        direction, vgap = 1, ry0 - c["bottom"]  # figure below caption
+                    else:
                         continue
-                    # horizontal overlap with caption column
-                    if rx1 <= cap_x0 or rx0 >= cap_x1:
-                        # No overlap with caption x-range. Allow when caption is
-                        # narrow (single-column caption under a wide figure can
-                        # still sit inside the figure's x-span) — i.e. caption
-                        # contained in rect horizontally.
-                        if not (rx0 <= cap_x0 and rx1 >= cap_x1):
-                            continue
-                    adj_rects.append(r)
+                    overlap = not (rx1 <= c["x0"] or rx0 >= c["x1"])
+                    key = (direction, 0 if overlap else 1, vgap)
+                    if best_key is None or key < best_key:
+                        best_key, best_cap = key, c
+                if best_cap is not None:
+                    assigned[id(best_cap)].append(r)
 
+        for c in caps:
+            adj_rects = assigned[id(c)]
             if not adj_rects:
-                # No graphic content near this caption → body-text mention or
-                # an un-extractable figure. DROP it (never emit a full page).
+                # No graphic content owned by this caption → body-text mention
+                # or un-extractable figure. DROP it (never emit a full page).
                 continue
-
             hull = _union_rects(adj_rects)
-            graphic_area = sum(
-                (r[2] - r[0]) * (r[3] - r[1]) for r in adj_rects
-            )
-
-            # Build the crop box: union of adjacent graphic rects + MARGIN,
-            # then clip to the caption column when the caption is narrow
-            # (<pw*0.6) so a two-column figure doesn't pull in the other column.
+            graphic_area = sum((r[2] - r[0]) * (r[3] - r[1]) for r in adj_rects)
+            # Crop box = union of owned rects + MARGIN. No caption-column clip.
             bx0 = max(0, hull[0] - MARGIN)
             by0 = max(0, hull[1] - MARGIN)
             bx1 = min(pw, hull[2] + MARGIN)
             by1 = min(ph, hull[3] + MARGIN)
-            if full_page_image is None and cap_w < pw * 0.6:
-                cap_cx = (cap_x0 + cap_x1) / 2
-                if cap_cx < pw * 0.45:
-                    bx1 = min(bx1, pw * 0.55)
-                elif cap_cx > pw * 0.55:
-                    bx0 = max(bx0, pw * 0.45)
-
+            # Extend the crop toward the caption so TEXT-rendered figure content
+            # (panel labels, chemical-formula lists, axis labels) between the
+            # last graphic rect and the caption is not clipped. The caption is
+            # the figure's hard boundary, so this can never reach body text.
+            n_above = sum(1 for r in adj_rects if r[3] <= c["top"] + 2)
+            if n_above * 2 >= len(adj_rects):     # figure above its caption
+                by1 = min(ph, max(by1, c["top"] - 2))
+            else:                                 # figure below its caption (rare)
+                by0 = max(0, min(by0, c["bottom"] + 2))
             candidates.append({
-                "fig_num": fig_num, "page": pn, "caption": caption,
+                "fig_num": c["fig_num"], "page": pn, "caption": c["caption"],
                 "box": [bx0, by0, bx1, by1],
                 "hull": hull, "graphic_area": graphic_area,
                 "pw": pw, "ph": ph,
@@ -807,10 +802,12 @@ def extract_figures(pdf_path, slug_dir):
         x0, y0, x1, y1 = c["box"]
         out = os.path.join(fig_dir, f"fig{fig_num}.png")
 
-        # Hull clamp bounds: Gemini may nudge the box but never let it leave
-        # the rect hull by more than MARGIN in any direction.
-        hx0, hy0 = max(0, hull[0] - MARGIN), max(0, hull[1] - MARGIN)
-        hx1, hy1 = min(pw, hull[2] + MARGIN), min(ph, hull[3] + MARGIN)
+        # Clamp bounds = the geometric box itself (owned-rect hull + MARGIN,
+        # already extended toward the caption to capture text-rendered figure
+        # content). Gemini may nudge WITHIN this box but never expand past it —
+        # the geometric crop is the prior; the LLM only refines inside it, so it
+        # can neither escape to a full page nor re-clip the caption extension.
+        hx0, hy0, hx1, hy1 = c["box"]
 
         rendered_ok = False
         for rnd in range(MAX_ROUNDS + 1):
