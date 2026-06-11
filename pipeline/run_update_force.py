@@ -690,26 +690,35 @@ def extract_figures(pdf_path, slug_dir):
                 break
 
         for tb in txt_blocks:
-            first_line = tb["lines"][0] if tb["lines"] else None
-            if not first_line:
+            # Find the caption LINE inside this block. Usually it's the first
+            # line, but Nature/Science-style layouts merge a trailing text
+            # fragment above the caption into the same block, so the "Figure N"
+            # line is line #1+. Scan all lines and key on the first that STARTS
+            # with "Figure N". Tolerate trailing punctuation/colon ("Figure 2:");
+            # ignore appendix letters ("Figure A1"). Anchored re.match rejects
+            # mid-sentence mentions; body-text mentions that happen to start a
+            # line are filtered by the adjacent-graphic requirement below.
+            cap_line = None
+            for ln in tb["lines"]:
+                lt = "".join(s["text"] for s in ln["spans"]).strip()
+                m = re.match(r"(?:Figure|Fig\.?)\s*([0-9]+)", lt)
+                if m:
+                    cap_line = (ln, lt, int(m.group(1)))
+                    break
+            if cap_line is None:
                 continue
-            lt = "".join(s["text"] for s in first_line["spans"])
-            # Tolerate trailing punctuation/colon ("Figure 2:"); ignore
-            # appendix letters ("Figure A1"). Captions begin the block, so
-            # re.match (anchored at start) already rejects mid-sentence text,
-            # but body-text mentions that START with "Figure 1" are filtered
-            # by the adjacent-graphic requirement below.
-            m = re.match(r"(?:Figure|Fig\.?)\s*([0-9]+)", lt)
-            if not m:
-                continue
-            fig_num = int(m.group(1))
+            cap_ln, lt, fig_num = cap_line
 
-            cap_x0 = tb["bbox"][0]
-            cap_top = tb["bbox"][1]
-            cap_x1 = tb["bbox"][2]
-            cap_bottom = tb["bbox"][3]
+            # Anchor on the caption line's own bbox (precise) for the top edge
+            # and column; use the block bottom so a multi-line caption's full
+            # vertical extent still bounds a figure that sits BELOW the caption.
+            lb = cap_ln["bbox"]
+            cap_x0 = lb[0]
+            cap_top = lb[1]
+            cap_x1 = lb[2]
+            cap_bottom = max(lb[3], tb["bbox"][3])
             cap_w = cap_x1 - cap_x0
-            caption = lt.strip()[:120]
+            caption = lt[:120]
 
             if full_page_image is not None:
                 # Legitimate full-page scanned figure for this caption.
