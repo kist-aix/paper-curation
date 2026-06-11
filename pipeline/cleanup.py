@@ -128,6 +128,24 @@ def collect_targets(purge_text=False):
     #     `add_file` 가 아닌 별도 JSON 편집이 필요하므로 prune_json_narratives()에서 처리.
 
     # 10. pipeline/_img_timelines/ — 과거 카테고리 candidate만 삭제, 현재 카테고리 보존
+    #
+    # 실제 generate_timelines 가 만드는 파일 패턴:
+    #   _method_text_{slug}.txt, _caption_{slug}.txt   ← narrative 산출물
+    #   category_{slug}_{N}.png                        ← 카테고리 candidate (generate_candidates prefix=f"category_{slug}")
+    #   research_timeline_{N}.png                      ← main timeline candidate (prefix="research_timeline" → slug="main")
+    #   {slug}_candidate_{N}.png                       ← 옛 네이밍 (호환 유지)
+    import re as _re
+    _IMG_TL_PATTERNS = [
+        (_re.compile(r"^_method_text_(.+)$"),     lambda m: m.group(1)),
+        (_re.compile(r"^_caption_(.+)$"),         lambda m: m.group(1)),
+        (_re.compile(r"^category_(.+)_(\d+)$"),   lambda m: m.group(1)),
+        # main timeline candidate 는 deploy 후 항상 stale 로 취급.
+        # (deploy 본은 docs/{topic}/research_timeline.png 에 별도 보존되고,
+        #  generate_timelines 의 새 Patch B 가 deploy 직후 sibling cleanup 하므로
+        #  여기 남아있는 research_timeline_N.png 는 옛 사이클의 잔재.)
+        (_re.compile(r"^research_timeline_\d+$"), lambda m: "__candidate_stale__"),
+        (_re.compile(r"^(.+)_candidate_(\d+)$"),  lambda m: m.group(1)),  # legacy
+    ]
     img_tl_dir = PIPELINE_DIR / "_img_timelines"
     if img_tl_dir.exists():
         current_slugs = _get_current_categories()
@@ -138,18 +156,13 @@ def collect_targets(purge_text=False):
             for f in topic_sub.iterdir():
                 if f.is_dir():
                     continue
-                # 파일명에서 카테고리 slug 추출: _method_text_{slug}.txt, _caption_{slug}.txt, {slug}_candidate_N.png
                 stem = f.stem
                 slug = None
-                for prefix in ("_method_text_", "_caption_"):
-                    if stem.startswith(prefix):
-                        slug = stem[len(prefix):]
+                for pat, extract in _IMG_TL_PATTERNS:
+                    m = pat.match(stem)
+                    if m:
+                        slug = extract(m)
                         break
-                if slug is None:
-                    # candidate image: {slug}_candidate_N 또는 기타
-                    parts = stem.rsplit("_candidate_", 1)
-                    if len(parts) == 2:
-                        slug = parts[0]
                 if slug and slug not in current_slugs:
                     add_file(f, "stale timeline candidate")
 
