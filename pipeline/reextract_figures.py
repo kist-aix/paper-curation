@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+"""Bulk figure re-extraction with the geometric (nearest-caption) extractor.
+
+Re-runs the fixed extract_figures() across the corpus to replace old
+full-page / over-cropped figures with tight, localized crops. Robust by
+design — safe to interrupt and resume, never regresses a paper.
+
+Two tiers (auto-detected from review.md):
+  - tier1: review already references figures -> re-extract -> webp -> re-render
+    HTML. NO LLM call; review prose is left untouched.
+  - tier2: review has no figure refs -> re-extract -> write_review (re-embed)
+    -> splice the original frontmatter + Related Papers back -> webp -> render.
+
+Robustness guarantees:
+  - NO-REGRESS: if the new extraction yields 0 figures, the paper is left
+    exactly as-is (old figures + review kept).
+  - Per-paper transient backup (figures/ + review.md + index.html) restored on
+    failure, deleted on success (peak disk ~= workers x one paper).
+  - Referenced figure numbers the new run does not reproduce keep their old
+    webp (no broken references).
+  - Checkpoint/resume via an append-only JSONL log (re-running skips done
+    slugs). Atomic _papers_index.json patch at the end (single-threaded).
+  - Geometric extraction only (GOOGLE_API_KEY unset) — deterministic, fast,
+    and already validated; Gemini refinement is skipped for the bulk pass.
+
+Usage:
+  PYTHONUTF8=1 python pipeline/reextract_figures.py --manifest /tmp/figure_scan_manifest.json --dry-run
+  PYTHONUTF8=1 python pipeline/reextract_figures.py --manifest /tmp/figure_scan_manifest.json --limit 30
+  PYTHONUTF8=1 python pipeline/reextract_figures.py --manifest /tmp/figure_scan_manifest.json --workers 16
+  PYTHONUTF8=1 python pipeline/reextract_figures.py --slugs 099_...,481_...
+"""
+import os, sys, re, json, glob, shutil, argparse, threading, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import run_update_force as ruf
+from prepare_deploy import convert_png_to_webp, update_html_refs
+from config_loader import PAPERS_DIR
+from lib.atomic_io import atomic_write_json
+
+PAPERS = str(PAPERS_DIR)
+LOG_DEFAULT = os.path.join(os.path.dirname(__file__), "_logs", "reextract_log.jsonl")
+
+FIGREF = re.compile(r'figures/fig(\d+)\.(png|webp)')
+
+
+def _now():
+    return time.strftime("%H:%M:%S")
+
+
+def review_fig_refs(review_path):
+    """Set of referenced fig numbers + dominant extension in review.md."""
+    if not os.path.exists(review_path):
+        return set(), "webp"
+    txt = open(review_path, encoding="utf-8").read()
+    nums = {int(m.group(1)) for m in FIGREF.finditer(txt)}
+    exts = [m.group(2) for m in FIGREF.finditer(txt)]
+    ext = "webp" if exts.count("webp") >= exts.count("png") else "png"
+    return nums, ext
+
+
+def _fm(text):
+    m = re.match(r"^(---\n.*?\n---\n)", text, flags=re.S)
+    return m.group(1) if m else ""
+
+
+def _related(text):
+    m = re.search(r"(^## Related Papers\b.*)$", text, flags=re.S | re.M)
+    return (m.group(1).rstrip() + "\n") if m else ""
+
+
+def _authors(fm):
+    blk = re.search(r"^authors:\s*\n((?:\s*-\s*.*\n)+)", fm, flags=re.M)
+    if not blk:
+        return []
+    return [re.sub(r'^\s*-\s*"?(.*?)"?\s*$', r'\1', ln)
+            for ln in blk.group(1).splitlines() if ln.strip()]
+
+
+def _yget(fm, key):
+    m = re.search(rf'^{key}:\s*"?(.*?)"?\s*$', fm, flags=re.M)
+    return m.group(1) if m else ""
+
+
+def _split_name(n):
+    p = n.rsplit(" ", 1)
+    return {"firstName": p[0] if len(p) > 1 else "", "lastName": p[-1]}
+
+
+def _remove_fig_embed(review_path, n):
+    """Remove the markdown embed (image + optional italic caption) for fig{n}."""
+    txt = open(review_path, encoding="utf-8").read()
+    pat = re.compile(
+        rf'!\[[^\]]*\]\(figures/fig{n}\.(?:png|webp)\)\s*\n+(\*[^*\n]+\*\s*\n+)?')
+    new = pat.sub("", txt)
+    if new != txt:
+        open(review_path, "w", encoding="utf-8").write(new)
+
+
+def _drop_fullpage_figs(pdf, fd, rv):
+    """Remove full-page figure files + their review embeds. Returns count.
+
+    Used only when the new extractor produced NO figures: the new extractor's
+    scanned-PDF guard keeps a legitimate full-page image, so new==0 means any
+    old full-page crop is text/junk from the old algorithm — safe to drop."""
+    import fitz
+    from PIL import Image
+    try:
+        doc = fitz.open(pdf)
+        p0 = doc[0]
+        ppx = (p0.rect.width * 3) * (p0.rect.height * 3)
+        doc.close()
+    except Exception:
+        return 0
+    removed = 0
+    for f in glob.glob(os.path.join(fd, "fig*.webp")) + glob.glob(os.path.join(fd, "fig*.png")):
+        try:
+            im = Image.open(f)
+            ratio = (im.size[0] * im.size[1]) / max(1.0, ppx)
+        except Exception:
+            continue
+        if ratio > 0.85:
+            mm = re.match(r"fig(\d+)\.(?:webp|png)$", os.path.basename(f))
+            if mm:
+                _remove_fig_embed(rv, int(mm.group(1)))
+            try:
+                os.remove(f)
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
+
+def _prune_orphans(fd, rv):
+    """Remove figure files the final review.md no longer references."""
+    final_refs, _ = review_fig_refs(rv)
+    for f in glob.glob(os.path.join(fd, "fig*.webp")):
+        mm = re.match(r"fig(\d+)\.webp$", os.path.basename(f))
+        if mm and int(mm.group(1)) not in final_refs:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+
+def _backup(sd, fd):
+    """Transient backup of the mutable per-paper state. Returns backup dir."""
+    bak = os.path.join(sd, ".reextract-bak")
+    if os.path.isdir(bak):
+        shutil.rmtree(bak, ignore_errors=True)
+    os.makedirs(bak)
+    if os.path.isdir(fd):
+        shutil.copytree(fd, os.path.join(bak, "figures"))
+    for fn in ("review.md", "index.html"):
+        s = os.path.join(sd, fn)
+        if os.path.exists(s):
+            shutil.copy2(s, os.path.join(bak, fn))
+    return bak
+
+
+def _restore(sd, fd, bak):
+    if not os.path.isdir(bak):
+        return
+    if os.path.isdir(os.path.join(bak, "figures")):
+        shutil.rmtree(fd, ignore_errors=True)
+        shutil.copytree(os.path.join(bak, "figures"), fd)
+    for fn in ("review.md", "index.html"):
+        b = os.path.join(bak, fn)
+        if os.path.exists(b):
+            shutil.copy2(b, os.path.join(sd, fn))
+
+
+def process_one(entry):
+    slug = entry["slug"]
+    tier = entry["tier"]
+    pdf = entry.get("pdf")
+    sd = os.path.join(PAPERS, slug)
+    fd = os.path.join(sd, "figures")
+    rv = os.path.join(sd, "review.md")
+
+    if not pdf or not os.path.exists(pdf):
+        return (slug, "skip_no_pdf", 0)
+    if not os.path.exists(rv):
+        return (slug, "skip_no_review", 0)
+
+    os.makedirs(fd, exist_ok=True)
+    ref_nums, _ = review_fig_refs(rv)
+    bak = _backup(sd, fd)
+    try:
+        # 1) extract (geometric; GOOGLE_API_KEY popped before the pool)
+        new_figs = ruf.extract_figures(pdf, sd)        # writes figN.png
+        new_nums = {int(f["name"]) for f in new_figs}
+
+        # 2) NO-REGRESS: no new figures. Revert to the pristine old state. Then,
+        #    since the new extractor's scanned-PDF guard would keep a legitimate
+        #    full-page image, new==0 means any old full-page crop is text/junk —
+        #    drop those (+ their embeds). Non-full-page old figures are kept.
+        if not new_nums:
+            _restore(sd, fd, bak)
+            dropped = _drop_fullpage_figs(pdf, fd, rv)
+            if dropped:
+                for fn in ("review.md", "index.html"):
+                    fp = os.path.join(sd, fn)
+                    if os.path.exists(fp):
+                        update_html_refs(fp)
+                ruf.convert_to_html(slug)
+                _prune_orphans(fd, rv)
+                return (slug, "dropped_fullpage_junk", -dropped)
+            _prune_orphans(fd, rv)
+            return (slug, "kept_old_no_new_figs", 0)
+
+        # 3) tier2: regenerate review to embed figures, preserve frontmatter +
+        #    Related Papers from the backup copy.
+        if tier == "tier2":
+            old = open(rv, encoding="utf-8").read()
+            fm, rel = _fm(old), _related(old)
+            item = {
+                "title": _yget(fm, "title") or entry.get("title", ""),
+                "creators": [_split_name(a) for a in _authors(fm)],
+                "date": _yget(fm, "date"), "DOI": _yget(fm, "doi"),
+                "abstractNote": "", "url": _yget(fm, "arxiv") or "",
+            }
+            ruf.write_review(item, sd, new_figs)        # review.md w/ png refs
+            new = open(rv, encoding="utf-8").read()
+            body = re.sub(r"^---\n.*?\n---\n", "", new, flags=re.S)
+            body = re.split(r"^## Related Papers\b", body, flags=re.M)[0].rstrip()
+            composed = (fm + "\n" if fm else "") + body + "\n\n" + rel
+            composed = re.sub(r"\n{3,}", "\n\n", composed).rstrip() + "\n"
+            open(rv, "w", encoding="utf-8").write(composed)
+
+        # 4) tier1: the review references the OLD figure set. For any referenced
+        #    number the new run did NOT reproduce, the old figure is stale (often
+        #    the full-page bug) — REMOVE its embed from the review instead of
+        #    showing it. Reproduced numbers now point at fresh tight crops.
+        if tier != "tier2":
+            for n in ref_nums - new_nums:
+                _remove_fig_embed(rv, n)
+
+        # 5) new png -> webp (uniform corpus format); drop the png on success.
+        for p in glob.glob(os.path.join(fd, "*.png")):
+            _, _, webp = convert_png_to_webp(p, quality=90)
+            if webp and os.path.exists(webp):
+                os.remove(p)
+
+        # 6) point review/html refs at webp (tier2 wrote png refs; tier1 no-op).
+        for fn in ("review.md", "index.html"):
+            fp = os.path.join(sd, fn)
+            if os.path.exists(fp):
+                update_html_refs(fp)
+
+        # 7) render HTML, then PRUNE figure files the final review no longer
+        #    references (orphaned old / full-page crops) so figures/ matches the
+        #    review exactly and stale full-page images are never deployed.
+        ruf.convert_to_html(slug)
+        _prune_orphans(fd, rv)
+
+        shutil.rmtree(bak, ignore_errors=True)          # success -> drop backup
+        return (slug, f"done_{tier}", len(new_nums))
+    except Exception as e:
+        _restore(sd, fd, bak)
+        shutil.rmtree(bak, ignore_errors=True)
+        return (slug, f"FAILED:{type(e).__name__}:{str(e)[:140]}", 0)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--manifest", help="figure_scan_manifest.json from the scan")
+    ap.add_argument("--slugs", help="comma-separated slugs (overrides manifest)")
+    ap.add_argument("--tier", choices=["tier1", "tier2", "all"], default="all")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--log", default=LOG_DEFAULT)
+    ap.add_argument("--no-resume", action="store_true", help="ignore the log; redo all")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    # Geometric only — deterministic, fast, validated. Do this ONCE for the
+    # whole process so every worker thread sees no key.
+    os.environ.pop("GOOGLE_API_KEY", None)
+    os.environ.pop("GEMINI_API_KEY", None)
+
+    # Build the work list.
+    if args.slugs:
+        idx = {p["slug"]: p for p in json.load(open(os.path.join(PAPERS, "_papers_index.json"), encoding="utf-8"))}
+        entries = []
+        for s in args.slugs.split(","):
+            s = s.strip()
+            p = idx.get(s, {})
+            rv = os.path.join(PAPERS, s, "review.md")
+            tier = "tier1" if (os.path.exists(rv) and review_fig_refs(rv)[0]) else "tier2"
+            # resolve pdf via the run_update_force resolver if not given
+            entries.append({"slug": s, "tier": tier, "pdf": p.get("pdf_path") or None,
+                            "title": p.get("title", "")})
+    else:
+        mani = json.load(open(args.manifest, encoding="utf-8"))
+        entries = [m for m in mani if m["tier"] in ("tier1", "tier2")]
+
+    if args.tier != "all":
+        entries = [e for e in entries if e["tier"] == args.tier]
+
+    # Resume: skip slugs already logged done/kept.
+    done = set()
+    os.makedirs(os.path.dirname(args.log), exist_ok=True)
+    if not args.no_resume and os.path.exists(args.log):
+        for ln in open(args.log, encoding="utf-8"):
+            try:
+                o = json.loads(ln)
+                if o.get("status", "").startswith(("done_", "kept_old", "skip_")):
+                    done.add(o["slug"])
+            except Exception:
+                pass
+    entries = [e for e in entries if e["slug"] not in done]
+    if args.limit:
+        entries = entries[:args.limit]
+
+    from collections import Counter
+    tc = Counter(e["tier"] for e in entries)
+    print(f"[{_now()}] work list: {len(entries)} papers "
+          f"(tier1={tc.get('tier1',0)} tier2={tc.get('tier2',0)}), "
+          f"{len(done)} already done, workers={args.workers}")
+    if args.dry_run:
+        print("[dry-run] not executing.")
+        return
+
+    log_lock = threading.Lock()
+    results = Counter()
+    t0 = time.time()
+    n = 0
+    with open(args.log, "a", encoding="utf-8") as logf, \
+            ThreadPoolExecutor(max_workers=args.workers) as ex:
+        futs = {ex.submit(process_one, e): e for e in entries}
+        for fut in as_completed(futs):
+            slug, status, nfig = fut.result()
+            key = status.split(":")[0]
+            results[key] += 1
+            n += 1
+            with log_lock:
+                logf.write(json.dumps({"slug": slug, "status": status, "nfig": nfig},
+                                      ensure_ascii=False) + "\n")
+                logf.flush()
+            if status.startswith("FAILED") or n % 100 == 0:
+                rate = n / max(1e-6, time.time() - t0)
+                eta = (len(entries) - n) / max(1e-6, rate)
+                print(f"[{_now()}] {n}/{len(entries)} "
+                      f"({rate:.1f}/s, ETA {eta/60:.1f}m) last={slug[:40]} -> {status[:60]}")
+
+    dt = time.time() - t0
+    print(f"\n[{_now()}] done in {dt/60:.1f}m. outcomes: {dict(results)}")
+
+    # Final single-threaded atomic index patch: has_figures for processed slugs.
+    processed = {e["slug"] for e in entries}
+    ipath = os.path.join(PAPERS, "_papers_index.json")
+    idx = json.load(open(ipath, encoding="utf-8"))
+    changed = 0
+    for p in idx:
+        s = p.get("slug")
+        if s in processed:
+            fd = os.path.join(PAPERS, s, "figures")
+            has = os.path.isdir(fd) and any(
+                f.lower().endswith((".png", ".webp")) for f in os.listdir(fd))
+            if bool(p.get("has_figures")) != has:
+                p["has_figures"] = has
+                changed += 1
+    if changed:
+        atomic_write_json(ipath, idx)
+    print(f"[{_now()}] index has_figures patched: {changed} entries")
+
+
+if __name__ == "__main__":
+    main()
