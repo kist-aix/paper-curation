@@ -153,6 +153,104 @@ def get_unpaywall_email():
     return cfg.get("unpaywall_email", "") or cfg.get("zotero", {}).get("email", "")
 
 
+# ---------------------------------------------------------------------------
+# 검색 키워드 (Core-1 search)
+# ---------------------------------------------------------------------------
+# config.json 최상위 "search_keywords".<topic> 가 우선. 없으면 아래 빌트인
+# 기본값으로 폴백한다 (ai4s/scisci 는 설정 없이도 동작). 새 토픽은 config.json 에
+# 블록을 추가하면 되고, 누락 시 get_search_keywords() 가 추가할 JSON 을 안내한다.
+
+_DEFAULT_SEARCH_KEYWORDS = {
+    "ai4s": {
+        "primary": [
+            "AI for science",
+            "machine learning science",
+            "scientific discovery AI",
+            "neural network physics",
+            "deep learning chemistry",
+            "AI drug discovery",
+            "scientific foundation model",
+            "AI materials",
+        ],
+        "secondary": [
+            "molecular dynamics",
+            "protein structure",
+            "weather prediction",
+            "quantum chemistry",
+            "scientific NLP",
+            "research automation",
+        ],
+    },
+    "scisci": {
+        "primary": [
+            "science of science",
+            "bibliometrics",
+            "scientometrics",
+            "research evaluation",
+            "citation analysis",
+            "scientific collaboration",
+        ],
+        "secondary": [
+            "h-index",
+            "research impact",
+            "academic careers",
+            "peer review",
+            "research funding",
+            "open access",
+            "reproducibility",
+            "research trend",
+            "international collaboration",
+            "science mapping",
+        ],
+    },
+}
+
+
+def get_search_keywords(topic):
+    """topic → {"primary": [...], "secondary": [...]} 검색 키워드 dict 반환.
+
+    우선순위:
+      1) config.json 최상위 "search_keywords".<topic>
+      2) 빌트인 기본값 (_DEFAULT_SEARCH_KEYWORDS — ai4s/scisci)
+
+    둘 다 없으면 config.json 에 그대로 붙여넣을 수 있는 JSON 블록을 담은
+    ValueError 를 던진다.
+    """
+    cfg = load_config()
+    configured = cfg.get("search_keywords", {}) or {}
+    if topic in configured:
+        return configured[topic]
+    if topic in _DEFAULT_SEARCH_KEYWORDS:
+        return _DEFAULT_SEARCH_KEYWORDS[topic]
+
+    example_block = json.dumps(
+        {
+            "search_keywords": {
+                topic: {
+                    "primary": [
+                        f"{topic} 핵심 키워드 1",
+                        f"{topic} 핵심 키워드 2",
+                        f"{topic} 핵심 키워드 3",
+                    ],
+                    "secondary": [
+                        f"{topic} 보조 키워드 1",
+                        f"{topic} 보조 키워드 2",
+                    ],
+                }
+            }
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    raise ValueError(
+        f"'{topic}' 토픽의 검색 키워드(search_keywords)가 정의되지 않았습니다.\n"
+        f"config.json 최상위에 아래 \"search_keywords\" 블록을 추가하세요.\n"
+        f"  - primary: 관련성 가중치가 높은 핵심 키워드 (제목/초록 매칭 0.5점)\n"
+        f"  - secondary: 보조 키워드 (매칭 0.2점)\n\n"
+        f"{example_block}"
+    )
+
+
 def get_paperbanana_dir():
     cfg = load_config()
     return cfg.get("paperbanana_dir", "")
