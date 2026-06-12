@@ -3,7 +3,8 @@ paper-curation 설치 스크립트.
 
 한 번 실행으로 전체 설치를 완료한다:
   1. config.json 생성 (인터랙티브)
-  2. 환경변수 확인 (ANTHROPIC_API_KEY, GOOGLE_API_KEY)
+  2. Core API 키 게이트 — ZOTERO/ANTHROPIC/GOOGLE/RESEND 4개 필수
+     (없으면 입력받아 config.json 저장, 거부 시 설치 중단)
   3. Zotero 연결 테스트 (User ID 조회 + 컬렉션 검증)
   4. PaperBanana 확인 (없으면 자동 클론)
   5. SKILL.md 생성 (템플릿 플레이스홀더 치환)
@@ -89,49 +90,133 @@ def step_config():
     return cfg
 
 
-def step_env_check(cfg):
-    """Step 2: LLM API 키 환경변수 확인.
+# Core API 키 게이트 — 설치를 끝내기 전에 반드시 있어야 하는 4개 필수 키.
+# 각 항목: env 변수명 → config.json 필드 경로(path) → 없으면 안 되는 이유(why).
+# env 또는 config.json 어느 한쪽에라도 값이 있으면 통과하고, 둘 다 비면 직접
+# 입력받아 config.json 에 저장한다 (config.json 은 .gitignore 로 보호됨).
+# OPENAI_API_KEY 는 더 이상 필수가 아니다 — Deep Research 임베딩이 Gemini 로 이동.
+REQUIRED_KEYS = [
+    {
+        "env": "ZOTERO_API_KEY",
+        "path": ("zotero", "api_key"),
+        "placeholder": "YOUR_ZOTERO_API_KEY_HERE",
+        "why": "Zotero 컬렉션·PDF 가져오기",
+        "issue": "https://www.zotero.org/settings/keys",
+        "prompt": "Zotero API Key",
+    },
+    {
+        "env": "ANTHROPIC_API_KEY",
+        "path": ("anthropic_api_key",),
+        "why": "리뷰·내러티브·Deep Research 답변 생성",
+        "issue": "https://console.anthropic.com/settings/keys",
+        "prompt": "Anthropic API Key (sk-ant-...)",
+    },
+    {
+        "env": "GOOGLE_API_KEY",
+        "path": ("google_api_key",),
+        "why": "figure 검증·Audio Overview·PaperBanana 타임라인·Deep Research 임베딩",
+        "issue": "https://aistudio.google.com/apikey",
+        "prompt": "Google API Key (AIza...)",
+    },
+    {
+        "env": "RESEND_API_KEY",
+        "path": ("resend_api_key",),
+        "why": "Audio Overview 이메일 발송",
+        "issue": "https://resend.com/api-keys",
+        "prompt": "Resend API Key (re_...)",
+    },
+]
 
-    ANTHROPIC / GOOGLE 키는 경고만 출력하고 넘어간다.
-    OPENAI_API_KEY는 Deep Research 검색 인덱스 빌드에 필수라 없으면
-    직접 입력받아 config.json에 저장하고, 입력을 건너뛰면 설치를 중단한다.
-    (config.json은 .gitignore 로 보호됨)"""
-    print("\n[2/6] 환경변수 확인")
 
-    for key in ["ANTHROPIC_API_KEY", "GOOGLE_API_KEY"]:
-        val = os.environ.get(key, "")
-        if val:
-            print(f"  ✓ {key} 설정됨")
-        else:
-            print(f"  ✗ {key} 미설정 — 파이프라인 실행 시 필요합니다")
+def _cfg_get(cfg, path):
+    """중첩 path(예: ("zotero","api_key"))를 따라 문자열 값을 읽는다. 없으면 ""."""
+    node = cfg
+    for k in path:
+        if not isinstance(node, dict):
+            return ""
+        node = node.get(k, "")
+    return node if isinstance(node, str) else ""
 
-    # OPENAI_API_KEY: required for Deep Research search index
-    env_key = os.environ.get("OPENAI_API_KEY", "")
-    cfg_key = cfg.get("openai_api_key", "")
-    openai_key = env_key or cfg_key
-    if openai_key:
-        source = "env" if env_key else "config.json"
-        print(f"  ✓ OPENAI_API_KEY 설정됨 ({source})")
-        os.environ["OPENAI_API_KEY"] = openai_key
-        return
 
+def _cfg_set(cfg, path, value):
+    """중첩 path 에 값을 쓴다. 중간 dict 가 없으면 만든다."""
+    node = cfg
+    for k in path[:-1]:
+        node = node.setdefault(k, {})
+    node[path[-1]] = value
+
+
+def _key_value(cfg, spec):
+    """필수 키를 env → config.json 순으로 찾는다. placeholder 는 빈 값 취급.
+
+    반환: (value, source) — 값이 없으면 ("", None)."""
+    env_val = os.environ.get(spec["env"], "").strip()
+    if env_val:
+        return env_val, "env"
+    cfg_val = _cfg_get(cfg, spec["path"]).strip()
+    if cfg_val and cfg_val != spec.get("placeholder"):
+        return cfg_val, "config.json"
+    return "", None
+
+
+def missing_required_keys(cfg):
+    """필수 Core 키 중 env·config 어디에도 값이 없는 항목 리스트를 반환한다.
+
+    프롬프트·sys.exit 없는 순수 함수 — 게이트 로직 단위 테스트용."""
+    return [spec for spec in REQUIRED_KEYS if not _key_value(cfg, spec)[0]]
+
+
+def _prompt_required(spec):
+    """필수 키가 어디에도 없을 때 직접 입력받는다. 입력을 건너뛰면 설치 중단."""
     print()
-    print("  ✗ OPENAI_API_KEY 미설정")
-    print("    Deep Research 검색 인덱스 빌드에 필수입니다.")
-    print("    발급: https://platform.openai.com/api-keys")
-    print("    지금 입력하시면 config.json에 저장되어 다음 실행에서도 자동 사용됩니다.")
-    print("    입력을 건너뛰시면 설치가 여기서 중단됩니다. 발급 후 다시 setup.py를 실행하세요.")
-    print()
-    user_input = input("    OpenAI API Key (sk-..., Enter로 중단): ").strip()
+    print(f"  ✗ {spec['env']} 미설정 — {spec['why']}에 필요합니다.")
+    print(f"    발급: {spec['issue']}")
+    print("    지금 입력하면 config.json 에 저장되어 다음 실행에서도 자동 사용됩니다.")
+    print("    입력을 건너뛰면 설치가 여기서 중단됩니다.")
+    user_input = input(f"    {spec['prompt']} (Enter 로 중단): ").strip()
     if not user_input:
-        print("\n  OPENAI_API_KEY가 필요합니다. 설치를 중단합니다.")
+        print(f"\n  {spec['env']} 가 필요합니다. 설치를 중단합니다.")
         print("  키를 발급한 뒤 다시 `python pipeline/setup.py` 를 실행해주세요.")
         sys.exit(1)
+    return user_input
 
-    cfg["openai_api_key"] = user_input
-    _save_config(cfg)
-    os.environ["OPENAI_API_KEY"] = user_input
-    print("  ✓ OPENAI_API_KEY → config.json 에 저장")
+
+def step_env_check(cfg):
+    """Step 2: Core API 키 게이트.
+
+    설치를 끝내려면 4개 Core 키(ZOTERO/ANTHROPIC/GOOGLE/RESEND)가 모두 있어야 한다.
+    env 또는 config.json 어느 한쪽에 있으면 통과하고, 둘 다 비면 그 자리에서
+    입력받아 config.json 에 저장한다. env 에만 있고 config 에 없으면 영속화를 위해
+    config 에도 반영해 downstream(config_loader / Zotero 연결 테스트)이 항상 읽도록 한다.
+    입력을 건너뛰면 sys.exit(1) 로 설치를 중단한다 (config.json 은 .gitignore 보호).
+
+    OPENAI_API_KEY 는 더 이상 필수가 아니다 — Deep Research 임베딩이 Gemini 로
+    이동했다. reader BYOK 답변 백엔드 / insights fallback 으로만 선택적으로 유용."""
+    print("\n[2/6] Core API 키 확인")
+
+    dirty = False
+    for spec in REQUIRED_KEYS:
+        value, source = _key_value(cfg, spec)
+        if not value:
+            value = _prompt_required(spec)
+            source = "입력"
+        os.environ[spec["env"]] = value
+        # config 에 아직 정확히 반영 안 된 값이면 저장 (env-only → config 영속화 포함)
+        if _cfg_get(cfg, spec["path"]).strip() != value:
+            _cfg_set(cfg, spec["path"], value)
+            dirty = True
+        print(f"  ✓ {spec['env']} 설정됨 ({source}) — {spec['why']}")
+    if dirty:
+        _save_config(cfg)
+
+    # OPTIONAL: OPENAI_API_KEY 는 게이트 없음 (정보성 안내만)
+    openai_key = (os.environ.get("OPENAI_API_KEY", "").strip()
+                  or cfg.get("openai_api_key", "").strip())
+    if openai_key:
+        print("  ✓ OPENAI_API_KEY 설정됨 (선택) — reader BYOK 답변 백엔드 / insights fallback")
+    else:
+        print("  · OPENAI_API_KEY 미설정 (선택) — Deep Research 임베딩은 Gemini 로 이동했습니다.")
+        print("    reader BYOK 답변 백엔드 / insights fallback 으로만 선택적으로 유용합니다.")
 
 
 def step_zotero_test(cfg):
@@ -383,7 +468,7 @@ def main():
     # Step 1: config.json
     cfg = step_config()
 
-    # Step 2: 환경변수 (OPENAI_API_KEY 는 필수 — 없으면 여기서 중단)
+    # Step 2: Core API 키 게이트 (4개 필수 — 하나라도 없고 입력 거부 시 중단)
     step_env_check(cfg)
 
     # Step 3: Zotero 연결
@@ -418,8 +503,9 @@ def main():
     print("  다음 단계: 파이프라인 실행")
     print("-" * 50)
     print()
-    print("  설치가 완료되었습니다. 이제 파이프라인을 실행하여")
-    print("  Zotero 컬렉션의 논문을 리뷰하고 웹 페이지로 배포할 수 있습니다.")
+    print("  Core API 키 4종(ZOTERO·ANTHROPIC·GOOGLE·RESEND) 확인 완료.")
+    print("  이제 파이프라인을 실행하여 Zotero 컬렉션의 논문을 리뷰하고")
+    print("  웹 페이지로 배포할 수 있습니다.")
     print()
     print("  ⚠ 주의: Zotero 컬렉션의 논문 편수에 따라 시간이 크게 달라집니다 (Anthropic Tier·concurrency 의존).")
     print("    - 10편 이하: 수 분")
@@ -437,6 +523,20 @@ def main():
         print()
         print(f"    # 전체 재빌드 (categorization/insights/timelines 까지 재생성 — 시간·비용 ↑)")
         print(f"    PYTHONUTF8=1 python pipeline/run_full.py --topic {topic} --mode rebuild --yes")
+    print()
+
+    # 배포·이메일은 나중 단계 — 설치 시점에는 자격증명을 묻지 않는다 (deferred)
+    print("-" * 50)
+    print("  나중 단계: 배포 & Audio Overview 이메일 (지금은 건너뜀)")
+    print("-" * 50)
+    print()
+    print("  Cloudflare/GitHub 배포 자격증명은 설치 때 묻지 않습니다. 처음 배포할 때")
+    print("  `run_full.py --mode deploy` 가 필요한 env(CF_API_TOKEN·CLOUDFLARE_ACCOUNT_ID·")
+    print("  GitHub 설정)를 그 자리에서 안내합니다. Audio Overview 이메일 발송 기능은")
+    print("  워커를 한 번 배포해 두어야 동작하며, 배포된 워커에 시크릿을 등록해야 합니다:")
+    print("    npx wrangler secret put GOOGLE_API_KEY   # 워커 측 TTS/Audio Overview 용")
+    print("    npx wrangler secret put RESEND_API_KEY   # MP3 첨부 메일 발송용")
+    print("  (자세한 내용은 README 'Audio Overview 이메일 발송 — Cloudflare Worker secrets' 참고)")
     print()
 
     # Step 7: 첫 파이프라인 자동 실행 (--no-run 으로 건너뛸 수 있음)
