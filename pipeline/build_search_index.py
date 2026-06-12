@@ -354,6 +354,8 @@ def quantize_int8_l2(vec: list) -> bytes:
 # 로 캐싱한다. 양자화된 벡터(=index 에 그대로 들어가는 값)를 저장하므로
 # 재양자화로 인한 drift 가 없다 (int8 quantization 과 100% 일관).
 EMBED_CACHE_NAME = "_embedding_cache.json"
+# 임베딩 바이너리 사이드카 — chunk 순서대로 dim 바이트씩 (JSON 의 chunks 와 1:1)
+EMB_BIN_NAME = "_search_index_emb.bin"
 
 
 def _chunk_sha(model: str, text: str) -> str:
@@ -382,10 +384,26 @@ def load_embedding_cache(topic_dir: Path, model: str) -> dict:
             prev = json.loads(prev_path.read_text(encoding="utf-8"))
             prev_model = prev.get("model", model)
             if prev_model == model:
-                for ch in prev.get("chunks", []):
+                prev_chunks = prev.get("chunks", [])
+                # 신형 포맷: emb 는 바이너리 사이드카(emb_file)에 chunk 순서대로
+                # dim 바이트씩 — 거기서 잘라 b64 로 복원해 캐시에 넣는다.
+                bin_blob = None
+                prev_dim = int(prev.get("dim") or 0)
+                if prev.get("emb_file") and prev_dim > 0:
+                    bin_path = topic_dir / prev["emb_file"]
+                    if (bin_path.exists()
+                            and bin_path.stat().st_size == prev_dim * len(prev_chunks)):
+                        bin_blob = bin_path.read_bytes()
+                for ci, ch in enumerate(prev_chunks):
                     txt = ch.get("text")
+                    if not txt:
+                        continue
                     emb = ch.get("emb")
-                    if not txt or not emb:
+                    if not emb and bin_blob is not None:
+                        emb = base64.b64encode(
+                            bin_blob[ci * prev_dim:(ci + 1) * prev_dim]
+                        ).decode("ascii")
+                    if not emb:
                         continue
                     sha = ch.get("text_sha") or _chunk_sha(model, txt)
                     cache[sha] = emb
@@ -710,17 +728,32 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
         print(f"ERROR: {len(missing)} chunk(s) have no embedding after embed pass — aborting")
         sys.exit(4)
 
+    # 임베딩은 JSON 이 아니라 바이너리 사이드카(.bin)로 분리한다.
+    # 이유 (cold-load 최적화, 2026-06-12): emb(b64) 가 인덱스 JSON 의 ~64% 를
+    # 차지해 JSON.parse 가 무겁고, 쿼리마다 per-chunk atob 디코드 비용도 컸다.
+    # .bin 은 chunk 순서대로 dim 바이트씩 — 브라우저가 ArrayBuffer 로 받아
+    # Int8Array 뷰만 만들면 파싱 0ms. (구형 chunk.emb 포맷은 클라이언트가
+    # 계속 지원하므로 미재빌드 토픽도 동작.)
     out_chunks = []
+    emb_blob = bytearray()
     for chunk in pending_chunks:
+        raw = base64.b64decode(sha_to_emb[chunk["text_sha"]])
+        if len(raw) != dim:
+            print(f"ERROR: embedding byte length {len(raw)} != dim {dim} "
+                  f"(sha {chunk['text_sha'][:12]}) — aborting")
+            sys.exit(4)
+        emb_blob.extend(raw)
         out_chunks.append({
             "slug": chunk["slug"],
             "section": chunk["section"],
             "text": chunk["text"],
             "text_sha": chunk["text_sha"],   # self-describing cache key
-            "emb": sha_to_emb[chunk["text_sha"]],
         })
     assert len(out_chunks) == len(pending_chunks), (
         f"out_chunks {len(out_chunks)} != pending_chunks {len(pending_chunks)}"
+    )
+    assert len(emb_blob) == dim * len(out_chunks), (
+        f"emb blob {len(emb_blob)}B != dim {dim} × {len(out_chunks)} chunks"
     )
 
     out = {
@@ -728,17 +761,21 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
         "dim": dim,
         "quant": "int8-l2norm",
         "count": len(out_chunks),
+        "emb_file": EMB_BIN_NAME,
         "papers": papers_meta,
         "chunks": out_chunks,
     }
 
+    bin_path = topic_dir / EMB_BIN_NAME
+    bin_path.write_bytes(bytes(emb_blob))
     out_path = topic_dir / "_search_index.json"
     out_path.write_text(
         json.dumps(out, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
     size_kb = out_path.stat().st_size // 1024
-    print(f"      wrote {out_path} ({size_kb:,} KB)")
+    bin_kb = bin_path.stat().st_size // 1024
+    print(f"      wrote {out_path} ({size_kb:,} KB) + {EMB_BIN_NAME} ({bin_kb:,} KB)")
 
     # Refresh the sidecar cache so the next build resumes from real vectors.
     # Skip on dry-run — its zero-vectors must never poison the cache.

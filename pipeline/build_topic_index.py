@@ -860,6 +860,22 @@ def _run_topic_index(topic=None):
         const resp = await fetch('_search_index.json');
         if (!resp.ok) throw new Error('Index fetch failed: ' + resp.status);
         DEEP.index = await resp.json();
+        // 신형 포맷: 임베딩은 바이너리 사이드카(emb_file) — JSON 에서 빠져
+        // cold-load 의 JSON.parse 가 가볍고, 쿼리 시 per-chunk atob 도 없다.
+        // ArrayBuffer → Int8Array 뷰 (파싱 0ms). 구형(chunk.emb b64)은
+        // getChunkVec 가 그대로 지원하므로 미재빌드 토픽도 동작.
+        if (DEEP.index.emb_file) {
+          const er = await fetch(DEEP.index.emb_file);
+          if (!er.ok) throw new Error('Embedding sidecar fetch failed: ' + er.status);
+          const buf = await er.arrayBuffer();
+          const expect = (DEEP.index.count || 0) * (DEEP.index.dim || 0);
+          if (buf.byteLength !== expect) {
+            throw new Error('Embedding sidecar size mismatch: ' + buf.byteLength + ' != ' + expect + ' — rebuild the index (build_search_index)');
+          }
+          DEEP.embI8 = new Int8Array(buf);
+        } else {
+          DEEP.embI8 = null;
+        }
         // Deep Research init: lexical(BM25) 인덱스를 미리 구축해 둔다.
         // (이후 hybridRetrieve 가 같은 캐시를 재사용)
         try { buildBM25(DEEP.index); } catch (e) { console.warn('[bm25] build skipped:', e && e.message || e); }
@@ -889,6 +905,26 @@ def _run_topic_index(topic=None):
       let s = 0;
       for (let i = 0; i < a.length; i++) s += a[i] * b[i];
       return s;
+    }
+
+    function getChunkVec(index, i) {
+      // 신형 포맷: 바이너리 사이드카의 Int8 뷰에서 직접 정규화 (atob 불필요)
+      if (DEEP.embI8) {
+        const dim = index.dim;
+        const off = i * dim;
+        const vec = new Float32Array(dim);
+        let n = 0;
+        for (let k = 0; k < dim; k++) {
+          const v = DEEP.embI8[off + k] / 127.0;
+          vec[k] = v;
+          n += v * v;
+        }
+        n = Math.sqrt(n) || 1;
+        for (let k = 0; k < dim; k++) vec[k] /= n;
+        return vec;
+      }
+      // 구형 포맷 호환: chunk 에 박힌 b64 디코드
+      return dequantizeEmb(index.chunks[i].emb);
     }
 
     async function embedQuery(text) {
@@ -1031,7 +1067,7 @@ def _run_topic_index(topic=None):
       if (!elig.length) return [];
       // dense 랭킹
       const denseScored = elig.map(function(i) {
-        return { i: i, s: cosineSim(queryVec, dequantizeEmb(chunks[i].emb)) };
+        return { i: i, s: cosineSim(queryVec, getChunkVec(index, i)) };
       });
       denseScored.sort(function(a, b) { return b.s - a.s; });
       const denseRank = Object.create(null);
