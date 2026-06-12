@@ -860,6 +860,9 @@ def _run_topic_index(topic=None):
         const resp = await fetch('_search_index.json');
         if (!resp.ok) throw new Error('Index fetch failed: ' + resp.status);
         DEEP.index = await resp.json();
+        // Deep Research init: lexical(BM25) 인덱스를 미리 구축해 둔다.
+        // (이후 hybridRetrieve 가 같은 캐시를 재사용)
+        try { buildBM25(DEEP.index); } catch (e) { console.warn('[bm25] build skipped:', e && e.message || e); }
         return DEEP.index;
       } finally {
         DEEP.loading = false;
@@ -889,19 +892,34 @@ def _run_topic_index(topic=None):
     }
 
     async function embedQuery(text) {
-      const key = _OPENAI_KEY;
-      if (!key) throw new Error('OpenAI API key missing — Deep Research 패널에서 키를 입력하세요.');
-      const resp = await fetch('https://api.openai.com/v1/embeddings', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + key },
-        body: JSON.stringify({ input: text, model: 'text-embedding-3-small' }),
-      });
+      // 질의 임베딩은 같은 출처(/api/embed) 프록시가 처리한다. serve_local
+      // 런처(또는 Cloudflare Worker)가 GOOGLE_API_KEY 로 gemini-embedding-001
+      // (RETRIEVAL_QUERY, 768d) 을 호출하므로 브라우저에는 임베딩용 API 키가
+      // 더 이상 필요 없다. 503/404/네트워크 실패는 'embed-proxy-unreachable'
+      // 접두사로 태깅 → runDeepResearch 가 친절한 한글 안내로 변환한다.
+      let resp;
+      try {
+        resp = await fetch('/api/embed', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: text }),
+        });
+      } catch (e) {
+        throw new Error('embed-proxy-unreachable: ' + (e && e.message || e));
+      }
+      if (resp.status === 503 || resp.status === 404) {
+        throw new Error('embed-proxy-unreachable: /api/embed ' + resp.status);
+      }
       if (!resp.ok) {
         const err = await resp.text();
-        throw new Error('OpenAI embed ' + resp.status + ': ' + err.slice(0, 180));
+        throw new Error('embed-proxy ' + resp.status + ': ' + err.slice(0, 180));
       }
       const data = await resp.json();
-      const raw = data.data[0].embedding;
+      const raw = (data && data.embedding) || [];
+      if (!raw.length) throw new Error('embed-proxy-unreachable: empty embedding');
+      // gemini-embedding-001 은 output_dimensionality != 3072 일 때 정규화되지
+      // 않은 벡터를 반환한다 — 코사인 유사도(정규화된 문서 벡터 가정)와 맞추려면
+      // int8 양자화와 동일하게 L2 정규화가 필수.
       let n = 0;
       for (const v of raw) n += v * v;
       n = Math.sqrt(n) || 1;
@@ -929,9 +947,76 @@ def _run_topic_index(topic=None):
       return (ko / (text.length || 1)) > 0.1 ? 'ko' : 'en';
     }
 
-    function retrieveChunks(queryVec, index, timeFilter, k) {
+    // ── Hybrid retrieval: BM25 (lexical) + dense + RRF ────────────────
+    // 한글/영문 혼용 코퍼스라 토크나이저는 두 갈래로 나눈다:
+    //   · ASCII 단어 토큰 — 영문 전문용어/약어를 통째로 보존 (예: "GNN")
+    //   · 한글 run 은 문자 bigram — 형태소 분석 없이도 한국어 매칭에 효과적
+    function deepTokenize(text) {
+      const t = String(text || '').toLowerCase();
+      const toks = [];
+      const ascii = t.match(/[a-z0-9]+/g);
+      if (ascii) for (const w of ascii) toks.push(w);
+      const hangul = t.match(/[\\uAC00-\\uD7AF\\u1100-\\u11FF\\u3130-\\u318F]+/g);
+      if (hangul) {
+        for (const run of hangul) {
+          if (run.length === 1) { toks.push(run); continue; }
+          for (let i = 0; i < run.length - 1; i++) toks.push(run.slice(i, i + 2));
+        }
+      }
+      return toks;
+    }
+
+    // 인덱스의 chunk.text 전체에 대해 컴팩트한 BM25 인덱스를 1회 구축하고
+    // DEEP.bm25 에 캐시한다 (Deep Research init 시점). chunk 수가 바뀌면 재구축.
+    function buildBM25(index) {
+      const chunks = index.chunks || [];
+      const N = chunks.length;
+      if (DEEP.bm25 && DEEP.bm25.N === N) return DEEP.bm25;
+      const df = Object.create(null);     // term -> document frequency
+      const docs = new Array(N);          // chunk 별 { tf, len }
+      let totalLen = 0;
+      for (let i = 0; i < N; i++) {
+        const toks = deepTokenize(chunks[i].text);
+        const tf = Object.create(null);
+        for (const tk of toks) tf[tk] = (tf[tk] || 0) + 1;
+        for (const tk in tf) df[tk] = (df[tk] || 0) + 1;
+        docs[i] = { tf: tf, len: toks.length };
+        totalLen += toks.length;
+      }
+      const avgdl = totalLen / (N || 1);
+      const idf = Object.create(null);
+      for (const tk in df) {
+        // BM25 idf (음수 방지를 위해 1 + ... 형태의 표준 변형)
+        idf[tk] = Math.log(1 + (N - df[tk] + 0.5) / (df[tk] + 0.5));
+      }
+      DEEP.bm25 = { N: N, docs: docs, idf: idf, avgdl: avgdl, k1: 1.5, b: 0.75 };
+      return DEEP.bm25;
+    }
+
+    function bm25Score(bm25, qToks, i) {
+      const doc = bm25.docs[i];
+      if (!doc) return 0;
+      const k1 = bm25.k1, b = bm25.b, avgdl = bm25.avgdl || 1;
+      let s = 0;
+      const seen = Object.create(null);
+      for (const tk of qToks) {
+        if (seen[tk]) continue;           // 동일 query term 중복 가중 방지
+        seen[tk] = 1;
+        const f = doc.tf[tk];
+        if (!f) continue;
+        const idf = bm25.idf[tk] || 0;
+        s += idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * doc.len / avgdl));
+      }
+      return s;
+    }
+
+    // dense + BM25 두 랭킹을 RRF(score = Σ 1/(60+rank)) 로 융합해 top-N 후보를
+    // 만든다. 시간 필터는 두 랭킹의 공통 후보 집합에 먼저 적용해 의미를
+    // 일관되게 유지한다. paper 당 최대 3 chunk 로 다양성도 보존 (기존 의미).
+    function hybridRetrieve(index, queryVec, query, timeFilter, topN) {
       const chunks = index.chunks, papers = index.papers;
-      const scored = [];
+      const bm25 = buildBM25(index);
+      const elig = [];
       for (let i = 0; i < chunks.length; i++) {
         const c = chunks[i];
         const paper = papers[c.slug];
@@ -941,19 +1026,156 @@ def _run_topic_index(topic=None):
           if (timeFilter.min && (!y || y < timeFilter.min)) continue;
           if (timeFilter.max && (!y || y > timeFilter.max)) continue;
         }
-        const vec = dequantizeEmb(c.emb);
-        scored.push({ chunk: c, paper: paper, sim: cosineSim(queryVec, vec) });
+        elig.push(i);
       }
-      scored.sort((a, b) => b.sim - a.sim);
-      const used = {};
-      const sel = [];
-      for (const s of scored) {
-        if (sel.length >= k) break;
-        used[s.chunk.slug] = (used[s.chunk.slug] || 0) + 1;
-        if (used[s.chunk.slug] > 3) continue;
-        sel.push(s);
+      if (!elig.length) return [];
+      // dense 랭킹
+      const denseScored = elig.map(function(i) {
+        return { i: i, s: cosineSim(queryVec, dequantizeEmb(chunks[i].emb)) };
+      });
+      denseScored.sort(function(a, b) { return b.s - a.s; });
+      const denseRank = Object.create(null);
+      for (let r = 0; r < denseScored.length; r++) denseRank[denseScored[r].i] = r;
+      // BM25 랭킹
+      const qToks = deepTokenize(query);
+      const bm25Scored = elig.map(function(i) {
+        return { i: i, s: bm25Score(bm25, qToks, i) };
+      });
+      bm25Scored.sort(function(a, b) { return b.s - a.s; });
+      const bm25Rank = Object.create(null);
+      for (let r = 0; r < bm25Scored.length; r++) bm25Rank[bm25Scored[r].i] = r;
+      // RRF 융합
+      const RRF_K = 60;
+      const fused = elig.map(function(i) {
+        let sc = 1 / (RRF_K + (denseRank[i] || 0));
+        if (i in bm25Rank) sc += 1 / (RRF_K + bm25Rank[i]);
+        return { i: i, score: sc };
+      });
+      fused.sort(function(a, b) { return b.score - a.score; });
+      const used = Object.create(null);
+      const out = [];
+      for (const f of fused) {
+        if (out.length >= topN) break;
+        const c = chunks[f.i];
+        used[c.slug] = (used[c.slug] || 0) + 1;
+        if (used[c.slug] > 3) continue;
+        out.push({ chunk: c, paper: papers[c.slug], rrf: f.score });
       }
-      return sel;
+      return out;
+    }
+
+    // ── LLM re-rank ──────────────────────────────────────────────────
+    // RRF top-20 을 답변 백엔드의 FAST tier 모델(Anthropic→Haiku, Google→Flash,
+    // OpenAI→소형)로 재정렬. 단발성 non-stream 호출. 어떤 실패든(파싱/타임아웃/
+    // 인증) RRF 상위 topK 로 조용히 폴백한다 — 답변 경로는 그대로.
+    async function rerankCall(backend, apiKey, model, sys, user) {
+      if (backend === 'anthropic') {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: model,
+            max_tokens: 512,
+            system: sys,
+            messages: [{ role: 'user', content: user }],
+          }),
+        });
+        if (!resp.ok) throw new Error('Anthropic rerank ' + resp.status);
+        const data = await resp.json();
+        return (data.content && data.content[0] && data.content[0].text) || '';
+      }
+      if (backend === 'openai') {
+        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+            max_completion_tokens: 512,
+          }),
+        });
+        if (!resp.ok) throw new Error('OpenAI rerank ' + resp.status);
+        const data = await resp.json();
+        return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      }
+      if (backend === 'google') {
+        const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+          + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey);
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: sys }] },
+            contents: [{ role: 'user', parts: [{ text: user }] }],
+            generationConfig: { maxOutputTokens: 512, temperature: 0 },
+          }),
+        });
+        if (!resp.ok) throw new Error('Google rerank ' + resp.status);
+        const data = await resp.json();
+        const cand = data.candidates && data.candidates[0];
+        const parts = cand && cand.content && cand.content.parts;
+        let t = '';
+        if (parts) for (const p of parts) if (p.text) t += p.text;
+        return t;
+      }
+      throw new Error('Unsupported backend: ' + backend);
+    }
+
+    async function rerankCandidates(query, candidates, topK) {
+      const fallback = candidates.slice(0, topK);
+      if (candidates.length <= topK) return fallback;
+      const apiKey = _LLM_KEY || _ANTHROPIC_KEY || _OPENAI_KEY || (window._GEMINI_KEY || '');
+      const backend = detectBackend(apiKey);
+      if (!backend) return fallback;
+      const model = resolveModel(backend, 'fast');
+      if (!model) return fallback;
+      // 후보 번호 목록: slug/section + 앞 ~200자
+      const listLines = candidates.map(function(c, i) {
+        const sec = c.chunk.section || '';
+        const head = String(c.chunk.text || '').replace(/\\s+/g, ' ').trim().slice(0, 200);
+        return '[' + i + '] ' + c.chunk.slug + ' / ' + sec + ': ' + head;
+      });
+      const sys = 'You are a retrieval re-ranker. Given a user query and a numbered list of candidate passages, return ONLY a JSON array of the ' + topK + ' candidate indices (integers) most relevant to the query, best first. No prose, no markdown — just the JSON array, e.g. [3,0,7].';
+      const user = 'Query: ' + query + '\\n\\nCandidates:\\n' + listLines.join('\\n') + '\\n\\nReturn the best ' + topK + ' indices as a JSON array.';
+      let text = '';
+      try {
+        text = await Promise.race([
+          rerankCall(backend, apiKey, model, sys, user),
+          new Promise(function(_, rej) { setTimeout(function() { rej(new Error('rerank-timeout')); }, 6000); }),
+        ]);
+      } catch (e) {
+        console.warn('[rerank] fallback to RRF:', e && e.message || e);
+        return fallback;
+      }
+      let idxs = null;
+      try {
+        const m = String(text).match(/\\[[\\s\\S]*?\\]/);
+        if (m) idxs = JSON.parse(m[0]);
+      } catch (e) { idxs = null; }
+      if (!Array.isArray(idxs) || !idxs.length) return fallback;
+      const picked = [];
+      const seen = Object.create(null);
+      for (const v of idxs) {
+        const i = parseInt(v);
+        if (isNaN(i) || i < 0 || i >= candidates.length || seen[i]) continue;
+        seen[i] = 1;
+        picked.push(candidates[i]);
+        if (picked.length >= topK) break;
+      }
+      if (!picked.length) return fallback;
+      // 모델이 topK 미만을 반환하면 RRF 순서로 채운다
+      if (picked.length < topK) {
+        for (const c of fallback) {
+          if (picked.length >= topK) break;
+          if (picked.indexOf(c) === -1) picked.push(c);
+        }
+      }
+      return picked;
     }
 
     function mdToMarkup(md) {
@@ -1447,12 +1669,10 @@ def _run_topic_index(topic=None):
       return false;
     }
 
-    // Which key just failed -- the LLM key (answer-generation) or the
-    // OpenAI embedding key (used only by embedQuery)? embedQuery
-    // tags its errors with the 'OpenAI embed' prefix; everything else
-    // is an answer-generation backend.
+    // Query embedding now goes through the same-origin /api/embed proxy
+    // (no reader key), so every auth failure that reaches here belongs to
+    // the answer-generation backend.
     function authErrorScope(err) {
-      if (err && err.message && err.message.indexOf('OpenAI embed') === 0) return 'embedding';
       return 'llm';
     }
 
@@ -1460,15 +1680,6 @@ def _run_topic_index(topic=None):
     // pop a fresh prompt with the "API Key Invalid. Try with another
     // one" prefix. Returns the new key, or null if the user cancels.
     function clearKeyAndRePrompt(scope) {
-      if (scope === 'embedding') {
-        _OPENAI_KEY = '';
-        try { localStorage.removeItem('_OPENAI_KEY'); } catch (e) {}
-        const nk = prompt('API Key Invalid. Try with another one.\\n\\nOpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다):');
-        if (!nk) return null;
-        _OPENAI_KEY = nk;
-        try { localStorage.setItem('_OPENAI_KEY', nk); } catch (e) {}
-        return nk;
-      }
       // LLM (answer-generation) scope -- also drop the cached
       // Anthropic/Gemini aliases so a Google key isn't silently
       // re-used for audio after the user replaces a bad LLM key.
@@ -1507,32 +1718,26 @@ def _run_topic_index(topic=None):
       // Without this, a silent fallthrough on missing keys / prompt
       // cancel can look identical to "nothing happened".
       deepSetStatus('⏳ Deep Research 시작...');
-      if (!_LLM_KEY || !_OPENAI_KEY) {
-        if (!_LLM_KEY) {
-          const lk = prompt('답변 생성용 API Key를 입력하세요 (Anthropic sk-ant-… / OpenAI sk-… / Google AIza… 중 하나):');
-          if (!lk) { deepSetStatus('API Key가 필요합니다.', true); return; }
-          const _b = detectBackend(lk);
-          if (!_b) { deepSetStatus('알 수 없는 키 형식입니다 (Anthropic은 sk-ant-, OpenAI는 sk-, Google은 AIza 로 시작).', true); return; }
-          _LLM_KEY = lk;
-          localStorage.setItem('_LLM_KEY', lk);
-          if (_b === 'anthropic') {
-            _ANTHROPIC_KEY = lk;
-            localStorage.setItem('_ANTHROPIC_KEY', lk);
-          } else if (_b === 'google') {
-            // Same key works for Audio Overview (Gemini). Seed _GEMINI_KEY
-            // so the audio modal doesn't re-prompt for the same key.
-            window._GEMINI_KEY = lk;
-            try { localStorage.setItem('_GEMINI_KEY', lk); } catch (e) {}
-          }
-          deepSetStatus('✓ ' + _b + ' 키 감지됨');
-          updateDeepModelLabels();
+      // 질의 임베딩은 이제 같은 출처 /api/embed 프록시가 처리하므로 별도
+      // OpenAI 임베딩 키를 더 받지 않는다. 답변 생성/재정렬용 LLM 키 하나면 된다.
+      if (!_LLM_KEY) {
+        const lk = prompt('답변 생성용 API Key를 입력하세요 (Anthropic sk-ant-… / OpenAI sk-… / Google AIza… 중 하나):');
+        if (!lk) { deepSetStatus('API Key가 필요합니다.', true); return; }
+        const _b = detectBackend(lk);
+        if (!_b) { deepSetStatus('알 수 없는 키 형식입니다 (Anthropic은 sk-ant-, OpenAI는 sk-, Google은 AIza 로 시작).', true); return; }
+        _LLM_KEY = lk;
+        localStorage.setItem('_LLM_KEY', lk);
+        if (_b === 'anthropic') {
+          _ANTHROPIC_KEY = lk;
+          localStorage.setItem('_ANTHROPIC_KEY', lk);
+        } else if (_b === 'google') {
+          // Same key works for Audio Overview (Gemini). Seed _GEMINI_KEY
+          // so the audio modal doesn't re-prompt for the same key.
+          window._GEMINI_KEY = lk;
+          try { localStorage.setItem('_GEMINI_KEY', lk); } catch (e) {}
         }
-        if (!_OPENAI_KEY) {
-          const ok = prompt('OpenAI API Key를 입력하세요 (임베딩 검색에 필요합니다 — 답변 생성과 별개):');
-          if (!ok) { deepSetStatus('OpenAI API Key가 필요합니다 (임베딩용).', true); return; }
-          _OPENAI_KEY = ok;
-          localStorage.setItem('_OPENAI_KEY', ok);
-        }
+        deepSetStatus('✓ ' + _b + ' 키 감지됨');
+        updateDeepModelLabels();
       }
       clearEl(document.getElementById('deep-answer'));
       document.getElementById('deep-refs').style.display = 'none';
@@ -1542,15 +1747,23 @@ def _run_topic_index(topic=None):
       deepUpdateButtons(false);
       try {
         const index = await deepLoadIndex();
-        deepSetStatus('\U0001F50D 질의 임베딩 중...');
+        deepSetStatus('\U0001F50D 질의 임베딩 중... (' + (index.model || 'embedding') + ')');
         const queryVec = await embedQuery(query);
-        deepSetStatus('\U0001F4DA 관련 논문 검색 중...');
+        // 차원 상수는 인덱스 헤더(index.dim)를 따른다 — 질의 임베딩 차원이
+        // 인덱스와 다르면(예: 인덱스 미재빌드) 코사인 유사도가 무의미해지므로 차단.
+        if (index.dim && queryVec.length !== index.dim) {
+          throw new Error('임베딩 차원(' + queryVec.length + ')이 검색 인덱스 차원(' + index.dim + ')과 다릅니다 — 인덱스를 재빌드하세요 (build_search_index).');
+        }
+        deepSetStatus('\U0001F4DA 관련 논문 검색 중... (BM25 + dense)');
         const timeFilter = parseTimeFilter(query);
-        const selected = retrieveChunks(queryVec, index, timeFilter, 30);
-        if (selected.length === 0) {
+        // Hybrid: BM25 + dense → RRF top-20 후보 → LLM 재정렬 top-8
+        const candidates = hybridRetrieve(index, queryVec, query, timeFilter, 20);
+        if (candidates.length === 0) {
           deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
           return;
         }
+        deepSetStatus('\U0001F9ED 상위 후보 재정렬 중...');
+        const selected = await rerankCandidates(query, candidates, 8);
         // Group chunks by paper so each paper appears as a single reference
         // entry. The retrieval step still uses chunk-level cosine similarity
         // (so different sections can independently boost a paper into the
@@ -1607,6 +1820,12 @@ def _run_topic_index(topic=None):
         setTimeout(() => deepSetStatus(''), 2500);
       } catch (e) {
         console.error(e);
+        // /api/embed 프록시 미가동(503/404/네트워크) — 키 문제가 아니므로
+        // 친절한 한글 안내로 분기한다. (Cloudflare 미배포 / 로컬 직접 열람 등)
+        if (e && e.message && e.message.indexOf('embed-proxy-unreachable') === 0) {
+          deepSetStatus('검색 서버(/api/embed)에 연결할 수 없습니다 — 로컬에서는 serve_local 런처로 여세요.', true);
+          return;
+        }
         // Auth failure path: clear the offending key, re-prompt with
         // "API Key Invalid. Try with another one", retry. Cap at 3
         // attempts so a user mashing Enter on a bad key doesn't

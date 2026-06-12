@@ -3,9 +3,14 @@ Build a Deep Research search index (for client-side RAG).
 
 Reads every review.md that belongs to the given topic, splits each one
 into section-aware chunks (Essence, Motivation, How, Achievement,
-Originality), embeds each chunk with OpenAI `text-embedding-3-small`,
-L2-normalises and quantises the 1536-dim float32 vectors down to int8,
+Originality), embeds each chunk with Google `gemini-embedding-001`
+(task_type RETRIEVAL_DOCUMENT, output_dimensionality=768),
+L2-normalises and quantises the 768-dim float32 vectors down to int8,
 then writes `docs/{topic}/_search_index.json`.
+
+주의(gotcha): gemini-embedding-001 은 output_dimensionality 가 3072 가
+아닐 때 정규화되지 않은 벡터를 돌려준다. int8 양자화 전에 반드시 L2
+정규화해야 한다 — quantize_int8_l2() 가 그 정규화를 수행하므로 커버된다.
 
 The resulting JSON is fetched lazily by the topic's index.html when a
 user activates Deep Research mode. The browser dequantises the int8
@@ -36,13 +41,14 @@ sys.path.insert(0, str(PIPELINE_DIR))
 from config_loader import DOCS_DIR, PAPERS_DIR, PROJECT_ROOT, get_topic_dir, get_papers_index_path
 
 
-def _load_openai_key_from_config() -> str:
-    """Fallback: read openai_api_key from config.json (written by setup.py)."""
+def _load_gemini_key_from_config() -> str:
+    """Fallback: read gemini/google api key from config.json (written by setup.py)."""
     try:
         cfg_path = PROJECT_ROOT / "config.json"
         if cfg_path.exists():
             with open(cfg_path, "r", encoding="utf-8") as f:
-                return json.load(f).get("openai_api_key", "") or ""
+                cfg = json.load(f)
+            return (cfg.get("gemini_api_key") or cfg.get("google_api_key") or "") or ""
     except Exception:
         pass
     return ""
@@ -93,9 +99,10 @@ TABLE_LINE_RE = re.compile(r"^\s*\|.*\|\s*$", re.MULTILINE)
 WS_RE = re.compile(r"[ \t]+")
 BLANK_RE = re.compile(r"\n\s*\n\s*\n+")
 
-# OpenAI limits: text-embedding-3-small accepts up to 8192 tokens per
-# input. Korean averages ~2 chars/token, so 6000 chars is a safe cap
-# that also keeps the JSON payload reasonable.
+# Gemini limits: gemini-embedding-001 accepts up to 2048 tokens per input.
+# Korean averages ~2 chars/token, so 6000 chars (~3000 tokens) can overflow;
+# auto_truncate=True 로 초과분은 모델이 잘라낸다. 6000 자 cap 은 JSON
+# payload 크기를 적당히 유지하기 위한 것이기도 하다.
 MAX_CHUNK_CHARS = 6000
 MIN_CHUNK_CHARS = 40
 
@@ -341,7 +348,7 @@ def quantize_int8_l2(vec: list) -> bytes:
 
 
 # ── Content-addressed embedding cache ────────────────────────────────────
-# 매 build 마다 ~16k chunk 를 전부 재임베딩하면 한국망 OpenAI 호출이 느리고
+# 매 build 마다 ~16k chunk 를 전부 재임베딩하면 한국망 Gemini 호출이 느리고
 # (transient 429 한 번에 전체가 죽고) 비용이 든다. chunk_text 는 review.md
 # 에서 deterministic 하게 나오므로, sha256(model + text) → 양자화된 emb(b64)
 # 로 캐싱한다. 양자화된 벡터(=index 에 그대로 들어가는 값)를 저장하므로
@@ -416,11 +423,12 @@ EMBED_BACKOFF_CAP_S = 60.0
 
 
 def _retry_after_seconds(err) -> float | None:
-    """Best-effort extraction of a Retry-After hint from an OpenAI error.
+    """Best-effort extraction of a Retry-After hint from a Gemini error.
 
-    한국↔OpenAI 경로의 429 는 7초 backoff 로는 못 벗어난다. RateLimitError
-    가 노출하는 retry hint (응답 헤더 또는 .retry_after) 를 존중해 backoff
-    를 맞춘다 (상한 EMBED_BACKOFF_CAP_S).
+    한국↔Gemini 경로의 429 는 7초 backoff 로는 못 벗어날 수 있다. 에러가
+    노출하는 retry hint (응답 헤더 또는 .retry_after) 를 존중해 backoff 를
+    맞춘다 (상한 EMBED_BACKOFF_CAP_S). google-genai APIError 가 hint 를
+    안 주면 None 을 돌려주고 지수 backoff 로 떨어진다.
     """
     val = getattr(err, "retry_after", None)
     if val is None:
@@ -440,17 +448,25 @@ def _retry_after_seconds(err) -> float | None:
 
 
 def embed_batch(client, texts: list, model: str) -> list:
-    """Call OpenAI embeddings with retry.
+    """Embed a batch with gemini-embedding-001 (RETRIEVAL_DOCUMENT) + retry.
 
-    Honors Retry-After on rate limits, caps backoff at EMBED_BACKOFF_CAP_S,
-    and asserts the returned vector count matches the input count so a short
-    response loudly fails instead of silently misaligning the index.
+    768-dim 출력을 task_type RETRIEVAL_DOCUMENT 로 요청한다. Retry-After 를
+    존중하고 backoff 를 EMBED_BACKOFF_CAP_S 로 cap 하며, 반환 벡터 수가
+    입력 수와 다르면 (조용한 chunk↔embedding misalignment 대신) 시끄럽게
+    실패한다. 정규화는 호출측 quantize_int8_l2() 가 수행한다 (gemini 는
+    output_dimensionality != 3072 일 때 비정규화 벡터를 돌려주므로).
     """
+    from google.genai import types as _gtypes
+
+    cfg = _gtypes.EmbedContentConfig(
+        task_type="RETRIEVAL_DOCUMENT",
+        output_dimensionality=768,
+    )
     last_err = None
     for attempt in range(EMBED_MAX_ATTEMPTS):
         try:
-            resp = client.embeddings.create(input=texts, model=model)
-            vecs = [d.embedding for d in resp.data]
+            resp = client.models.embed_content(model=model, contents=texts, config=cfg)
+            vecs = [list(e.values) for e in (resp.embeddings or [])]
             # Per-batch length guard — a short/long batch would otherwise
             # silently misalign chunks↔embeddings downstream (zip()).
             if len(vecs) != len(texts):
@@ -603,7 +619,8 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
 
     total_chars = sum(len(c["text"]) for c in pending_chunks)
     approx_tokens = total_chars // 3  # conservative estimate
-    print(f"      approx {approx_tokens:,} input tokens ~= ${approx_tokens * 0.00000002:.4f} (text-embedding-3-small)")
+    # gemini-embedding-001: $0.15 / 1M input tokens
+    print(f"      approx {approx_tokens:,} input tokens ~= ${approx_tokens * 0.00000015:.4f} (gemini-embedding-001)")
 
     # Cache key per chunk (sha256(model + text)); reused everywhere below.
     for ch in pending_chunks:
@@ -611,7 +628,7 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
 
     # --- Content-addressed embedding cache (incremental) ---
     # sha → 양자화된 emb(b64). 이전 index + sidecar 에서 로드한 뒤, 캐시에
-    # 없는 chunk 만 OpenAI 로 보낸다. dry-run 도 캐시 hit 은 재사용한다.
+    # 없는 chunk 만 Gemini 로 보낸다. dry-run 도 캐시 hit 은 재사용한다.
     sha_to_emb: dict = load_embedding_cache(topic_dir, model)
     miss_chunks = [c for c in pending_chunks if c["text_sha"] not in sha_to_emb]
     n_hit = len(pending_chunks) - len(miss_chunks)
@@ -621,28 +638,30 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
     if dry_run:
         print("[3/4] --dry-run: zero-vectors for cache misses")
         for c in miss_chunks:
-            qbytes = quantize_int8_l2([0.0] * 1536)
+            qbytes = quantize_int8_l2([0.0] * 768)
             sha_to_emb[c["text_sha"]] = base64.b64encode(qbytes).decode("ascii")
-        dim = 1536
+        dim = 768
     elif not miss_chunks:
         print("[3/4] All chunks served from cache — no API calls")
         dim = 0  # filled in below from any cached vector
     else:
         print(f"[3/4] Embedding {len(miss_chunks)} chunks with {model}...")
         try:
-            from openai import OpenAI
+            from google import genai
         except ImportError:
-            print("ERROR: openai package not installed. Run: pip install openai")
+            print("ERROR: google-genai package not installed. Run: pip install google-genai")
             sys.exit(1)
 
-        api_key = os.environ.get("OPENAI_API_KEY") or _load_openai_key_from_config()
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or _load_gemini_key_from_config()
         if not api_key:
-            print("ERROR: OPENAI_API_KEY not set (env var or config.json).")
-            print("       Set OPENAI_API_KEY or run 'python pipeline/setup.py' to save it into config.json.")
+            print("ERROR: GOOGLE_API_KEY not set (env var or config.json).")
+            print("       Set GOOGLE_API_KEY/GEMINI_API_KEY or run 'python pipeline/setup.py' to save it into config.json.")
             sys.exit(1)
 
-        client = OpenAI(api_key=api_key)
-        BATCH = 100
+        client = genai.Client(api_key=api_key)
+        # gemini-embedding-001 은 요청당 최대 100 input 까지 받지만, 한국망
+        # 타임아웃·부분실패 노출면을 줄이려 50 으로 둔다.
+        BATCH = 50
         t0 = time.time()
         embedded = 0
         for i in range(0, len(miss_chunks), BATCH):
@@ -730,7 +749,7 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
     print("Done.")
 
 
-def _run_search_index(topic, *, model="text-embedding-3-small", limit=None, dry_run=False):
+def _run_search_index(topic, *, model="gemini-embedding-001", limit=None, dry_run=False):
     """Programmatic entrypoint for build_search_index."""
     return build_index(topic, model, limit, dry_run)
 
@@ -738,7 +757,7 @@ def _run_search_index(topic, *, model="text-embedding-3-small", limit=None, dry_
 def main():
     parser = argparse.ArgumentParser(description="Build Deep Research search index")
     parser.add_argument("--topic", required=True, help="topic alias (e.g. ai4s, scisci)")
-    parser.add_argument("--model", default="text-embedding-3-small")
+    parser.add_argument("--model", default="gemini-embedding-001")
     parser.add_argument("--limit", type=int, default=None, help="limit number of papers (debug)")
     parser.add_argument("--dry-run", action="store_true", help="chunk only, no API calls")
     args = parser.parse_args()
