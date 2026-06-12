@@ -688,7 +688,7 @@ def compute_related_candidates(embeddings, slugs, top_k=5):
 
 
 def generate_connections_from_candidates(candidates, topic_papers, client,
-                                         batch_size=25, deadline_s=480):
+                                         batch_size=25, deadline_s=300, max_rounds=3):
     """임베딩 top-20 후보 -> Sonnet이 이유/관계 작성.
 
     BEST-EFFORT + 행 방지: 연결은 정규 사이클의 ``extract_insights --only
@@ -699,10 +699,14 @@ def generate_connections_from_candidates(candidates, topic_papers, client,
     하면서 런 전체를 영구히 정지시켰다(메인스레드가 lock 대기에 묶임). 영구 수정:
       1) 이 단계 전용 client 는 ``timeout=90, max_retries=1`` 로 막힌 호출을 ~3분
          안에 끝낸다.
-      2) 수집 루프에 전체 wall-clock ``deadline_s`` 를 둬, 그 안에 끝난 배치만
-         쓰고 나머지는 버린다.
+      2) 라운드마다 wall-clock ``deadline_s`` 를 둬, 그 안에 끝난 배치만 쓴다.
       3) ``shutdown(wait=False, cancel_futures=True)`` — 좀비 워커를 join 하지
          않는다(아직 시작 안 한 배치는 취소; 도는 워커는 짧은 timeout 으로 곧 끝남).
+      4) MULTI-ROUND: 한 라운드를 돈 뒤 *막혀서 처리 못 한 논문만* 골라 다음
+         라운드에서 재시도한다(최대 ``max_rounds``). 네트워크가 잠깐 느렸을 뿐이면
+         2라운드에서 대개 완결되고, 끝까지 막힌 논문만 기존 연결을 유지한 채
+         남는다. 성공한 배치의 논문은 *결과가 비어도* '처리됨' 으로 봐서(연결이
+         없는 게 정상인 논문) 재시도 루프가 무한반복되지 않는다.
     """
     from concurrent.futures import (ThreadPoolExecutor, FIRST_COMPLETED,
                                     wait as _futures_wait)
@@ -714,8 +718,8 @@ def generate_connections_from_candidates(candidates, topic_papers, client,
     num_to_slug = {p["slug"].split("_")[0]: p["slug"] for p in topic_papers}
     all_connections = {}
     all_slugs = sorted(candidates.keys())
-    batches = [all_slugs[i:i + batch_size] for i in range(0, len(all_slugs), batch_size)]
-    log(f"  {len(all_slugs)} papers, {len(batches)} batches (parallel 4)...")
+    log(f"  {len(all_slugs)} papers, batch_size={batch_size}, "
+        f"<= {max_rounds} rounds × {deadline_s}s ...")
 
     def process_batch(batch_slugs):
         papers_block = []
@@ -792,37 +796,54 @@ Rules:
                         seen.add(r["slug"])
                 all_connections[slug] = existing
 
-    executor = ThreadPoolExecutor(max_workers=4)
-    deadline = time.monotonic() + deadline_s
-    done_n = 0
-    try:
-        futures = {
-            executor.submit(process_batch, batch): bi
-            for bi, batch in enumerate(batches)
-        }
-        pending = set(futures)
-        while pending:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                log(f"  [connections] deadline {deadline_s}s 초과 — "
-                    f"{done_n}/{len(batches)} 배치 완료, {len(pending)} 배치 포기 "
-                    f"(best-effort; extract_insights 가 추후 갱신)")
-                break
-            done, pending = _futures_wait(
-                pending, timeout=min(remaining, 30.0),
-                return_when=FIRST_COMPLETED)
-            for future in done:
-                bi = futures[future]
-                try:
-                    _merge(future.result())
-                    done_n += 1
-                    log(f"    batch {bi + 1}/{len(batches)}: ok")
-                except Exception as e:
-                    log(f"    batch {bi + 1}/{len(batches)} ERROR: {str(e)[:100]}")
-    finally:
-        # 좀비 워커를 join 하지 않는다(=런이 멈추지 않게). 시작 안 한 배치는 취소;
-        # 도는 워커는 conn_client 의 짧은 timeout 안에서 스스로 끝난다.
-        executor.shutdown(wait=False, cancel_futures=True)
+    all_slug_set = set(all_slugs)
+    attempted = set()  # 배치가 성공적으로 끝난 슬러그 (연결 0개여도 포함 → 재시도 X)
+
+    def _run_round(todo):
+        """todo 슬러그를 배치로 나눠 한 라운드 처리. deadline_s 안에 끝난 배치만
+        수집하고 성공 배치의 슬러그를 attempted 에 기록. 막힌 워커는 join 안 함."""
+        round_batches = [todo[i:i + batch_size]
+                         for i in range(0, len(todo), batch_size)]
+        executor = ThreadPoolExecutor(max_workers=4)
+        round_deadline = time.monotonic() + deadline_s
+        try:
+            futures = {executor.submit(process_batch, b): tuple(b)
+                       for b in round_batches}
+            pending = set(futures)
+            while pending:
+                remaining = round_deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                done, pending = _futures_wait(
+                    pending, timeout=min(remaining, 30.0),
+                    return_when=FIRST_COMPLETED)
+                for future in done:
+                    bslugs = futures[future]
+                    try:
+                        _merge(future.result())
+                        attempted.update(bslugs)   # 성공 → 다음 라운드에서 제외
+                    except Exception as e:
+                        log(f"    batch ERROR (재시도 대상): {str(e)[:90]}")
+        finally:
+            # 좀비 워커를 join 하지 않는다(=런이 멈추지 않게). 시작 안 한 배치는
+            # 취소; 도는 워커는 conn_client 의 짧은 timeout 안에서 스스로 끝난다.
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    for rnd in range(max_rounds):
+        todo = sorted(all_slug_set - attempted)
+        if not todo:
+            break
+        if rnd:
+            log(f"  [connections] round {rnd + 1}/{max_rounds}: "
+                f"{len(todo)} papers 재시도 (막힌/실패 배치만)")
+        _run_round(todo)
+
+    missing = all_slug_set - attempted
+    if missing:
+        log(f"  [connections] {len(missing)} papers 미완 — 기존 연결 유지, "
+            f"extract_insights 가 정규 사이클에 갱신")
+    else:
+        log(f"  [connections] {len(all_slug_set)} papers 전부 처리 완료")
 
     return all_connections
 
