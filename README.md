@@ -21,7 +21,7 @@
 | **지식 축적** | Obsidian 연동으로 메모가 다음 질의에 반영되는 compounding knowledge |
 | **논문 검색/등록** | arXiv, Semantic Scholar, OpenAlex 병렬 검색 + Zotero 자동 등록 (선택) |
 
-**필요한 것**: Zotero 컬렉션 + PDF + API 키 (Anthropic, Google, OpenAI 중 최소 한 개 + 임베딩용 OpenAI)
+**필요한 것**: Zotero 컬렉션 + PDF + API 키 (필수: Anthropic · Google · Zotero Web API). 검색 임베딩은 Google `gemini-embedding-001` 을 쓰므로 별도 OpenAI 키는 필요 없습니다 (OpenAI 는 답변 BYOK·insights fallback 용 선택).
 
 ---
 
@@ -40,21 +40,20 @@
 git clone https://github.com/jehyunlee/paper-curation.git
 cd paper-curation
 
-# 2) conda env 두 개 생성 (py314 = 메인, py312 = 토픽 모델링 전용 — 둘 다 필수)
-conda create -n py314 -c conda-forge python=3.14 pip -y
+# 2) conda env 하나 생성 (py312 = 표준 단일 env)
 conda create -n py312 -c conda-forge python=3.12 pip -y
-#    토픽 모델링/분류는 numba 의 CALL_KW 비호환 때문에 Python 3.14 에서 죽으므로
-#    별도 py312 env 에서 실행됩니다 (자세한 이유는 "사전 준비" 참고).
+conda activate py312
 
-# 3) 의존성 설치 — 클러스터링 라이브러리는 양쪽 env 에 모두 필요
-conda run -n py314 pip install -r requirements.txt
-conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
-    joblib numpy scikit-learn anthropic openai
-conda activate py314
+# 3) 의존성 설치 (umap-learn · hdbscan · sentence-transformers 포함)
+pip install -r requirements.txt
+#    오케스트레이터는 현재 인터프리터로 umap/hdbscan import 가 되면 토픽 모델링/분류를
+#    별도 서브프로세스 없이 in-process 로 실행합니다. (레거시 py314+py312 듀얼 구성도
+#    동일 probe 로 계속 동작 — "사전 준비" 의 접힌 노트 참고.)
 
-# 4) 필수 API 키 (리뷰=Anthropic, 임베딩=OpenAI). Google 은 Figure 검증용(선택).
+# 4) 필수 API 키 (리뷰=Anthropic, 검색 임베딩·Figure 검증·TTS=Google).
+#    검색 임베딩은 Google gemini-embedding-001 이라 OpenAI 키는 선택입니다 (답변 BYOK·insights fallback).
 export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
+export GOOGLE_API_KEY=...
 
 # 5) config.json 생성(대화형) → 첫 파이프라인 실행
 python pipeline/setup.py
@@ -84,11 +83,24 @@ python pipeline/setup.py
 | 항목 | 내용 |
 |------|------|
 | **Zotero** | [API Key 발급](https://www.zotero.org/settings/keys) + 큐레이션할 컬렉션에 논문 PDF 준비 |
-| **API 키** | `ANTHROPIC_API_KEY` (리뷰·인사이트 — **필수**), `OPENAI_API_KEY` (Deep Research 임베딩 — **필수**), `GOOGLE_API_KEY` (Figure 검증·TTS — 선택) |
-| **conda env** | `py314` (메인) + `py312` (토픽 모델링) — 둘 다 필수, 아래 명령으로 생성 |
+| **API 키** | `ANTHROPIC_API_KEY` (리뷰·인사이트 — **필수**), `GOOGLE_API_KEY` (검색 임베딩 `gemini-embedding-001`·Figure 검증·TTS — **필수**), `RESEND_API_KEY` (배포 시 Audio Overview 이메일 — 배포 필수), `OPENAI_API_KEY` (답변 BYOK·insights fallback — 선택) |
+| **conda env** | `py312` 단일 env (표준) — 아래 명령으로 생성. 레거시 py314+py312 듀얼도 동일 probe 로 동작 |
 | **Java Runtime** | `opendataloader-pdf` 의 PDF 추출용. macOS: `brew install --cask temurin`. 없으면 PyMuPDF 로 fallback (표·구조 품질 ↓) |
 
-**conda env 생성 (필수)** — Quickstart 의 2~3단계와 동일합니다:
+**conda env 생성 (표준: 단일 py312)** — Quickstart 의 2~3단계와 동일합니다:
+
+```bash
+conda create -n py312 -c conda-forge python=3.12 pip -y
+conda activate py312
+pip install -r requirements.txt
+```
+
+`requirements.txt` 가 umap-learn / hdbscan / sentence-transformers 를 포함하므로, 오케스트레이터는 현재 인터프리터로 클러스터링 라이브러리 import 가 성공하면 토픽 모델링/분류를 **별도 서브프로세스 없이 in-process** 로 실행합니다. Python 3.12 는 numba 의 `CALL_KW` 비호환 문제가 없으므로 단일 env 로 충분합니다.
+
+<details>
+<summary><b>레거시: py314 + py312 듀얼 env (선택)</b></summary>
+
+메인을 Python 3.14 (`py314`) 로 쓰고 싶다면 numba 의 bytecode interpreter 가 3.14 의 `CALL_KW` opcode 를 아직 처리하지 못해 `topic_modeling.py` / `classify_papers.py` 의 `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` 경로가 죽습니다 (0.65.1 / 0.66.0rc1 / main 모두 동일). 이때 형제 `py312` env 를 따로 만들면, `run_update_force._resolve_topic_modeling_python()` 가 **동일한 probe** (현재 인터프리터로 umap import 실패 시) 로 형제 `py312/bin/python` 를 자동으로 잡아 클러스터링 두 스크립트만 그쪽으로 보냅니다 (우선순위: `PAPER_CURATION_PY312` env var → 형제 env `<base>/envs/py312` → `which python3.12` → `sys.executable` fallback). 두 env 모두 numba 0.65 / llvmlite 0.47 / numpy 2.x 동일 라인업입니다.
 
 ```bash
 conda create -n py314 -c conda-forge python=3.14 pip -y
@@ -99,18 +111,17 @@ conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
 conda activate py314
 ```
 
-**왜 env 가 두 개인가** — numba 의 bytecode interpreter 가 Python 3.14 의 `CALL_KW` opcode 를 아직 처리하지 못해, `topic_modeling.py` / `classify_papers.py` 의 `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` 경로가 Python 3.14 에서 죽습니다 (0.65.1 / 0.66.0rc1 / main 모두 동일). 그래서 클러스터링 두 스크립트만 별도 `py312` env 에서 실행하며, `run_update_force._resolve_topic_modeling_python()` 가 형제 env `py312/bin/python` 를 자동으로 잡아 그쪽으로 보냅니다 (우선순위: `PAPER_CURATION_PY312` env var → 형제 env `<base>/envs/py312` → `which python3.12` → `sys.executable` fallback). 두 env 모두 numba 0.65 / llvmlite 0.47 / numpy 2.x 동일 라인업입니다. **py312 를 만들지 않으면** 첫 실행이 분류 단계에서 numba 트레이스백과 함께 멈춥니다.
+</details>
 
 ### 설치 확인 (verify)
 
-긴 파이프라인을 돌리기 전에, 클러스터링 의존성이 py312 에 제대로 깔렸는지 한 줄로 확인하세요:
+긴 파이프라인을 돌리기 전에, 한 줄로 의존성이 제대로 깔렸는지 확인하세요:
 
 ```bash
-conda run -n py312 python -c "import umap, hdbscan, sentence_transformers; print('py312 OK')"
-conda run -n py314 python -c "import fitz, sklearn, anthropic, openai; print('py314 OK')"
+python -c "import umap, hdbscan, sentence_transformers, fitz, sklearn, anthropic; print('py312 OK')"
 ```
 
-두 줄 모두 `OK` 가 찍히면 준비 완료입니다. 실행 계획만 먼저 보려면 `--dry-run` 도 가능합니다:
+`OK` 가 찍히면 준비 완료입니다. 실행 계획만 먼저 보려면 `--dry-run` 도 가능합니다:
 
 ```bash
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source zotero --dry-run
@@ -120,12 +131,12 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source
 
 | 증상 / 에러 메시지 | 원인 | 해결 |
 |---|---|---|
-| `op_CALL_KW: pop from empty list` (numba 트레이스백) | 분류 단계가 py314 에서 실행됨 | `py312` env 를 만들고 클러스터링 의존성 설치 — 위 "conda env 생성" 참고. 형제 위치가 아니면 `PAPER_CURATION_PY312` 로 경로 지정 |
-| `ModuleNotFoundError: umap` / `hdbscan` / `sentence_transformers` | 의존성 누락 | 해당 env 에서 `pip install -r requirements.txt` (py312 에는 클러스터링 패키지도) |
+| `op_CALL_KW: pop from empty list` (numba 트레이스백) | 분류가 Python 3.14 인터프리터에서 실행됨 | 표준 단일 `py312` env 로 실행하거나, py314 메인을 쓰면 형제 `py312` env 를 만들어 라우팅 — 위 "conda env 생성" 의 레거시 노트 참고. 형제 위치가 아니면 `PAPER_CURATION_PY312` 로 경로 지정 |
+| `ModuleNotFoundError: umap` / `hdbscan` / `sentence_transformers` | 의존성 누락 | env 활성화 후 `pip install -r requirements.txt` (umap-learn·hdbscan·sentence-transformers 포함) |
 | Figure 품질이 낮음 / 표·구조가 깨짐 | Java 미설치로 PyMuPDF fallback | `brew install --cask temurin` (macOS) 후 재실행 |
 | SPECTER2 / arXiv 다운로드가 멈춤 (한국 망) | huggingface LFS·arXiv 차단 | 아래 "한국 망 환경 우회" 의 S3 미러 명령 사용 |
 | `[COLLECTION_ERROR]` | Zotero 컬렉션 이름 오타 | 출력의 사용 가능한 컬렉션 목록에서 올바른 이름 선택 후 재실행 |
-| `OPENAI_API_KEY 미설정` 으로 설치 중단 | Deep Research 임베딩 키 필수 | `export OPENAI_API_KEY=sk-...` 후 재실행 |
+| 검색 인덱스가 빈 임베딩으로 빌드됨 | `GOOGLE_API_KEY` 미설정 | `export GOOGLE_API_KEY=...` 후 재실행 — 검색 임베딩은 Google `gemini-embedding-001` 사용 (OpenAI 키는 더 이상 필수 아님) |
 
 ---
 
@@ -181,7 +192,7 @@ flowchart TB
 | | 설명 |
 |---|---|
 | **입력** | 전체 리뷰의 Essence + Title |
-| **처리** | Bottom-up, LLM 호출 최소화:<ul><li>SPECTER2 임베딩 → HDBSCAN fine-grained 클러스터링</li><li>TF-IDF 키워드 추출 → Claude Sonnet이 클러스터 작명</li><li>Ward linkage로 카테고리 그룹핑</li><li>논문당 1~3개 카테고리 복수 분류 (Node-based Hybrid C: KNN-vote primary + qualified-vote multi)</li></ul> |
+| **처리** | Bottom-up, LLM 호출 최소화:<ul><li>SPECTER2 임베딩 (proximity adapter + CLS pooling) → HDBSCAN fine-grained 클러스터링</li><li>TF-IDF 키워드 추출 → Claude Sonnet이 클러스터 작명</li><li>Ward linkage로 카테고리 그룹핑</li><li>논문당 1~3개 카테고리 복수 분류 (Node-based Hybrid C: KNN-vote primary + qualified-vote multi)</li></ul> |
 | **출력** | <ul><li><code>_new_classification.json</code></li><li><code>_papers_index.json</code></li></ul> |
 
 ### 4. 인사이트 + 타임라인
@@ -197,9 +208,9 @@ flowchart TB
 | | 설명 |
 |---|---|
 | **입력** | 전체 리뷰 + 개인 메모(<code>notes/</code>) |
-| **처리** | <ul><li>Section-aware chunking</li><li>OpenAI <code>text-embedding-3-small</code> 임베딩 (int8 L2 양자화)</li><li>개인 메모도 인덱싱되어 다음 질의에 반영</li></ul> |
+| **처리** | <ul><li>Section-aware chunking</li><li>Google <code>gemini-embedding-001</code> 임베딩 (768d, <code>task_type=RETRIEVAL_DOCUMENT</code>, L2 정규화 후 int8 양자화)</li><li>BM25 sparse 텀도 함께 인덱싱 (hybrid 검색용)</li><li>개인 메모도 인덱싱되어 다음 질의에 반영</li></ul> |
 | **출력** | <code>_search_index.json</code> |
-| **활용** | 토픽 페이지에서 자연어 질의 → 임베딩 유사도 검색 → 사용자 키 prefix 자동 감지 → **Anthropic / OpenAI / Google 중 하나**가 논문 근거 답변 스트리밍. 응답은 자연어 본문 + 클릭 가능 `[N]` 인용 + 자동 figure 인라인. Fast/Smart 토글 라벨은 감지된 백엔드의 실제 모델명을 표시 (예: `Fast (cost: Haiku 4.5)`) |
+| **활용** | 토픽 페이지에서 자연어 질의 → 질의 임베딩은 worker <code>/api/embed</code> (배포) 또는 <code>pipeline/serve_local.py</code> (로컬) 가 <code>gemini-embedding-001</code> (<code>task_type=RETRIEVAL_QUERY</code>) 로 대신 계산 → **hybrid 검색** (BM25 + dense, RRF 융합) → LLM 이 상위 후보를 한 문장씩 re-rank → 사용자 키 prefix 자동 감지로 **Anthropic / OpenAI / Google 중 하나**가 논문 근거 답변 스트리밍. 검색에는 독자 키가 전혀 필요 없고, 키(BYOK)는 답변 생성에만 쓰입니다. 응답은 자연어 본문 + 클릭 가능 `[N]` 인용 + 자동 figure 인라인. Fast/Smart 토글 라벨은 감지된 백엔드의 실제 모델명을 표시 (예: `Fast (cost: Haiku 4.5)`) |
 
 ### 6. 인덱스 + 네트워크
 
@@ -241,14 +252,16 @@ setx CLOUDFLARE_ACCOUNT_ID "..."
 
 **Custom domain (권장)** — `wrangler.toml` 의 `[[routes]]` 블록에 `pattern = "your-subdomain.your-domain.tld"` + `custom_domain = true` + `zone_name = "your-domain.tld"` 를 박으면 `wrangler deploy` 가 Cloudflare DNS · SSL · 라우팅까지 자동 설정합니다. 동시에 `prepare_deploy.py` 의 `CF_BASE_URL` 도 같은 값으로 갱신해야 gh-pages 스텁이 새 도메인을 가리킵니다. workers.dev 기본 도메인으로도 동작은 하지만 메일 도메인 일관성을 위해 custom domain 권장.
 
-**Audio Overview 이메일 발송 — Cloudflare Worker secrets** — `worker/index.js` 가 [Resend](https://resend.com) API 로 MP3 첨부 메일을 보냅니다. 세 가지 시크릿을 `wrangler secret put` 으로 등록:
+**Cloudflare Worker secrets (이메일 + 질의 임베딩)** — `worker/index.js` 가 두 라우트를 노출합니다: `/api/audio-email` ([Resend](https://resend.com) API 로 MP3 첨부 메일 발송) + `/api/embed` (`gemini-embedding-001` 질의 임베딩 프록시 — 독자가 키 없이 검색하도록). `wrangler secret put` 으로 등록:
 
 ```bash
-npx wrangler secret put RESEND_API_KEY    # Resend 대시보드의 re_xxx 키 (필수)
+npx wrangler secret put GOOGLE_API_KEY    # /api/embed 질의 임베딩 프록시용 (gemini-embedding-001, 필수)
+npx wrangler secret put RESEND_API_KEY    # Resend 대시보드의 re_xxx 키 (이메일 발송 필수)
 npx wrangler secret put AUDIO_FROM        # 예: "Paper Curation <noreply@your-domain.tld>" (도메인 verify 필요)
 npx wrangler secret put AUDIO_REPLY_TO    # 답장이 갈 운영자 메일, 예: "you@gmail.com" (선택)
 ```
 
+- `GOOGLE_API_KEY` 가 없으면 `/api/embed` 가 실패해 Deep Research 검색이 동작하지 않습니다 (배포 시 필수). 로컬에서는 `pipeline/serve_local.py` 가 같은 역할을 합니다.
 - `RESEND_API_KEY` 가 비어 있으면 `/api/audio-email` 이 503 을 반환하고, 클라이언트는 다운로드만으로 fallback 합니다.
 - `AUDIO_FROM` 의 도메인은 Resend 에서 SPF/DKIM/DMARC TXT 3개를 등록해 verify 해두어야 임의 수신자에게 발송할 수 있습니다 (verify 전엔 Resend 계정 메일 1명만 가능).
 - 로컬 빌드 시 운영자 본인 메일을 미리 박아두려면 `config.json` 에 `"local_emails": ["a@b.com", ...]` 또는 환경변수 `PAPER_CURATION_LOCAL_EMAILS="a@b.com,c@d.com"`. 배포 시 자동 strip 됩니다.
@@ -271,6 +284,9 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode rebuild --slugs
 
 # 분류만 재실행 (HDBSCAN approximate_predict + centroid fallback, LLM 호출 없음 — py312 자동 라우팅)
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode reclassify
+
+# 크로스카테고리 Research Insights 까지 생성 (opt-in — 기본 curate 는 paper-connections 만 생성)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source zotero --insights
 
 # 타임라인 narrative + 이미지 재생성
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode retime --images all
@@ -304,6 +320,7 @@ cd docs && python -m http.server 8000
 - `--dry-run`: 실행 계획만 출력
 - `--skip-dedup`: Zotero dedup preflight 스킵
 - `--dedup-execute`: preflight가 실제 삭제까지 수행 (기본은 dry-run 리포트)
+- `--insights`: 크로스카테고리 Research Insights 생성 opt-in (기본 Core 는 paper-connections 만)
 - `--yes`: rebuild 모드 확인 게이트 우회
 
 ### Concurrency 가이드 — Anthropic Tier 기준
@@ -496,7 +513,7 @@ schema_version: v1
 ---
 ```
 
-기존 review.md 는 `pipeline/migrate_to_toolschema.py` 로 일괄 변환 (백업: `docs/papers/.legacy/{slug}_v0.md`). 재실행 idempotent. 모든 readers (`build_papers_index` / `build_topic_index` / `validate_papers`) 가 frontmatter fast path 우선, 레거시 body-regex 는 fallback.
+기존 review.md 는 `pipeline/_archive/migrate_to_toolschema.py` (일회성 마이그레이션, 현재 아카이브됨) 로 일괄 변환 (백업: `docs/papers/.legacy/{slug}_v0.md`). 재실행 idempotent. 모든 readers (`build_papers_index` / `build_topic_index` / `validate_papers`) 가 frontmatter fast path 우선, 레거시 body-regex 는 fallback.
 
 ---
 
@@ -533,8 +550,8 @@ Deep Research 질의 -> Obsidian 메모 작성 -> 인덱스 재빌드 -> 다음 
 
 | 구분 | 항목 |
 |------|------|
-| **필수** | Python 3.14 권장 (3.12+ 동작; macOS conda env `py314` 표준), Zotero (API Key + 컬렉션 + PDF) |
-| **API** | Anthropic (Claude Haiku/Sonnet/Opus), Google (Gemini), OpenAI (text-embedding-3-small), Zotero Web API |
+| **필수** | Python 3.12 (macOS conda env `py312` 단일 표준; 레거시 py314+py312 듀얼도 동작), Zotero (API Key + 컬렉션 + PDF) |
+| **API** | Anthropic (Claude Haiku/Sonnet/Opus), Google (Gemini + `gemini-embedding-001` 검색 임베딩), Zotero Web API, Resend (배포 시 Audio Overview 이메일). OpenAI 는 선택 (답변 BYOK·insights fallback) |
 | **Python** | `pip install -r requirements.txt` — anthropic, openai, google-genai, pymupdf, Pillow, requests, pyzotero, opendataloader-pdf, numpy, scikit-learn, joblib, umap-learn, hdbscan, sentence-transformers |
 | **선택** | Obsidian (메모/Graph View), PaperBanana (타임라인 이미지), Zotero Desktop (PDF 원클릭) |
 
@@ -564,7 +581,7 @@ Turn hundreds of papers into structured Korean reviews, auto-classify them with 
 | **Knowledge Compounding** | Obsidian integration: your notes feed back into future queries |
 | **Paper Discovery** | Parallel search across arXiv, Semantic Scholar, OpenAlex + auto-registration to Zotero (optional) |
 
-**What you need**: A Zotero collection with PDFs + API keys (at least one of Anthropic / Google / OpenAI for answers + OpenAI for embeddings)
+**What you need**: A Zotero collection with PDFs + API keys (required: Anthropic · Google · Zotero Web API). Search embeddings use Google `gemini-embedding-001`, so no separate OpenAI key is needed (OpenAI is optional — reader BYOK answers / insights fallback).
 
 ---
 
@@ -585,21 +602,20 @@ To install by hand, these five steps are the minimal path to running it locally.
 git clone https://github.com/jehyunlee/paper-curation.git
 cd paper-curation
 
-# 2) Create two conda envs (py314 = main, py312 = topic modeling only — both required)
-conda create -n py314 -c conda-forge python=3.14 pip -y
+# 2) Create one conda env (py312 = the standard single env)
 conda create -n py312 -c conda-forge python=3.12 pip -y
-#    Topic modeling/classification crashes on Python 3.14 (numba CALL_KW), so it
-#    runs in a separate py312 env (see "Prerequisites" for the full reason).
+conda activate py312
 
-# 3) Install dependencies — clustering libs are needed in BOTH envs
-conda run -n py314 pip install -r requirements.txt
-conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
-    joblib numpy scikit-learn anthropic openai
-conda activate py314
+# 3) Install dependencies (includes umap-learn · hdbscan · sentence-transformers)
+pip install -r requirements.txt
+#    If the active interpreter can import umap/hdbscan, the orchestrator runs topic
+#    modeling/classification in-process — no subprocess. (The legacy py314+py312 dual
+#    setup keeps working via the same probe — see the collapsed note under "Prerequisites".)
 
-# 4) Required API keys (reviews = Anthropic, embeddings = OpenAI). Google is optional (figure validation).
+# 4) Required API keys (reviews = Anthropic, search embeddings / figure validation / TTS = Google).
+#    Search embeddings use Google gemini-embedding-001, so OpenAI is optional (BYOK answers / insights fallback).
 export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
+export GOOGLE_API_KEY=...
 
 # 5) Create config.json (interactive) → first pipeline run
 python pipeline/setup.py
@@ -629,11 +645,24 @@ Checklist — get these items ready and the first run won't stall:
 | Item | Details |
 |------|---------|
 | **Zotero** | [API Key](https://www.zotero.org/settings/keys) + a collection with paper PDFs |
-| **API keys** | `ANTHROPIC_API_KEY` (reviews/insights — **required**), `OPENAI_API_KEY` (Deep Research embeddings — **required**), `GOOGLE_API_KEY` (figure validation/TTS — optional) |
-| **conda envs** | `py314` (main) + `py312` (topic modeling) — both required, created by the commands below |
+| **API keys** | `ANTHROPIC_API_KEY` (reviews/insights — **required**), `GOOGLE_API_KEY` (search embeddings `gemini-embedding-001` / figure validation / TTS — **required**), `RESEND_API_KEY` (Audio Overview email when deployed — required for deploy), `OPENAI_API_KEY` (reader BYOK answers / insights fallback — optional) |
+| **conda env** | `py312` single env (standard) — created by the commands below. The legacy py314+py312 dual still works via the same probe |
 | **Java Runtime** | For `opendataloader-pdf`'s PDF extraction. macOS: `brew install --cask temurin`. Without it the pipeline falls back to PyMuPDF (lower table/structure quality) |
 
-**Create the conda envs (required)** — identical to Quickstart steps 2–3:
+**Create the conda env (standard: single py312)** — identical to Quickstart steps 2–3:
+
+```bash
+conda create -n py312 -c conda-forge python=3.12 pip -y
+conda activate py312
+pip install -r requirements.txt
+```
+
+Because `requirements.txt` includes umap-learn / hdbscan / sentence-transformers, the orchestrator runs topic modeling/classification **in-process, with no subprocess**, whenever the active interpreter can import the clustering libraries. Python 3.12 has no numba `CALL_KW` incompatibility, so a single env is enough.
+
+<details>
+<summary><b>Legacy: py314 + py312 dual env (optional)</b></summary>
+
+If you want Python 3.14 (`py314`) as your main env, numba's bytecode interpreter doesn't yet handle 3.14's `CALL_KW` opcode, so `topic_modeling.py` / `classify_papers.py`'s `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` path crashes (0.65.1 / 0.66.0rc1 / main are all affected). Create a sibling `py312` env and `run_update_force._resolve_topic_modeling_python()` uses the **same probe** (the active interpreter failing to import umap) to auto-detect the sibling `py312/bin/python` and route only those two clustering scripts there (priority: `PAPER_CURATION_PY312` env var → sibling env `<base>/envs/py312` → `which python3.12` → `sys.executable` fallback). Both envs install the same numba 0.65 / llvmlite 0.47 / numpy 2.x lineup.
 
 ```bash
 conda create -n py314 -c conda-forge python=3.14 pip -y
@@ -644,18 +673,17 @@ conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
 conda activate py314
 ```
 
-**Why two envs** — numba's bytecode interpreter doesn't yet handle Python 3.14's `CALL_KW` opcode, so `topic_modeling.py` / `classify_papers.py`'s `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` path crashes on Python 3.14 (0.65.1 / 0.66.0rc1 / main are all affected). Those two clustering scripts therefore run in a separate `py312` env, and `run_update_force._resolve_topic_modeling_python()` auto-detects the sibling `py312/bin/python` and routes them there (priority: `PAPER_CURATION_PY312` env var → sibling env `<base>/envs/py312` → `which python3.12` → `sys.executable` fallback). Both envs install the same numba 0.65 / llvmlite 0.47 / numpy 2.x lineup. **If you skip py312**, the first run stops at the classification step with a numba traceback.
+</details>
 
 ### Verify your install
 
-Before launching the long pipeline, confirm the clustering deps actually landed in py312 with a one-liner:
+Before launching the long pipeline, confirm the dependencies actually landed with a one-liner:
 
 ```bash
-conda run -n py312 python -c "import umap, hdbscan, sentence_transformers; print('py312 OK')"
-conda run -n py314 python -c "import fitz, sklearn, anthropic, openai; print('py314 OK')"
+python -c "import umap, hdbscan, sentence_transformers, fitz, sklearn, anthropic; print('py312 OK')"
 ```
 
-Both lines printing `OK` means you're ready. To preview the execution plan first, use `--dry-run`:
+`OK` means you're ready. To preview the execution plan first, use `--dry-run`:
 
 ```bash
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source zotero --dry-run
@@ -665,12 +693,12 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source
 
 | Symptom / error | Cause | Fix |
 |---|---|---|
-| `op_CALL_KW: pop from empty list` (numba traceback) | Classification ran under py314 | Create the `py312` env and install the clustering deps — see "Create the conda envs" above. If it isn't a sibling env, point `PAPER_CURATION_PY312` at it |
-| `ModuleNotFoundError: umap` / `hdbscan` / `sentence_transformers` | Missing dependency | Run `pip install -r requirements.txt` in that env (and the clustering packages in py312) |
+| `op_CALL_KW: pop from empty list` (numba traceback) | Classification ran under a Python 3.14 interpreter | Run in the standard single `py312` env, or — if you keep py314 as main — create a sibling `py312` env to route into. See the legacy note under "Create the conda env". If it isn't a sibling env, point `PAPER_CURATION_PY312` at it |
+| `ModuleNotFoundError: umap` / `hdbscan` / `sentence_transformers` | Missing dependency | Activate the env and run `pip install -r requirements.txt` (it includes umap-learn / hdbscan / sentence-transformers) |
 | Figures look low-quality / tables broken | Java missing → PyMuPDF fallback | `brew install --cask temurin` (macOS), then re-run |
 | SPECTER2 / arXiv download hangs (Korean network) | huggingface LFS / arXiv blocked | Use the S3 mirror command in "Korean-network workarounds" below |
 | `[COLLECTION_ERROR]` | Wrong Zotero collection name | Pick the correct name from the listed available collections, then re-run |
-| Install aborts on `OPENAI_API_KEY 미설정` | Deep Research embedding key is required | `export OPENAI_API_KEY=sk-...`, then re-run |
+| Search index builds with empty embeddings | `GOOGLE_API_KEY` not set | `export GOOGLE_API_KEY=...`, then re-run — search embeddings use Google `gemini-embedding-001` (an OpenAI key is no longer required) |
 
 ---
 
@@ -726,7 +754,7 @@ flowchart TB
 | | Description |
 |---|---|
 | **Input** | Essence + title from all reviews |
-| **Processing** | Bottom-up, minimal LLM calls:<ul><li>SPECTER2 embeddings → HDBSCAN fine-grained clustering</li><li>TF-IDF keywords → Claude Sonnet names each cluster</li><li>Ward linkage groups clusters into categories</li><li>1–3 categories per paper (Node-based Hybrid C: KNN-vote primary + qualified-vote multi)</li></ul> |
+| **Processing** | Bottom-up, minimal LLM calls:<ul><li>SPECTER2 embeddings (proximity adapter + CLS pooling) → HDBSCAN fine-grained clustering</li><li>TF-IDF keywords → Claude Sonnet names each cluster</li><li>Ward linkage groups clusters into categories</li><li>1–3 categories per paper (Node-based Hybrid C: KNN-vote primary + qualified-vote multi)</li></ul> |
 | **Output** | <ul><li><code>_new_classification.json</code></li><li><code>_papers_index.json</code></li></ul> |
 
 ### 4. Insights + Timelines
@@ -742,9 +770,9 @@ flowchart TB
 | | Description |
 |---|---|
 | **Input** | All reviews + personal notes (<code>notes/</code>) |
-| **Processing** | <ul><li>Section-aware chunking</li><li>OpenAI <code>text-embedding-3-small</code> embeddings (int8 L2 quantized)</li><li>Personal notes are indexed and reflected in future queries</li></ul> |
+| **Processing** | <ul><li>Section-aware chunking</li><li>Google <code>gemini-embedding-001</code> embeddings (768d, <code>task_type=RETRIEVAL_DOCUMENT</code>, L2-normalized then int8-quantized)</li><li>BM25 sparse terms indexed alongside (for hybrid retrieval)</li><li>Personal notes are indexed and reflected in future queries</li></ul> |
 | **Output** | <code>_search_index.json</code> |
-| **Usage** | Natural-language query on topic page → embedding similarity search → user-key prefix auto-detected → **Anthropic / OpenAI / Google** streams a grounded answer. Output is natural prose + clickable `[N]` citation chips + auto-inlined figures. The Fast/Smart toggle labels show the actual model resolved for the detected backend (e.g. `Fast (cost: Haiku 4.5)`) |
+| **Usage** | Natural-language query on topic page → the query embedding is computed for the reader by the worker <code>/api/embed</code> route (deployed) or <code>pipeline/serve_local.py</code> (local) with <code>gemini-embedding-001</code> (<code>task_type=RETRIEVAL_QUERY</code>) → **hybrid retrieval** (BM25 + dense, fused with RRF) → an LLM re-ranks the top candidates one sentence each → user-key prefix auto-detected, and **Anthropic / OpenAI / Google** streams a grounded answer. Retrieval needs no reader key at all; a key (BYOK) is only for answer generation. Output is natural prose + clickable `[N]` citation chips + auto-inlined figures. The Fast/Smart toggle labels show the actual model resolved for the detected backend (e.g. `Fast (cost: Haiku 4.5)`) |
 
 ### 6. Index + Network
 
@@ -786,14 +814,16 @@ setx CLOUDFLARE_ACCOUNT_ID "..."
 
 **Custom domain (recommended)** — drop a `[[routes]]` block into `wrangler.toml` with `pattern = "your-subdomain.your-domain.tld"`, `custom_domain = true`, and `zone_name = "your-domain.tld"`. `wrangler deploy` then provisions DNS, SSL, and routing in Cloudflare for you. Update `prepare_deploy.py`'s `CF_BASE_URL` constant to match so the gh-pages stubs point at the new domain. The default `*.workers.dev` URL works too, but a custom domain matters for email consistency.
 
-**Audio Overview email — Cloudflare Worker secrets** — `worker/index.js` ships finished MP3s through the [Resend](https://resend.com) API. Register three secrets with `wrangler secret put`:
+**Cloudflare Worker secrets (email + query embedding)** — `worker/index.js` exposes two routes: `/api/audio-email` (ships finished MP3s through the [Resend](https://resend.com) API) and `/api/embed` (a `gemini-embedding-001` query-embedding proxy so readers can search without a key). Register the secrets with `wrangler secret put`:
 
 ```bash
-npx wrangler secret put RESEND_API_KEY    # the re_xxx key from Resend (required)
+npx wrangler secret put GOOGLE_API_KEY    # for the /api/embed query-embedding proxy (gemini-embedding-001, required)
+npx wrangler secret put RESEND_API_KEY    # the re_xxx key from Resend (required for email)
 npx wrangler secret put AUDIO_FROM        # e.g. "Paper Curation <noreply@your-domain.tld>" (domain must be verified)
 npx wrangler secret put AUDIO_REPLY_TO    # operator inbox replies land in, e.g. "you@gmail.com" (optional)
 ```
 
+- Without `GOOGLE_API_KEY`, `/api/embed` fails and Deep Research retrieval won't work (required for deploy). Locally, `pipeline/serve_local.py` plays the same role.
 - When `RESEND_API_KEY` is unset, `/api/audio-email` returns 503 and the client falls back to download-only.
 - `AUDIO_FROM` requires the domain to be SPF/DKIM/DMARC-verified in Resend before it can send to arbitrary recipients (without verification, only the Resend account's own address works).
 - To bake operator addresses for localhost builds, add `"local_emails": ["a@b.com", ...]` to `config.json` or set `PAPER_CURATION_LOCAL_EMAILS="a@b.com,c@d.com"`. These are stripped at deploy time.
@@ -817,6 +847,9 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode rebuild --slugs
 # Reclassify only (HDBSCAN approximate_predict + centroid fallback, no LLM calls — auto-routed to py312)
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode reclassify
 
+# Also generate cross-category Research Insights (opt-in — Core runs paper-connections only)
+PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source zotero --insights
+
 # Regenerate timelines (narratives + images)
 PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode retime --images all
 
@@ -837,7 +870,7 @@ cd docs && python -m http.server 8000
 - **retime** — regenerate narratives + timeline images
 - **deploy** — run `prepare_deploy.py` only (split-host: Cloudflare + gh-pages stubs + master code push)
 
-Safety flags: `--strict-pdf` (block fuzzy PDF match), `--slugs A,B,C`, `--dry-run`, `--skip-dedup`, `--dedup-execute`, `--yes`.
+Safety flags: `--strict-pdf` (block fuzzy PDF match), `--slugs A,B,C`, `--dry-run`, `--skip-dedup`, `--dedup-execute`, `--insights` (opt-in cross-category Research Insights; Core runs paper-connections only), `--yes`.
 
 ### Concurrency Tuning by Anthropic Tier
 
@@ -1027,7 +1060,7 @@ schema_version: v1
 ---
 ```
 
-Existing review.md files are bulk-migrated via `pipeline/migrate_to_toolschema.py` (backups: `docs/papers/.legacy/{slug}_v0.md`). The migration is idempotent on re-run. All readers (`build_papers_index` / `build_topic_index` / `validate_papers`) take the frontmatter fast path first and fall back to the legacy body-regex if no v1 frontmatter is present.
+Existing review.md files are bulk-migrated via `pipeline/_archive/migrate_to_toolschema.py` (a one-time migration, now archived; backups: `docs/papers/.legacy/{slug}_v0.md`). The migration is idempotent on re-run. All readers (`build_papers_index` / `build_topic_index` / `validate_papers`) take the frontmatter fast path first and fall back to the legacy body-regex if no v1 frontmatter is present.
 
 ---
 
@@ -1064,8 +1097,8 @@ Deep Research query -> Obsidian note -> re-index -> your notes cited in next que
 
 | Category | Items |
 |----------|-------|
-| **Required** | Python 3.14 recommended (3.12+ works; macOS conda env `py314` is the standard), Zotero (API Key + collection + PDFs) |
-| **APIs** | Anthropic (Claude Haiku/Sonnet/Opus), Google (Gemini), OpenAI (text-embedding-3-small), Zotero Web API |
+| **Required** | Python 3.12 (macOS conda env `py312` is the single standard; the legacy py314+py312 dual also works), Zotero (API Key + collection + PDFs) |
+| **APIs** | Anthropic (Claude Haiku/Sonnet/Opus), Google (Gemini + `gemini-embedding-001` search embeddings), Zotero Web API, Resend (Audio Overview email when deployed). OpenAI is optional (reader BYOK answers / insights fallback) |
 | **Python** | `pip install -r requirements.txt` — anthropic, openai, google-genai, pymupdf, Pillow, requests, pyzotero, opendataloader-pdf, numpy, scikit-learn, joblib, umap-learn, hdbscan, sentence-transformers |
 | **Optional** | Obsidian (notes/Graph View), PaperBanana (timeline images), Zotero Desktop (one-click PDF) |
 

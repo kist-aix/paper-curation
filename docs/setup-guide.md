@@ -8,19 +8,16 @@ Paper Curation 파이프라인의 설치 및 설정 가이드입니다.
 
 - [Claude Code](https://claude.ai/code) 설치
 - [Zotero API Key](https://www.zotero.org/settings/keys) 발급
-- API 키 — `ANTHROPIC_API_KEY` (리뷰·인사이트 — **필수**), `OPENAI_API_KEY` (Deep Research 임베딩 — **필수**), `GOOGLE_API_KEY` (Figure 검증·TTS — 선택)
+- API 키 — `ANTHROPIC_API_KEY` (리뷰·인사이트 — **필수**), `GOOGLE_API_KEY` (검색 임베딩 `gemini-embedding-001`·Figure 검증·TTS — **필수**), `RESEND_API_KEY` (배포 시 Audio Overview 이메일 — 배포 필수), `OPENAI_API_KEY` (답변 BYOK·insights fallback — 선택)
 - Zotero 컬렉션 이름 확인 (리뷰할 논문들이 모인 컬렉션)
 - Zotero PDF 저장 경로 확인
-- **conda env 두 개 필요** — `py314` (Python 3.14, 메인) + `py312` (Python 3.12, 토픽 모델링/분류 전용). 토픽 모델링은 numba 의 `CALL_KW` 비호환 때문에 Python 3.14 에서 죽으므로 별도 `py312` env 에서 실행됩니다. 생성 명령:
+- **conda env 하나 필요 (표준: 단일 `py312`)** — Python 3.12 단일 env 면 충분합니다. `requirements.txt` 가 umap-learn / hdbscan / sentence-transformers 를 포함하므로 오케스트레이터가 토픽 모델링/분류를 별도 서브프로세스 없이 in-process 로 실행합니다 (Python 3.12 는 numba 의 `CALL_KW` 비호환 문제가 없음). 생성 명령:
   ```bash
-  conda create -n py314 -c conda-forge python=3.14 pip -y
   conda create -n py312 -c conda-forge python=3.12 pip -y
-  conda run -n py314 pip install -r requirements.txt
-  conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
-      joblib numpy scikit-learn anthropic openai
-  conda activate py314
+  conda activate py312
+  pip install -r requirements.txt
   ```
-  `py312` 를 만들지 않으면 첫 실행이 분류 단계에서 numba 트레이스백과 함께 멈춥니다. 자세한 내용은 README "사전 준비" 참고.
+  메인을 Python 3.14 (`py314`) 로 쓰고 싶다면 형제 `py312` env 를 추가로 만들면 동일 probe 로 클러스터링 두 스크립트(`topic_modeling.py` / `classify_papers.py`)만 자동 라우팅됩니다. 자세한 내용은 README "사전 준비" 참고.
 - **Java Runtime** — `opendataloader-pdf` 가 Java CLI 래퍼. macOS: `brew install --cask temurin`. 없으면 PyMuPDF 로 자동 fallback (표/구조 추출 품질 ↓).
 
 ## Claude Code에서 설치 (권장)
@@ -63,14 +60,14 @@ cd paper-curation
 pip install -r requirements.txt   # 전체 의존성 (anthropic·openai·umap-learn·hdbscan·sentence-transformers 등)
 ```
 
-> 토픽 모델링/분류용 `py312` env 에도 클러스터링 의존성을 설치해야 합니다 (위 "사전 준비" 의 conda 명령 참고).
+> 표준은 단일 `py312` env 입니다 (`requirements.txt` 에 클러스터링 의존성 포함). 레거시 py314 메인을 쓰는 경우에만 형제 `py312` env 에 클러스터링 의존성을 따로 설치하세요 (위 "사전 준비" 의 conda 명령 참고).
 
 ### 2. Setup
 
 ```bash
 export ANTHROPIC_API_KEY=your_key     # 리뷰·인사이트 (필수)
-export OPENAI_API_KEY=your_key        # Deep Research 임베딩 (필수)
-export GOOGLE_API_KEY=your_key        # Figure 검증·TTS (선택)
+export GOOGLE_API_KEY=your_key        # 검색 임베딩 gemini-embedding-001·Figure 검증·TTS (필수)
+export OPENAI_API_KEY=your_key        # 답변 BYOK·insights fallback (선택)
 python pipeline/setup.py
 ```
 
@@ -93,6 +90,12 @@ python pipeline/setup.py
     "pdf_dir": "/path/to/your/zotero/pdfs"
   },
   "unpaywall_email": "your_email@example.com",
+  "search_keywords": {
+    "my_topic": {
+      "primary": ["machine learning biology", "protein language model"],
+      "secondary": ["single cell RNA", "drug target prediction"]
+    }
+  },
   "paperbanana_dir": "/path/to/paperbanana"
 }
 ```
@@ -103,6 +106,7 @@ python pipeline/setup.py
 | `email` | 이메일 (Zotero 및 Unpaywall용) |
 | `collections` | Topic alias → Zotero 컬렉션 이름 매핑. Collection key는 Zotero API를 통해 자동 변환됩니다. |
 | `pdf_dir` | Zotero PDF가 저장된 로컬 경로 |
+| `search_keywords` | 토픽별 Core-1 검색 키워드 (`{topic: {primary: [...], secondary: [...]}}`). `primary` 매칭 0.5점, `secondary` 0.2점. `ai4s`/`scisci` 는 빌트인 기본값이 있어 생략 가능하고, 그 외 신규 토픽은 여기에 추가합니다. (선택) |
 | `paperbanana_dir` | [PaperBanana](https://github.com/dwzhu-pku/PaperBanana) clone 경로 (선택) |
 
 ### 환경변수 (선택)
@@ -114,7 +118,10 @@ python pipeline/setup.py
 | `ZOTERO_API_KEY` | Zotero API key |
 | `ZOTERO_USER_ID` | Zotero user ID |
 | `ZOTERO_DIR` | Zotero PDF 저장 경로 |
-| `ANTHROPIC_API_KEY` | Claude API key |
+| `ANTHROPIC_API_KEY` | Claude API key (리뷰·인사이트 — 필수) |
+| `GOOGLE_API_KEY` | Google AI key (검색 임베딩 `gemini-embedding-001`·Figure 검증·TTS — 필수) |
+| `OPENAI_API_KEY` | OpenAI key (답변 BYOK·insights fallback — 선택) |
+| `RESEND_API_KEY` | Resend key (배포 시 Audio Overview 이메일 — wrangler secret 으로도 등록) |
 | `GITHUB_REPO` | GitHub repo (owner/repo) |
 | `GITHUB_BRANCH` | Git branch (기본: master) |
 | `PAGES_BASE_URL` | GitHub Pages base URL |
