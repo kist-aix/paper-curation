@@ -687,9 +687,28 @@ def compute_related_candidates(embeddings, slugs, top_k=5):
     return candidates
 
 
-def generate_connections_from_candidates(candidates, topic_papers, client, batch_size=25):
-    """임베딩 top-20 후보 -> Sonnet이 이유/관계 작성."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+def generate_connections_from_candidates(candidates, topic_papers, client,
+                                         batch_size=25, deadline_s=480):
+    """임베딩 top-20 후보 -> Sonnet이 이유/관계 작성.
+
+    BEST-EFFORT + 행 방지: 연결은 정규 사이클의 ``extract_insights --only
+    connections`` 가 다시 채우므로, 한국망↔Anthropic 의 stale-connection(half-open
+    소켓) 으로 *토픽 모델링 전체가 멈추면 안 된다*. 과거엔 막힌 배치 하나가
+    client 의 max_retries(4) × timeout(180s) = 12분을 잡고, 게다가 ``with
+    ThreadPoolExecutor`` 의 암묵적 ``shutdown(wait=True)`` 가 그 좀비 워커를 join
+    하면서 런 전체를 영구히 정지시켰다(메인스레드가 lock 대기에 묶임). 영구 수정:
+      1) 이 단계 전용 client 는 ``timeout=90, max_retries=1`` 로 막힌 호출을 ~3분
+         안에 끝낸다.
+      2) 수집 루프에 전체 wall-clock ``deadline_s`` 를 둬, 그 안에 끝난 배치만
+         쓰고 나머지는 버린다.
+      3) ``shutdown(wait=False, cancel_futures=True)`` — 좀비 워커를 join 하지
+         않는다(아직 시작 안 한 배치는 취소; 도는 워커는 짧은 timeout 으로 곧 끝남).
+    """
+    from concurrent.futures import (ThreadPoolExecutor, FIRST_COMPLETED,
+                                    wait as _futures_wait)
+
+    # 막힌 호출이 토픽모델링을 오래 잡지 않게 짧은 timeout/무재시도 클라이언트.
+    conn_client = client.with_options(timeout=90.0, max_retries=1)
 
     slug_to_paper = {p["slug"]: p for p in topic_papers}
     num_to_slug = {p["slug"].split("_")[0]: p["slug"] for p in topic_papers}
@@ -738,7 +757,7 @@ Rules:
 - 유사도가 높아도 의미 없는 연결은 제외
 - target은 candidate 목록의 논문 번호만 사용"""
 
-        resp = client.messages.create(
+        resp = conn_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=10000,
             messages=[{"role": "user", "content": prompt}],
@@ -750,40 +769,60 @@ Rules:
                 text = text[4:]
         return json.loads(text)
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    def _merge(batch_result):
+        for num, conns in batch_result.items():
+            slug = num_to_slug.get(num)
+            if not slug:
+                continue
+            resolved = []
+            for c in conns:
+                target_slug = num_to_slug.get(c.get("target", ""))
+                if target_slug:
+                    resolved.append({
+                        "slug": target_slug,
+                        "relation": c.get("relation", "alternative"),
+                        "reason": c.get("reason", ""),
+                    })
+            if resolved:
+                existing = all_connections.get(slug, [])
+                seen = {r["slug"] for r in existing}
+                for r in resolved:
+                    if r["slug"] not in seen:
+                        existing.append(r)
+                        seen.add(r["slug"])
+                all_connections[slug] = existing
+
+    executor = ThreadPoolExecutor(max_workers=4)
+    deadline = time.monotonic() + deadline_s
+    done_n = 0
+    try:
         futures = {
             executor.submit(process_batch, batch): bi
             for bi, batch in enumerate(batches)
         }
-        for future in as_completed(futures):
-            bi = futures[future]
-            try:
-                batch_result = future.result()
-                for num, conns in batch_result.items():
-                    slug = num_to_slug.get(num)
-                    if not slug:
-                        continue
-                    resolved = []
-                    for c in conns:
-                        target_slug = num_to_slug.get(c.get("target", ""))
-                        if target_slug:
-                            resolved.append({
-                                "slug": target_slug,
-                                "relation": c.get("relation", "alternative"),
-                                "reason": c.get("reason", ""),
-                            })
-                    if resolved:
-                        existing = all_connections.get(slug, [])
-                        seen = {r["slug"] for r in existing}
-                        for r in resolved:
-                            if r["slug"] not in seen:
-                                existing.append(r)
-                                seen.add(r["slug"])
-                        all_connections[slug] = existing
-                log(f"    batch {bi + 1}/{len(batches)}: {len(batch_result)} papers")
-            except Exception as e:
-                log(f"    batch {bi + 1}/{len(batches)} ERROR: {str(e)[:100]}")
-            time.sleep(0.5)
+        pending = set(futures)
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                log(f"  [connections] deadline {deadline_s}s 초과 — "
+                    f"{done_n}/{len(batches)} 배치 완료, {len(pending)} 배치 포기 "
+                    f"(best-effort; extract_insights 가 추후 갱신)")
+                break
+            done, pending = _futures_wait(
+                pending, timeout=min(remaining, 30.0),
+                return_when=FIRST_COMPLETED)
+            for future in done:
+                bi = futures[future]
+                try:
+                    _merge(future.result())
+                    done_n += 1
+                    log(f"    batch {bi + 1}/{len(batches)}: ok")
+                except Exception as e:
+                    log(f"    batch {bi + 1}/{len(batches)} ERROR: {str(e)[:100]}")
+    finally:
+        # 좀비 워커를 join 하지 않는다(=런이 멈추지 않게). 시작 안 한 배치는 취소;
+        # 도는 워커는 conn_client 의 짧은 timeout 안에서 스스로 끝난다.
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return all_connections
 
