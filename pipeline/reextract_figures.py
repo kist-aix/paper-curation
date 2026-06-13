@@ -88,12 +88,20 @@ def _split_name(n):
 
 
 def _remove_fig_embed(review_path, n):
-    """Remove the markdown embed (image + optional italic caption) for fig{n}."""
+    """Remove the markdown embed (image + optional italic caption) for fig{n}.
+
+    Handles BOTH layouts the corpus uses: image and caption on the SAME line
+    `![..](figures/figN.webp) *caption*` AND on separate lines
+    `![..](figures/figN.webp)\n\n*caption*`. The old regex required a newline
+    right after the `)`, so it silently failed on same-line embeds — leaving
+    the old (often full-page) figure referenced and on disk."""
     txt = open(review_path, encoding="utf-8").read()
     pat = re.compile(
-        rf'!\[[^\]]*\]\(figures/fig{n}\.(?:png|webp)\)\s*\n+(\*[^*\n]+\*\s*\n+)?')
+        rf'!\[[^\]]*\]\(figures/fig{n}\.(?:png|webp)\)'
+        rf'[ \t]*\n*(?:\*[^*\n]+\*[ \t]*\n*)?')
     new = pat.sub("", txt)
     if new != txt:
+        new = re.sub(r"\n{3,}", "\n\n", new)
         open(review_path, "w", encoding="utf-8").write(new)
 
 
@@ -141,6 +149,41 @@ def _prune_orphans(fd, rv):
                 os.remove(f)
             except OSError:
                 pass
+
+
+def _drop_fullpage_from_new(pdf, fd, new_figs):
+    """Drop just-extracted figN.png files that came out FULL-PAGE.
+
+    Image-based / scanned PDFs render every page as a >90% image, so the
+    extractor's scanned-PDF guard emits whole pages as 'figures'. Those are
+    junk. Remove them from disk and from the returned list; if nothing tight
+    survives, the caller's new==0 path drops the old full-page crops too."""
+    import fitz
+    from PIL import Image
+    try:
+        doc = fitz.open(pdf)
+        p0 = doc[0]
+        ppx = (p0.rect.width * 3) * (p0.rect.height * 3)
+        doc.close()
+    except Exception:
+        return new_figs
+    kept = []
+    for f in new_figs:
+        fp = os.path.join(fd, f"fig{f['name']}.png")
+        try:
+            im = Image.open(fp)
+            ratio = (im.size[0] * im.size[1]) / max(1.0, ppx)
+        except Exception:
+            kept.append(f)
+            continue
+        if ratio > 0.85:
+            try:
+                os.remove(fp)
+            except OSError:
+                pass
+        else:
+            kept.append(f)
+    return kept
 
 
 # 모든 figure 참조 (숫자형 figN 만이 아니라 table1 / fig1a / fig-table1 같은
@@ -243,7 +286,8 @@ def process_one(entry):
     bak = _backup(sd, fd)
     try:
         # 1) extract (geometric; GOOGLE_API_KEY popped before the pool)
-        new_figs = ruf.extract_figures(pdf, sd)        # writes figN.png
+        new_figs = ruf.extract_figures(pdf, sd)        # writes figN.png under fd
+        new_figs = _drop_fullpage_from_new(pdf, fd, new_figs)  # drop image-based junk
         new_nums = {int(f["name"]) for f in new_figs}
 
         # 2) NO-REGRESS: no new figures. Revert to the pristine old state. Then,
