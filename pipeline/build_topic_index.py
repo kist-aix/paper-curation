@@ -2556,12 +2556,31 @@ def _run_topic_index(topic=None):
             def _norm_title(t):
                 return re.sub(r"\s+", " ", t.lower().strip()) if t else ""
 
-            _title_to_key = {}
+            def _norm_arxiv(s):
+                m = re.search(r"(\d{4}\.\d{4,5})", s or "")
+                return m.group(1) if m else ""
+
+            # Index Zotero items by title AND DOI AND arXiv-id. The 'Open PDF'
+            # button must reflect "this paper has a PDF", not "its title happens
+            # to match" — exact-title matching silently dropped papers whose
+            # stored title differs (truncation, punctuation, version suffix) even
+            # when a PDF exists. DOI/arXiv give a robust ID-first fallback.
+            _title_to_key, _doi_to_key, _arxiv_to_key = {}, {}, {}
             for _it in _items:
-                _t = _it.get("data", {}).get("title", "")
+                _d2 = _it.get("data", {})
                 _k = _it.get("key", "")
-                if _t and _k:
-                    _title_to_key[_norm_title(_t)] = _k
+                if not _k:
+                    continue
+                if _d2.get("title"):
+                    _title_to_key.setdefault(_norm_title(_d2["title"]), _k)
+                _doi = (_d2.get("DOI", "") or "").lower().strip()
+                if _doi:
+                    _doi_to_key.setdefault(_doi, _k)
+                _ax = _norm_arxiv((_d2.get("url", "") or "") + " "
+                                  + (_d2.get("extra", "") or "") + " "
+                                  + (_d2.get("archiveID", "") or ""))
+                if _ax:
+                    _arxiv_to_key.setdefault(_ax, _k)
 
             # Fetch attachment items so we can map parent -> PDF attachment
             # key. zotero://open-pdf requires the *attachment* key, not the
@@ -2600,11 +2619,21 @@ def _run_topic_index(topic=None):
             if _papers_index.exists():
                 with open(_papers_index, "r", encoding="utf-8") as _pf:
                     for _p in json.load(_pf):
-                        _t = _p.get("title", "")
                         _s = _p.get("slug", "")
-                        _nt = _norm_title(_t)
-                        if _s and _nt in _title_to_key:
-                            _parent_key = _title_to_key[_nt]
+                        if not _s:
+                            continue
+                        # Resolve the Zotero parent item: title first (preserves
+                        # all existing matches), then DOI, then arXiv-id — so a
+                        # title mismatch no longer hides a paper that has a PDF.
+                        _parent_key = _title_to_key.get(_norm_title(_p.get("title", "")))
+                        if not _parent_key:
+                            _doi = (_p.get("doi", "") or "").lower().strip()
+                            _parent_key = _doi_to_key.get(_doi) if _doi else None
+                        if not _parent_key:
+                            _ax = _norm_arxiv((_p.get("arxiv_id", "") or "") + " "
+                                              + (_p.get("url", "") or "") + " " + _s)
+                            _parent_key = _arxiv_to_key.get(_ax) if _ax else None
+                        if _parent_key:
                             # Use PDF attachment key if available, fall back
                             # to parent key (which at least selects the item)
                             _slug_to_key[_s] = _parent_to_pdf.get(_parent_key, _parent_key)
