@@ -33,7 +33,7 @@ from config_loader import PAPERS_DIR as _PAPERS_DIR  # noqa: E402
 PAPERS = Path(_PAPERS_DIR)
 DOCS = PAPERS.parent
 
-SCRIPT_MODEL = "gemini-2.5-pro"
+SCRIPT_MODEL = "gemini-3.1-pro-preview"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 SAMPLE_RATE = 24_000
 MAX_CHUNK_CHARS = 2200

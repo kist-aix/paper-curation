@@ -177,7 +177,7 @@ function audioCtx() {
     return window._audioContextProvider() || {title:"", review:"", connections:[]};
   return window._AUDIO || {title:"", review:"", connections:[]};
 }
-const SCRIPT_MODEL = "gemini-2.5-pro";
+const SCRIPT_MODEL = "gemini-3.1-pro-preview";
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const GBASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 const SAMPLE_RATE = 24000;

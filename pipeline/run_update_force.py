@@ -1074,7 +1074,7 @@ REVIEW_TOOL_SCHEMA = {
 }
 
 WRITE_REVIEW_SCHEMA_VERSION = "v1"
-WRITE_REVIEW_MODEL = "claude-haiku-4-5-20251001"
+WRITE_REVIEW_MODEL = "claude-haiku-4-5"
 
 
 def write_review(item, slug_dir, figures):

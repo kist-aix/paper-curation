@@ -63,17 +63,17 @@ def load_topic_data(topic):
 # 1. Cross-Category Insights
 # ═══════════════════════════════════════════
 
-# Sonnet 4.6 의 context window 는 200k 이고, 실제 insight 호출은 max_tokens=8000
+# Sonnet 4.6 의 context window 는 1M 이고, 실제 insight 호출은 max_tokens=8000
 # 출력을 요청한다 (_cc_anthropic_call). 따라서 input+output 이 window 를 넘지 않으려면
-# 프롬프트 자체는 (window - max_output - safety_margin) 아래여야 한다. 200k 를 그대로
+# 프롬프트 자체는 (window - max_output - safety_margin) 아래여야 한다. 1M 를 그대로
 # 임계값으로 쓰면 ~192~200k 프롬프트가 shrink gate 를 그냥 통과한 뒤 호출 시점에
 # context-length 초과로 죽고, 바깥 try/except 가 빈 insight 를 돌려준다.
-# CONTEXT_WINDOW - MAX_OUTPUT_TOKENS - SAFETY_MARGIN = 200000 - 8000 - 4000 = 188000.
-_CONTEXT_WINDOW = 200000
+# CONTEXT_WINDOW - MAX_OUTPUT_TOKENS - SAFETY_MARGIN = 1000000 - 8000 - 4000 = 988000.
+_CONTEXT_WINDOW = 1000000
 _MAX_OUTPUT_TOKENS = 8000   # _cc_anthropic_call max_tokens
 _SAFETY_MARGIN = 4000       # tool schema/오버헤드/추정 오차 흡수
-MAX_PROMPT_TOKENS = _CONTEXT_WINDOW - _MAX_OUTPUT_TOKENS - _SAFETY_MARGIN  # 188000
-TARGET_PROMPT_TOKENS = 150000
+MAX_PROMPT_TOKENS = _CONTEXT_WINDOW - _MAX_OUTPUT_TOKENS - _SAFETY_MARGIN  # 988000
+TARGET_PROMPT_TOKENS = 900000
 
 
 def _est_tokens(text):
@@ -127,8 +127,8 @@ def _haiku_summarize_block(block, client, target_chars):
     )
     _t0 = time.time()
     log(f"    [haiku-summarize] calling Haiku 4.5 (~{_est_tokens(prompt)} input tokens, target {target_chars} chars)...")
-    resp = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+    resp = client.with_options(timeout=600.0).messages.create(
+        model="claude-haiku-4-5",
         max_tokens=max(2000, target_chars // 3),
         messages=[{"role": "user", "content": prompt}],
     )
@@ -509,7 +509,7 @@ _BACKENDS = [b.strip().lower() for b in
              .split(",") if b.strip()]
 # de-dup preserving order
 _BACKENDS = list(dict.fromkeys(_BACKENDS))
-_OPENAI_CONN_MODEL = os.environ.get("EXTRACT_INSIGHTS_OPENAI_MODEL", "gpt-4.1")
+_OPENAI_CONN_MODEL = os.environ.get("EXTRACT_INSIGHTS_OPENAI_MODEL", "gpt-5.5")
 # Cross-category insights fallback chain (separate from paper_connections):
 # anthropic → openai → gemini. Each backend is forced into the same JSON schema
 # so the downstream consumer is provider-agnostic. Override with
@@ -519,8 +519,8 @@ _CC_BACKENDS = [b.strip().lower() for b in
                                 "anthropic,openai,gemini").split(",")
                  if b.strip()]
 _CC_BACKENDS = list(dict.fromkeys(_CC_BACKENDS))
-_OPENAI_CC_MODEL = os.environ.get("EXTRACT_INSIGHTS_CC_OPENAI_MODEL", "gpt-4.1")
-_GEMINI_CC_MODEL = os.environ.get("EXTRACT_INSIGHTS_CC_GEMINI_MODEL", "gemini-2.5-pro")
+_OPENAI_CC_MODEL = os.environ.get("EXTRACT_INSIGHTS_CC_OPENAI_MODEL", "gpt-5.5")
+_GEMINI_CC_MODEL = os.environ.get("EXTRACT_INSIGHTS_CC_GEMINI_MODEL", "gemini-3.1-pro-preview")
 # Per-attempt wall-clock cap (thread watchdog) — fail fast so fallback kicks in.
 _ATTEMPT_DEADLINE_S = int(os.environ.get("EXTRACT_INSIGHTS_ATTEMPT_DEADLINE", "150"))
 # Circuit breaker: after this many consecutive failures of a backend, drop it

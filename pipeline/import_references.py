@@ -160,7 +160,7 @@ def parse_with_haiku(refs: list[str], anthropic_key: str, batch_size: int = 30) 
         for attempt in range(3):
             try:
                 resp = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model="claude-haiku-4-5",
                     max_tokens=8000,
                     system=PARSE_SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": prompt}],

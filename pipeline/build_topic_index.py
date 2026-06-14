@@ -1337,7 +1337,7 @@ def _run_topic_index(topic=None):
     }
 
     const MODEL_MAP = {
-      anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-6' },
+      anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-4-6' },
       openai:    { fast: 'gpt-4.1',                   smart: 'gpt-5.5' },
       google:    { fast: 'gemini-3.1-flash-lite',     smart: 'gemini-3.5-flash' },
     };
