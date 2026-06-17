@@ -260,11 +260,15 @@ def parse_review(md_path: Path, slug: str) -> dict:
                 pass
             body = text[end + 4:]
 
-    # ── Body-blockquote fallback ─────────────────────────────────────────
-    if not authors:
-        am = re.search(r"\*\*저자\*\*:\s*([^|*\n]+?)(?:\s*\|)", body)
-        if am:
-            authors = [a.strip() for a in am.group(1).split(",") if a.strip()]
+    # ── Body-blockquote 저자 라인 ────────────────────────────────────────
+    # frontmatter authors 는 build_papers_index 단계에서 5명으로 truncate되어
+    # 시니어(주로 마지막) 저자가 누락된다(예: Dashun Wang). 본문 "> **저자**:"
+    # 라인은 전체 저자를 보존하므로 더 긴 쪽을 채택해 저자 기반 검색 누락을 막는다.
+    am = re.search(r"\*\*저자\*\*:\s*([^|*\n]+?)(?:\s*\|)", body)
+    if am:
+        body_authors = [a.strip() for a in am.group(1).split(",") if a.strip()]
+        if len(body_authors) > len(authors):
+            authors = body_authors
     if not doi:
         dm = re.search(r"\*\*DOI\*\*:\s*\[?([^\]\s\)]+)", body)
         if dm:
@@ -323,7 +327,7 @@ def parse_review(md_path: Path, slug: str) -> dict:
     return {
         "title": title,
         "year": year,
-        "authors": authors[:8],          # cap at 8 to keep index small
+        "authors": authors,              # 전체 저자 유지 (저자 기반 검색 완전성)
         "first_author": first_author,
         "doi": doi,
         "arxiv": arxiv,
@@ -802,4 +806,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from _env_guard import force_py312
+    force_py312()
     main()

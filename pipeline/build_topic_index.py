@@ -983,6 +983,130 @@ def _run_topic_index(topic=None):
       return (ko / (text.length || 1)) > 0.1 ? 'ko' : 'en';
     }
 
+    // ── Author-aware retrieval ────────────────────────────────────────
+    // 저자명은 chunk 본문/임베딩에 들어있지 않다(섹션 본문만 인덱싱). 그래서
+    // "Dashun Wang의 연구를 시간순으로" 같은 질의는 dense/BM25 둘 다 매칭이
+    // 안 돼 엉뚱한 결과로 흐른다. index.papers 의 authors/first_author 메타
+    // (이미 로드됨)를 직접 매칭해 해당 저자 논문을 후보로 구성한다.
+    function _normName(s) {
+      return String(s || '').toLowerCase()
+        .normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')   // 발음기호 제거 (Barabási→barabasi)
+        .replace(/[.\\-]/g, ' ').replace(/\\s+/g, ' ').trim();
+    }
+    function _latinTokenSet(s) {
+      const set = Object.create(null);
+      const m = _normName(s).match(/[a-z][a-z]+/g);             // 길이>=2 라틴 토큰만
+      if (m) for (const w of m) set[w] = 1;
+      return set;
+    }
+    // index.papers → [{label, tokens:[...], slugs:{...}}] 1회 구축·캐시.
+    function buildAuthorMap(index) {
+      if (DEEP._authorMap) return DEEP._authorMap;
+      const papers = index.papers || {};
+      const map = [];
+      const byKey = Object.create(null);
+      function add(name, slug) {
+        const toks = Object.keys(_latinTokenSet(name));
+        if (toks.length < 2) return;                           // 단일 토큰 이름은 신뢰성 낮아 제외
+        const key = toks.slice().sort().join(' ');
+        let e = byKey[key];
+        if (!e) { e = { label: name, tokens: toks, slugs: Object.create(null) }; byKey[key] = e; map.push(e); }
+        else if (String(name).length > e.label.length) e.label = name;
+        e.slugs[slug] = 1;
+      }
+      for (const slug in papers) {
+        const p = papers[slug];
+        const list = (p.authors && p.authors.length) ? p.authors : (p.first_author ? [p.first_author] : []);
+        for (const a of list) add(a, slug);
+      }
+      DEEP._authorMap = map;
+      return map;
+    }
+    // 질의가 코퍼스 저자를 가리키면 {label, slugs:[...]}, 아니면 null.
+    function matchCorpusAuthor(query, index) {
+      const qset = _latinTokenSet(query);
+      const map = buildAuthorMap(index);
+      let best = null;
+      for (const e of map) {
+        let all = true;
+        for (const t of e.tokens) { if (!qset[t]) { all = false; break; } }
+        if (all && (!best || e.tokens.length > best.tokens.length)) best = e;
+      }
+      return best ? { label: best.label, slugs: Object.keys(best.slugs) } : null;
+    }
+    // 코퍼스엔 없지만 "이름 + 연구/정리" 형태의 저자 질의로 보이는지.
+    function looksLikeAuthorQuery(query) {
+      const namePair = /[A-Z][a-z]+\\s+(?:[A-Z]\\.?\\s+)?[A-Z][a-z]+/.test(query);
+      const intent = /(연구|논문|저자|업적|work|works|paper|papers|author|publication|정리|요약|시간순|연대순|연도순|chronolog|timeline)/i.test(query);
+      return namePair && intent;
+    }
+    function isChronological(query) {
+      return /(시간\\s*순|연대\\s*순|연도\\s*순|시계열|순서대로|발전\\s*과정|chronolog|timeline|over\\s+time|by\\s+year)/i.test(query);
+    }
+    function _chunkIdxBySlug(index) {
+      if (DEEP._cbs) return DEEP._cbs;
+      const m = Object.create(null);
+      const chunks = index.chunks || [];
+      for (let i = 0; i < chunks.length; i++) {
+        const s = chunks[i].slug;
+        (m[s] || (m[s] = [])).push(i);
+      }
+      DEEP._cbs = m;
+      return m;
+    }
+    function _sectionRank(sec) {
+      const s = String(sec || '').toLowerCase();
+      if (s.indexOf('essence') >= 0 || s.indexOf('요약') >= 0 || s.indexOf('한줄') >= 0) return 0;
+      if (s.indexOf('achiev') >= 0 || s.indexOf('성과') >= 0) return 1;
+      if (s.indexOf('origin') >= 0 || s.indexOf('독창') >= 0) return 2;
+      return 3;
+    }
+    // 저자 논문들을 hybridRetrieve 와 동일한 {chunk,paper,rrf} 후보로 변환.
+    // chronological 이면 연도 오름차순(초과 시 연도 분포 보존 stride 샘플),
+    // 아니면 질의-best chunk 코사인 관련도 내림차순. 논문당 대표 chunk 최대 2개.
+    function authorCandidates(index, hit, queryVec, timeFilter, chronological) {
+      const papers = index.papers, chunks = index.chunks;
+      const cbs = _chunkIdxBySlug(index);
+      const plist = [];
+      for (const slug of hit.slugs) {
+        const p = papers[slug];
+        if (!p) continue;
+        const y = parseInt(p.year);
+        if (timeFilter) {
+          if (timeFilter.min && (!y || y < timeFilter.min)) continue;
+          if (timeFilter.max && (!y || y > timeFilter.max)) continue;
+        }
+        const idxs = cbs[slug] || [];
+        let best = -1;
+        for (const ci of idxs) { const sc = cosineSim(queryVec, getChunkVec(index, ci)); if (sc > best) best = sc; }
+        plist.push({ slug: slug, year: y || 0, score: best, idxs: idxs });
+      }
+      if (!plist.length) return [];
+      if (chronological) plist.sort(function(a, b) { return (a.year - b.year) || (b.score - a.score); });
+      else plist.sort(function(a, b) { return (b.score - a.score) || (b.year - a.year); });
+      const MAXP = chronological ? 24 : 12;                    // 토큰 예산 보호 상한 (시간순은 궤적 커버리지 ↑)
+      let chosen = plist;
+      if (plist.length > MAXP) {
+        if (chronological) {
+          chosen = [];
+          const stride = (plist.length - 1) / (MAXP - 1);
+          for (let k = 0; k < MAXP; k++) chosen.push(plist[Math.round(k * stride)]);
+        } else {
+          chosen = plist.slice(0, MAXP);
+        }
+      }
+      const cands = [];
+      for (const p of chosen) {
+        const ranked = p.idxs.map(function(ci) {
+          return { ci: ci, sec: chunks[ci].section || '', s: cosineSim(queryVec, getChunkVec(index, ci)) };
+        });
+        ranked.sort(function(a, b) { return (_sectionRank(a.sec) - _sectionRank(b.sec)) || (b.s - a.s); });
+        const take = ranked.slice(0, 2);
+        for (const r of take) cands.push({ chunk: chunks[r.ci], paper: papers[p.slug], rrf: r.s });
+      }
+      return cands;
+    }
+
     // ── Hybrid retrieval: BM25 (lexical) + dense + RRF ────────────────
     // 한글/영문 혼용 코퍼스라 토크나이저는 두 갈래로 나눈다:
     //   · ASCII 단어 토큰 — 영문 전문용어/약어를 통째로 보존 (예: "GNN")
@@ -1792,14 +1916,34 @@ def _run_topic_index(topic=None):
         }
         deepSetStatus('\U0001F4DA 관련 논문 검색 중... (BM25 + dense)');
         const timeFilter = parseTimeFilter(query);
-        // Hybrid: BM25 + dense → RRF top-20 후보 → LLM 재정렬 top-8
-        const candidates = hybridRetrieve(index, queryVec, query, timeFilter, 20);
-        if (candidates.length === 0) {
-          deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
+        const chronological = isChronological(query);
+        // 저자 인지 검색: 질의가 코퍼스 저자를 가리키면 메타로 직접 후보 구성
+        // (저자명은 임베딩/BM25에 없어 일반 검색으로는 매칭 불가).
+        const authorHit = matchCorpusAuthor(query, index);
+        let candidates, selected;
+        if (authorHit) {
+          deepSetStatus('\U0001F464 저자 "' + authorHit.label + '" 논문 ' + authorHit.slugs.length + '편' + (chronological ? ' · 시간순' : '') + ' 정리 중...');
+          candidates = authorCandidates(index, authorHit, queryVec, timeFilter, chronological);
+          if (candidates.length === 0) {
+            deepSetStatus('"' + authorHit.label + '" 저자의 논문을 (기간 조건에서) 찾지 못했어요.', true);
+            return;
+          }
+          selected = candidates;  // 이미 논문당 대표 chunk·정렬 완료 → 재정렬 생략(순서 보존)
+        } else if (looksLikeAuthorQuery(query)) {
+          // 이름+의도는 있으나 이 토픽 코퍼스에 해당 저자가 없음 → 명확히 안내
+          // (예: ai4s 에서 Dashun Wang → scisci 토픽에 존재).
+          deepSetStatus('이 토픽에는 해당 저자의 논문이 없는 것 같아요. 다른 토픽(예: scisci)에서 시도해보세요.', true);
           return;
+        } else {
+          // Hybrid: BM25 + dense → RRF top-20 후보 → LLM 재정렬 top-8
+          candidates = hybridRetrieve(index, queryVec, query, timeFilter, 20);
+          if (candidates.length === 0) {
+            deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
+            return;
+          }
+          deepSetStatus('\U0001F9ED 상위 후보 재정렬 중...');
+          selected = await rerankCandidates(query, candidates, 8);
         }
-        deepSetStatus('\U0001F9ED 상위 후보 재정렬 중...');
-        const selected = await rerankCandidates(query, candidates, 8);
         // Group chunks by paper so each paper appears as a single reference
         // entry. The retrieval step still uses chunk-level cosine similarity
         // (so different sections can independently boost a paper into the
@@ -2680,4 +2824,6 @@ def _run_topic_index(topic=None):
 
 
 if __name__ == "__main__":
+    from _env_guard import force_py312
+    force_py312()
     _run_topic_index()

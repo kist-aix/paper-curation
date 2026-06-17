@@ -158,27 +158,39 @@ def _probe_current_interpreter():
 
 
 def _resolve_topic_modeling_python():
+    # 표준: py312 단독 환경. py314 등 다른 인터프리터로는 **절대 라우팅하지 않는다**.
+    # (운영자 지시 2026-06-18: py312 단독 사용, py314 진입 경로 전면 차단.)
+    # 0. 현재 인터프리터가 이미 py312 + 클러스터링 의존성을 직접 import 할 수 있으면
+    #    그대로 사용 (단일 env 표준 경로).
     from pathlib import Path as _Path
     import shutil as _shutil
-    # 0. 단일 env 프로브: 현재 인터프리터가 클러스터링 의존성을 직접 import 할 수
-    #    있으면 (py312 단일 표준) 서브프로세스 env 를 갈아끼울 필요가 없다.
-    if _probe_current_interpreter():
-        print(f"[env] UMAP/HDBSCAN 프로브 성공 → 단일 env 모드: {sys.executable}")
+    if sys.version_info[:2] == (3, 12) and _probe_current_interpreter():
         return sys.executable
-    # 프로브 실패 → 보조 py312 인터프리터로 라우팅 (py314 메인 + py312 보조 이중 구성)
+    # 그 외(예: py314 에서 호출) → py312 인터프리터로 라우팅. py314 로는 절대 가지 않는다.
+    #   1) PAPER_CURATION_PY312 명시 경로
     explicit = os.environ.get("PAPER_CURATION_PY312", "").strip()
     if explicit and os.path.exists(explicit):
         return explicit
+    #   2) 형제 conda env <base>/envs/py312/bin/python
     here = _Path(sys.executable).resolve()
-    # conda env layout: <prefix>/envs/<name>/bin/python
-    if here.parent.name == "bin" and here.parent.parent.parent.name == "envs":
-        sibling = here.parent.parent.parent / "py312" / "bin" / "python"
-        if sibling.exists():
-            return str(sibling)
+    for anc in here.parents:
+        if anc.name == "envs":
+            cand = anc / "py312" / "bin" / "python"
+            if cand.exists():
+                return str(cand)
+            break
+    #   3) PATH 의 python3.12
     found = _shutil.which("python3.12")
     if found:
         return found
-    return sys.executable
+    #   4) 현재 인터프리터가 py312 면 그대로 (의존성 미설치 상태일 수 있음)
+    if sys.version_info[:2] == (3, 12):
+        return sys.executable
+    # py312 를 못 찾으면 py314 로 진행하지 않고 명확히 실패한다.
+    raise RuntimeError(
+        "py312 인터프리터를 찾을 수 없습니다. paper-curation 은 py312 단독 환경을 사용합니다 "
+        "(py314 사용 금지). conda env py312 를 만들거나 PAPER_CURATION_PY312 로 절대 경로를 지정하세요."
+    )
 
 
 TOPIC_MODELING_PYTHON = _resolve_topic_modeling_python()
@@ -2329,4 +2341,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from _env_guard import force_py312
+    force_py312()
     main()

@@ -1152,4 +1152,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from _env_guard import force_py312
+    force_py312()
     main()

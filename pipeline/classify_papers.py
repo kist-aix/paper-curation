@@ -32,10 +32,10 @@ Pipeline contract:
 
 실행 환경:
   UMAP + hdbscan + sentence-transformers 가 모두 설치된 환경에서 실행한다.
-  표준 셋업은 conda env `py314` (Python 3.14, macOS) — CLAUDE.md
-  Python Environment 섹션 참조. Windows 의 경우 Smart App Control 이
-  numba/llvmlite DLL 을 차단하면 Python 3.12 전용 env (`py312` 등)
-  fallback 이 필요할 수 있다.
+  표준이자 유일 환경은 conda env `py312` (Python 3.12). **py314 사용 금지** —
+  진입점(__main__)의 `_env_guard.force_py312()` 가 다른 인터프리터로 실행되면
+  py312 로 자동 재실행한다. (numba 가 Python 3.14 의 CALL_KW opcode 를 못 다뤄
+  py312 로 통일했다 — 운영자 지시 2026-06-18.)
 
 Usage:
   PYTHONUTF8=1 python pipeline/classify_papers.py --topic ai4s
@@ -313,4 +313,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from _env_guard import force_py312
+    force_py312()
     main()

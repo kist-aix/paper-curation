@@ -249,20 +249,8 @@ PYTHONUTF8=1 python pipeline/run_full.py --topic my_topic --mode curate --source
 | `[COLLECTION_ERROR]` | Zotero 컬렉션 이름 오타 | 출력의 사용 가능한 컬렉션 목록에서 올바른 이름 선택 후 재실행 |
 | 검색 인덱스가 빈 임베딩으로 빌드됨 | `GOOGLE_API_KEY` 미설정 | `export GOOGLE_API_KEY=...` 후 재실행 — 검색 임베딩은 Google `gemini-embedding-001` 사용 (OpenAI 키는 더 이상 필수 아님) |
 
-## 레거시 환경
+## ⚠️ py314 미지원 (py312 전용)
 
-<details>
-<summary><b>레거시: py314 + py312 듀얼 env (선택)</b></summary>
+paper-curation 은 **py312 단독** 환경만 지원합니다. Python 3.14 는 numba 가 3.14 의 `CALL_KW` opcode 를 처리하지 못해 클러스터링(`topic_modeling.py` / `classify_papers.py`)이 죽습니다. 과거의 "py314 메인 + py312 보조 듀얼" 구성은 **폐기**되었습니다.
 
-메인을 Python 3.14 (`py314`) 로 쓰고 싶다면 numba 의 bytecode interpreter 가 3.14 의 `CALL_KW` opcode 를 아직 처리하지 못해 `topic_modeling.py` / `classify_papers.py` 의 `umap_cluster.transform()` → `sklearn.pairwise_distances(metric=callable)` 경로가 죽습니다 (0.65.1 / 0.66.0rc1 / main 모두 동일). 이때 형제 `py312` env 를 따로 만들면, `run_update_force._resolve_topic_modeling_python()` 가 **동일한 probe** (현재 인터프리터로 umap import 실패 시) 로 형제 `py312/bin/python` 를 자동으로 잡아 클러스터링 두 스크립트만 그쪽으로 보냅니다 (우선순위: `PAPER_CURATION_PY312` env var → 형제 env `<base>/envs/py312` → `which python3.12` → `sys.executable` fallback). 두 env 모두 numba 0.65 / llvmlite 0.47 / numpy 2.x 동일 라인업입니다.
-
-```bash
-conda create -n py314 -c conda-forge python=3.14 pip -y
-conda create -n py312 -c conda-forge python=3.12 pip -y
-conda run -n py314 pip install -r requirements.txt
-conda run -n py312 pip install umap-learn hdbscan sentence-transformers \
-    joblib numpy scikit-learn anthropic openai
-conda activate py314
-```
-
-</details>
+모든 실행 진입점(`__main__`)이 `_env_guard.force_py312()` 를 호출하므로, py312 가 아닌 인터프리터(예: py314)로 실행해도 **자동으로 py312 로 재실행**됩니다. py312 를 못 찾으면 명확히 실패하며 절대 py314 로 진행하지 않습니다. py312 위치가 표준(형제 conda env)이 아니면 `PAPER_CURATION_PY312` 환경변수로 절대 경로를 지정하세요.
