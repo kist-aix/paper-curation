@@ -597,7 +597,7 @@ async function runAudioGen() {
     }
   }
   try {
-    setStatus("✍️ 대본 생성 중... (gemini-2.5-pro)");
+    setStatus(`✍️ 대본 생성 중... (${SCRIPT_MODEL})`);
     const script = await callScript(buildScriptPrompt(s));
     if (!script) throw new Error("대본이 비어 있습니다");
     setStatus("🔊 음성 합성 중...");
