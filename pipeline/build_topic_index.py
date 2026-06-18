@@ -2779,6 +2779,27 @@ def _run_topic_index(topic=None):
       return out;
     }
 
+    // Resolve a working link for a reference so EVERY entry is clickable even
+    // without a DOI: valid DOI -> doi.org; an arXiv id (incl. one mislabeled
+    // into the doi field, e.g. "arXiv:2310.03302") -> arxiv.org; a real
+    // external URL -> as-is; otherwise a title search. Placeholder DOIs
+    // ("미제공" / "N/A" / "-") are treated as no-DOI, never linked verbatim.
+    function refLink(ref) {
+      const rawDoi = (ref.doi || '').trim();
+      let arxiv = (ref.arxiv || '').trim();
+      if (!arxiv && /ar[xX]iv/.test(rawDoi)) {
+        const ax = rawDoi.match(/(\\d{4}\\.\\d{4,5})/);
+        if (ax) arxiv = ax[1];
+      }
+      const validDoi = /^10\\.\\d{3,}\\/\\S+$/.test(rawDoi) ? rawDoi : '';
+      const ext = (ref.external_url || '').trim();
+      const extOk = /^https?:\\/\\//.test(ext) && !/doi\\.org\\/(?!10\\.)/.test(ext);
+      if (validDoi) return { url: 'https://doi.org/' + encodeURIComponent(validDoi), tag: 'DOI: ' + validDoi };
+      if (arxiv) return { url: 'https://arxiv.org/abs/' + encodeURIComponent(arxiv), tag: 'arXiv:' + arxiv };
+      if (extOk) return { url: ext, tag: 'URL' };
+      return { url: 'https://scholar.google.com/scholar?q=' + encodeURIComponent(ref.title || ''), tag: '검색' };
+    }
+
     async function buildFullHtml() {
       const q = document.getElementById('search-input').value;
       let answerMarkup = mdToMarkup(DEEP.currentAnswer);
@@ -2795,17 +2816,13 @@ def _run_topic_index(topic=None):
         for (const n of [...cited].sort((a, b) => a - b)) {
           const ref = DEEP.currentRefs[n - 1];
           if (!ref) continue;
-          const href = ref.external_url || '';
-          const titleHtml = href
-            ? '<a href="' + href + '" target="_blank" rel="noopener">' + escapeAttr(ref.title) + '</a>'
-            : escapeAttr(ref.title);
+          const link = refLink(ref);
+          const titleHtml = '<a href="' + link.url + '" target="_blank" rel="noopener">' + escapeAttr(ref.title) + '</a>';
           const authorBits = ref.first_author
             ? escapeAttr(ref.first_author.split(/\\s+/).slice(-1)[0]) + ' et al. '
             : '';
           const yearBits = ref.year ? '(' + ref.year + '). ' : '';
-          const idBits = ref.doi
-            ? ' DOI: <a href="https://doi.org/' + encodeURIComponent(ref.doi) + '" target="_blank" rel="noopener">' + escapeAttr(ref.doi) + '</a>'
-            : (ref.arxiv ? ' arXiv:<a href="https://arxiv.org/abs/' + encodeURIComponent(ref.arxiv) + '" target="_blank" rel="noopener">' + escapeAttr(ref.arxiv) + '</a>' : '');
+          const idBits = ' <a href="' + link.url + '" target="_blank" rel="noopener" style="color:#6b7280">' + escapeAttr(link.tag) + '</a>';
           refsMarkup += '<li>' + authorBits + yearBits + titleHtml + '.' + idBits + '</li>';
         }
         refsMarkup += '</ol>';
