@@ -614,6 +614,18 @@ def _run_topic_index(topic=None):
     .deep-status {{ padding: 0.55rem 1.1rem; font-size: 0.82rem; color: #555; background: #f7f9fb; border-bottom: 1px solid #eee; display: none; }}
     .deep-status.active {{ display: block; }}
     .deep-status.error {{ color: #b33a3a; background: #fef3f2; border-bottom-color: #fadcd9; }}
+    .deep-plan {{ padding: 0.6rem 1.1rem; background: #f9fafb; border-bottom: 1px solid #eee; display: none; }}
+    .deep-plan.active {{ display: block; }}
+    .deep-plan-title {{ font-size: 0.78rem; font-weight: 700; color: {accent_dark}; margin-bottom: 0.35rem; }}
+    .deep-sec-title {{ margin-top: 0.7rem; padding-top: 0.5rem; border-top: 1px dashed #e2e2e2; }}
+    .deep-plan-list {{ margin: 0 0 0 1.3rem; font-size: 0.8rem; color: #555; line-height: 1.6; }}
+    .deep-plan-list li {{ margin: 0.15rem 0; }}
+    .deep-plan-list li .rstat {{ color: #aaa; font-size: 0.73rem; margin-left: 0.45rem; }}
+    .deep-plan-list li.done .rstat {{ color: {accent}; font-weight: 600; }}
+    .deep-plan-list li.deep-sec-hdr {{ list-style: none; margin: 0.5rem 0 0.2rem -0.7rem; font-weight: 700; color: {accent_dark}; font-size: 0.76rem; }}
+    .deep-deeper-lbl {{ display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: #444; cursor: pointer; user-select: none; }}
+    .deep-deeper-lbl input {{ cursor: pointer; }}
+    .deep-deeper-note {{ font-size: 0.72rem; color: {accent}; font-weight: 600; }}
     .deep-body {{ padding: 1.2rem 1.5rem; display: none; }}
     .deep-body.active {{ display: block; }}
     .deep-answer {{ font-size: 0.94rem; line-height: 1.75; color: #262626; }}
@@ -1457,7 +1469,7 @@ def _run_topic_index(topic=None):
       return used;
     }
 
-    function buildPrompt(query, selected, lang, fullTexts) {
+    function buildPrompt(query, selected, lang, fullTexts, deeper) {
       const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- **인용은 글 흐름에 녹여 쓰세요**. 매 주장 끝에 ``[ref:N]`` 마커만 붙입니다 (N=발췌문 번호) — 후처리가 작은 클릭 가능한 ⌈[N]⌉ 링크로 변환합니다. 본문에서는 **저자명·논문명·연도·시점을 어구로 다양하게 표현**해서 자연스럽게 읽히게 하세요:\\n  ▸ "He et al.에 의하면 ~[ref:1]"\\n  ▸ "최근 공개된 연구에 따르면 ~[ref:2]"\\n  ▸ "2024년에 밝혀진 바[ref:3]에 따르면 ~"\\n  ▸ "OmniH2O[ref:1]는 universal teleoperation을 보였고, 이어진 Expressive Whole-Body Control 연구[ref:4]가 이를 확장했다."\\n  ▸ "Sun et al.와 같이[ref:5], ~"\\n  ▸ "SPARK[ref:6]에서 보인 것처럼 ~"\\n  ▸ "이러한 접근은 초기 humanoid teleoperation 연구[ref:1, ref:2]에서 등장했고 ~"\\n  같은 어구를 반복하지 말고 매 문장마다 다른 표현을 선택하세요. 동일 논문을 한 단락 안에서 또 인용해야 하면 그때는 작가명 생략하고 "이 연구[ref:1]는 또한 ~" 같이 짧게.\\n  중요: ``[ref:N]`` 마커만 출력에 남기고, 우리가 생성하는 "Smith et al. (2024)" 같은 표준 표현은 따로 삽입하지 마세요 — 그건 References 섹션에서만 보여줍니다.\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
       const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- **Weave citations into the flow.** Append only ``[ref:N]`` markers after each claim (N = excerpt number). A post-processor turns them into small clickable [N] superscripts. In the prose, **vary how you mention author / paper / year / temporal context**:\\n  ▸ "According to He et al., ~[ref:1]"\\n  ▸ "Recent work shows ~[ref:2]"\\n  ▸ "A 2024 study reports ~[ref:3]"\\n  ▸ "OmniH2O[ref:1] established universal teleoperation, later extended by Expressive Whole-Body Control[ref:4]."\\n  ▸ "As Sun et al. did[ref:5], ~"\\n  ▸ "As shown in SPARK[ref:6], ~"\\n  ▸ "This direction emerged in early humanoid teleoperation work[ref:1, ref:2] and ~"\\n  Vary the phrasing every sentence — avoid repeating the same lead-in. When the same paper is cited again within a paragraph, drop the author and use a short hand: "This work[ref:1] also ~".\\n  Important: keep only the ``[ref:N]`` marker — do NOT insert formal "Smith et al. (2024)" tags into the prose. Those appear only in the References section at the bottom.\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
       const lines = [];
@@ -1477,9 +1489,17 @@ def _run_topic_index(topic=None):
         const fa = paper.first_author || '';
         const authorTag = fa ? (' — ' + fa.split(/\\s+/).slice(-1)[0] + ' et al.') : '';
         const idTag = paper.doi ? (' [DOI: ' + paper.doi + ']') : (paper.arxiv ? (' [arXiv:' + paper.arxiv + ']') : '');
-        lines.push('[' + n + '] Paper: "' + paper.title + '"' + authorTag + ' (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + idTag + figs + '\\n' + sectionsBlock + originalBlock);
+        const relTag = (s.relation && !s.isSeed)
+          ? (' [연결관계: ' + (RELATION_KO[s.relation] || s.relation) + (s.reason ? (' — ' + s.reason) : '') + ']')
+          : '';
+        lines.push('[' + n + '] Paper: "' + paper.title + '"' + authorTag + ' (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + idTag + relTag + figs + '\\n' + sectionsBlock + originalBlock);
       }
-      const user = 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n') + '\\n\\n---\\nQuestion: ' + query;
+      const deeperNote = deeper
+        ? (lang === 'ko'
+            ? '아래에는 질문의 핵심 논문과, 그와 연결된 논문들(기반·후속/확장·대안·응용·반론)이 함께 제공됩니다. 연결 논문에는 [연결관계: 관계 — 이유] 태그가 붙어 있습니다. 단순 나열이 아니라 연구 계보를 짚어 종합하세요: 무엇이 기반이 되었고, 무엇이 이를 후속·확장·응용했으며, 어떤 반론·대안이 제기됐는지 흐름으로 엮고, 후속/반론 관계를 본문에 명시하세요.\\n\\n'
+            : 'Below are the core papers for the question together with their connected papers (foundation / extension / alternative / application / counterpoint). Connected papers carry a [연결관계: relation — reason] tag. Do not merely list them — trace the research lineage: what laid the foundation, what extended/applied it, and what counterarguments or alternatives arose, weaving the follow-up/rebuttal relations explicitly into the prose.\\n\\n')
+        : '';
+      const user = deeperNote + 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n') + '\\n\\n---\\nQuestion: ' + query;
       return { system: lang === 'ko' ? systemKo : systemEn, user: user };
     }
 
@@ -1504,14 +1524,15 @@ def _run_topic_index(topic=None):
     }
 
     const MODEL_MAP = {
-      anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-4-6' },
-      openai:    { fast: 'gpt-4.1',                   smart: 'gpt-5.5' },
-      google:    { fast: 'gemini-3.1-flash-lite',     smart: 'gemini-3.5-flash' },
+      anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-4-6', top: 'claude-opus-4-8' },
+      openai:    { fast: 'gpt-4.1',          smart: 'gpt-5.5',           top: 'gpt-5.5' },
+      google:    { fast: 'gemini-3.1-flash-lite', smart: 'gemini-3.5-flash', top: 'gemini-3.5-flash' },
     };
 
     function resolveModel(backend, tier) {
       const m = MODEL_MAP[backend];
       if (!m) return '';
+      if (tier === 'top') return m.top || m.smart;
       return tier === 'smart' ? m.smart : m.fast;
     }
 
@@ -1519,9 +1540,9 @@ def _run_topic_index(topic=None):
     // the user sees what they're picking. Keyed by the same backend
     // names detectBackend() returns.
     const MODEL_LABEL = {
-      anthropic: { fast: 'Haiku 4.5', smart: 'Sonnet 4.6' },
-      openai:    { fast: 'GPT-4.1',   smart: 'GPT-5.5'    },
-      google:    { fast: 'Gemini 3.1 Flash-Lite', smart: 'Gemini 3.5 Flash' },
+      anthropic: { fast: 'Haiku 4.5', smart: 'Sonnet 4.6', top: 'Opus 4.8' },
+      openai:    { fast: 'GPT-4.1',   smart: 'GPT-5.5',    top: 'GPT-5.5' },
+      google:    { fast: 'Gemini 3.1 Flash-Lite', smart: 'Gemini 3.5 Flash', top: 'Gemini 3.5 Flash' },
     };
 
     function updateDeepModelLabels() {
@@ -1554,11 +1575,18 @@ def _run_topic_index(topic=None):
       const body = {
         model: model,
         max_tokens: maxTokens,
-        thinking: { type: 'enabled', budget_tokens: thinkingBudget },
         system: prompt.system,
         messages: [{ role: 'user', content: prompt.user }],
         stream: true,
       };
+      // Opus 4.8 does adaptive thinking by default and REJECTS the legacy
+      // budget-based thinking.type.enabled (HTTP 400). Only Sonnet 4.6 /
+      // Haiku 4.5 take the explicit budget form. (Mirrors the proven Python
+      // opus_streaming_call in generate_timelines.py, which sends no thinking
+      // param at all for claude-opus-4-8.)
+      if (!/opus-4-8/.test(model)) {
+        body.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
+      }
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -1724,14 +1752,14 @@ def _run_topic_index(topic=None):
       if (buffer.trim()) parseBlock(buffer);
     }
 
-    async function callLLM(query, selected, lang, tier, length, fullTexts) {
+    async function callLLM(query, selected, lang, tier, length, fullTexts, deeper) {
       const apiKey = _LLM_KEY || _ANTHROPIC_KEY;
       if (!apiKey) throw new Error('API key missing — Deep Research \uD328\uB110\uC5D0\uC11C \uD0A4\uB97C \uC785\uB825\uD558\uC138\uC694 (Anthropic / OpenAI / Google \uC911 \uD558\uB098).');
       const backend = detectBackend(apiKey);
       if (!backend) throw new Error('\uC54C \uC218 \uC5C6\uB294 API key \uD615\uC2DD\uC785\uB2C8\uB2E4 (Anthropic\uC740 sk-ant-, OpenAI\uB294 sk-, Google\uC740 AIza \uB85C \uC2DC\uC791).');
       const model = resolveModel(backend, tier);
       const spec = LENGTH_SPEC[length] || LENGTH_SPEC.short;
-      const p = buildPrompt(query, selected, lang, fullTexts);
+      const p = buildPrompt(query, selected, lang, fullTexts, deeper);
       p.system += '\\n\\n' + (lang === 'ko'
         ? '\uBD84\uB7C9 \uC9C0\uCE68: \uB2F5\uBCC0\uC744 ' + spec.ko + '\uB85C \uC791\uC131\uD558\uC138\uC694. \uBD84\uB7C9\uC774 \uAE38\uC218\uB85D \uAC01 \uB17C\uBB38\uC744 \uB354 \uAE4A\uC774 \uC788\uAC8C \uB2E4\uB8E8\uACE0, \uC8FC\uC81C \uADF8\uB8F9\uC744 \uB354 \uC138\uBD84\uD654\uD558\uC138\uC694.'
         : 'Length directive: write the answer as ' + spec.en + '. Longer lengths should cover each paper in more depth and introduce finer thematic subdivisions.');
@@ -1912,6 +1940,506 @@ def _run_topic_index(topic=None):
       return nk;
     }
 
+    // ── Deeper Research: expand over the paper-connection graph ────────
+    // Seed retrieval finds the core papers for the query; we then pull their
+    // KNOWN connected papers (foundation / extension / alternative /
+    // application / counterpoint) from _paper_connections.json and synthesize
+    // across the neighbourhood so the answer traces lineage + counterpoints.
+    const RELATION_KO = {
+      foundation: '기반', extension: '후속·확장', alternative: '대안',
+      application: '응용', counterpoint: '반론', related: '관련'
+    };
+
+    async function loadConnections() {
+      if (DEEP._conn) return DEEP._conn;
+      try {
+        const r = await fetch('_paper_connections.json');
+        DEEP._conn = r.ok ? await r.json() : {};
+      } catch (e) { DEEP._conn = {}; }
+      return DEEP._conn;
+    }
+
+    // Representative chunk {section,text} for a paper slug (Essence-first).
+    function bestChunkForSlug(index, slug) {
+      const cbs = _chunkIdxBySlug(index);
+      const idxs = cbs[slug];
+      if (!idxs || !idxs.length) return null;
+      let best = idxs[0], bestRank = 99;
+      for (const ci of idxs) {
+        const rnk = _sectionRank((index.chunks[ci] || {}).section);
+        if (rnk < bestRank) { bestRank = rnk; best = ci; }
+      }
+      const c = index.chunks[best];
+      return { section: c.section, text: c.text };
+    }
+
+    // Render the expansion structure into #deep-plan (core + connected by relation).
+    function deepRenderExpansion(seeds, connected) {
+      const wrap = document.getElementById('deep-plan');
+      const list = document.getElementById('deep-plan-list');
+      if (!wrap || !list) return;
+      const title = wrap.querySelector(':scope > .deep-plan-title');
+      if (title) title.textContent = '\U0001F578️ 연결 그래프 — 핵심 ' + seeds.length + '편 · 연결 ' + connected.length + '편';
+      clearEl(list);
+      function addItem(label, rel) {
+        const li = document.createElement('li');
+        const t = document.createElement('span');
+        t.className = 'rtext';
+        t.textContent = label;
+        li.appendChild(t);
+        if (rel) {
+          const stat = document.createElement('span');
+          stat.className = 'rstat';
+          stat.textContent = rel;
+          li.appendChild(stat);
+          li.classList.add('done');
+        }
+        list.appendChild(li);
+      }
+      for (const s of seeds) addItem('★ ' + (s.paper.title || s.slug), '핵심');
+      for (const c of connected) addItem((c.paper.title || c.slug), RELATION_KO[c.relation] || c.relation);
+      wrap.classList.add('active');
+      wrap.style.display = 'block';
+    }
+
+    // Numbered evidence block for the multi-agent report (curated review
+    // excerpts + relation tags + figure URLs; no local full-text). Numbering
+    // matches DEEP.currentRefs so [ref:N] stays consistent across all agents.
+    function buildEvidenceText(selected, allowSet) {
+      const lines = [];
+      for (let i = 0; i < selected.length; i++) {
+        if (allowSet && !allowSet.has(i + 1)) continue;
+        const s = selected[i], n = i + 1, paper = s.paper;
+        const figs = (paper.figures && paper.figures.length)
+          ? '\\n  Figures:\\n' + paper.figures.map(function(f) { return '    - ' + f.url + '  (' + (f.caption || 'figure') + ')'; }).join('\\n')
+          : '';
+        const sectionsBlock = (s.chunks || []).map(function(c) {
+          return '  Section: ' + c.section + '\\n  Text:\\n' + c.text.split('\\n').map(function(l) { return '    ' + l; }).join('\\n');
+        }).join('\\n');
+        const fa = paper.first_author || '';
+        const authorTag = fa ? (' — ' + fa.split(/\\s+/).slice(-1)[0] + ' et al.') : '';
+        const idTag = paper.doi ? (' [DOI: ' + paper.doi + ']') : (paper.arxiv ? (' [arXiv:' + paper.arxiv + ']') : '');
+        const relTag = (s.relation && !s.isSeed)
+          ? (' [연결관계: ' + (RELATION_KO[s.relation] || s.relation) + (s.reason ? (' — ' + s.reason) : '') + ']')
+          : '';
+        lines.push('[' + n + '] Paper: "' + paper.title + '"' + authorTag + ' (' + (paper.year || 'n/a') + ', category: ' + (paper.category || 'n/a') + ')' + idTag + relTag + figs + '\\n' + sectionsBlock);
+      }
+      return 'Excerpts from paper reviews:\\n\\n' + lines.join('\\n\\n---\\n\\n');
+    }
+
+    // Non-streaming completion across the 3 backends (configurable max tokens).
+    // Used by the report planner + per-section writer agents.
+    async function llmComplete(backend, apiKey, model, sys, user, maxTokens) {
+      const mt = maxTokens || 2048;
+      if (backend === 'anthropic') {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({ model: model, max_tokens: mt, system: sys, messages: [{ role: 'user', content: user }] }),
+        });
+        if (!resp.ok) { const eb = await resp.text().catch(function(){ return ''; }); throw new Error('Anthropic complete ' + resp.status + ': ' + eb.slice(0, 300)); }
+        const data = await resp.json();
+        let t = '';
+        if (data.content) for (const b of data.content) if (b.type === 'text' && b.text) t += b.text;
+        return t;
+      }
+      if (backend === 'openai') {
+        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify({ model: model, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], max_completion_tokens: mt }),
+        });
+        if (!resp.ok) { const eb = await resp.text().catch(function(){ return ''; }); throw new Error('OpenAI complete ' + resp.status + ': ' + eb.slice(0, 300)); }
+        const data = await resp.json();
+        return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      }
+      if (backend === 'google') {
+        const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey);
+        const resp = await fetch(url, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: sys }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: mt } }),
+        });
+        if (!resp.ok) { const eb = await resp.text().catch(function(){ return ''; }); throw new Error('Google complete ' + resp.status + ': ' + eb.slice(0, 300)); }
+        const data = await resp.json();
+        const cand = data.candidates && data.candidates[0];
+        const parts = cand && cand.content && cand.content.parts;
+        let t = ''; if (parts) for (const p of parts) if (p.text) t += p.text;
+        return t;
+      }
+      throw new Error('Unsupported backend: ' + backend);
+    }
+
+    // Fallback report outline derived from which relations are present.
+    function defaultSections(all, lang) {
+      const rels = {};
+      for (const s of all) if (!s.isSeed && s.relation) rels[s.relation] = 1;
+      const ko = lang === 'ko';
+      const secs = [];
+      secs.push(ko ? { title: '연구 배경과 기반', focus: 'foundation·핵심 논문의 문제의식과 기반' }
+                   : { title: 'Background & Foundations', focus: 'foundation papers and the core problem' });
+      secs.push(ko ? { title: '핵심 접근과 성과', focus: '핵심(seed) 논문들의 방법과 기여' }
+                   : { title: 'Core Approaches & Contributions', focus: 'methods and contributions of the core papers' });
+      if (rels.extension || rels.application)
+        secs.push(ko ? { title: '후속 연구와 응용', focus: 'extension·application 논문들의 확장과 적용' }
+                     : { title: 'Extensions & Applications', focus: 'extension/application papers' });
+      if (rels.counterpoint || rels.alternative)
+        secs.push(ko ? { title: '반론과 대안', focus: 'counterpoint·alternative 논문들의 비판과 대안' }
+                     : { title: 'Counterpoints & Alternatives', focus: 'counterpoint/alternative papers' });
+      secs.push(ko ? { title: '종합과 전망', focus: '전체를 아우르는 종합과 향후 방향' }
+                   : { title: 'Synthesis & Outlook', focus: 'overall synthesis and outlook' });
+      return secs;
+    }
+
+    // Orchestrator: plan 3-5 report sections (fast model, JSON). Falls back to
+    // a relation-derived outline on any failure.
+    async function planReportSections(query, all, aspects, lang, backend, apiKey) {
+      const fallback = defaultSections(all, lang);
+      const model = resolveModel(backend, 'fast');
+      if (!model) return fallback;
+      const lst = all.map(function(s, i) {
+        const tag = s.isSeed ? '핵심' : (RELATION_KO[s.relation] || s.relation || '관련');
+        return '[' + (i + 1) + '] (' + tag + ') ' + (s.paper.title || s.slug);
+      }).join('\\n');
+      const aspText = (aspects && aspects.length)
+        ? aspects.map(function(a, i) { return '  ' + (i + 1) + '. ' + a; }).join('\\n') : '';
+      const sys = (lang === 'ko')
+        ? '당신은 학술 리서치 리포트의 구조를 설계하는 편집장입니다. 조사 계획과 근거 논문 목록(핵심/연결관계 표시)을 보고, 모아진 논문들을 어떻게 연결할지 4~8개 단락으로 세밀하게 구성하세요. 연구 계보(기반→핵심→후속·응용→반론)가 드러나게 하고, 각 단락이 다룰 근거 논문 번호를 refs 배열로 지정하세요 — 모든 근거 논문이 최소 한 단락에는 포함되도록 폭넓게 분배하세요. 오직 JSON 배열만 출력: [{"title":"단락 제목","focus":"한 줄 요지","refs":[1,5,9]}]'
+        : 'You design the structure of an academic research report. Given the investigation plan and the evidence list (core/relation-tagged), organise how the gathered papers connect into 4-8 fine-grained sections revealing the research lineage (foundation→core→extension/application→counterpoint). Assign each section the evidence paper numbers it covers via a refs array — distribute broadly so EVERY evidence paper appears in at least one section. Output ONLY a JSON array: [{"title":"...","focus":"...","refs":[1,5,9]}]';
+      const user = (lang === 'ko' ? '질문: ' : 'Question: ') + query + '\\n\\n'
+        + (aspText ? ((lang === 'ko' ? '조사 계획:\\n' : 'Investigation plan:\\n') + aspText + '\\n\\n') : '')
+        + (lang === 'ko' ? '근거 논문:\\n' : 'Evidence papers:\\n') + lst + '\\n\\n'
+        + (lang === 'ko' ? '4~8개 단락을 refs 포함 JSON 배열로.' : 'Return 4-8 sections (with refs) as a JSON array.');
+      let text = '';
+      try {
+        text = await Promise.race([
+          llmComplete(backend, apiKey, model, sys, user, 1500),
+          new Promise(function(_, rej) { setTimeout(function() { rej(new Error('plan-timeout')); }, 20000); }),
+        ]);
+      } catch (e) { return fallback; }
+      let arr = null;
+      try { const m = String(text).match(/\\[[\\s\\S]*\\]/); if (m) arr = JSON.parse(m[0]); } catch (e) { arr = null; }
+      if (!Array.isArray(arr) || !arr.length) return fallback;
+      const N = all.length;
+      const out = [];
+      for (const v of arr) {
+        if (v && typeof v.title === 'string' && v.title.trim()) {
+          const refs = [];
+          if (Array.isArray(v.refs)) {
+            for (const r of v.refs) {
+              const ri = parseInt(r);
+              if (!isNaN(ri) && ri >= 1 && ri <= N && refs.indexOf(ri) === -1) refs.push(ri);
+            }
+          }
+          out.push({ title: v.title.trim(), focus: (typeof v.focus === 'string' ? v.focus.trim() : ''), refs: refs });
+        }
+        if (out.length >= 8) break;
+      }
+      return out.length ? out : fallback;
+    }
+
+    // Per-section writer agent. Writes ONE section body from the shared
+    // numbered evidence, citing [ref:N]. Returns markdown (no heading).
+    async function writeSection(query, all, lang, backend, apiKey, model, sec) {
+      const refSet = (sec.refs && sec.refs.length) ? new Set(sec.refs) : null;
+      const evidence = buildEvidenceText(all, refSet);
+      const sys = (lang === 'ko')
+        ? '당신은 리서치 리포트의 한 단락을 집필하는 전문 작성자입니다. 아래 번호가 매겨진 발췌문만 근거로, 지정된 단락 주제에 해당하는 내용을 자연스러운 한국어 서술로 작성하세요. 규칙: (1) 인용은 ``[ref:N]`` 마커만 사용(N=발췌 번호) — 후처리가 링크로 바꿉니다. (2) 단락 제목·머리말 없이 본문만 출력. (3) 발췌 밖 지식 금지, 근거 없는 주장 생략. (4) 제공된 발췌 논문을 폭넓게 활용하되 단락 주제와 무관한 논문은 인용하지 마세요. (5) [연결관계:] 태그가 있는 논문은 그 관계를 문장에 녹여 표현하세요(예: "~의 후속 연구[ref:N]", "이에 대한 반론[ref:N]"). (6) 연관 Figure는 ![caption](url) 로 본문에 삽입(발췌에 명시된 URL만, 임의 URL 금지).'
+        : 'You write ONE section of a research report. Using ONLY the numbered excerpts below, write the assigned section in natural Korean prose. Rules: (1) cite with [ref:N] markers only; (2) output only the body, no heading; (3) no outside knowledge, omit unsupported claims; (4) use the provided papers broadly but do not cite ones irrelevant to this section; (5) for [연결관계:]-tagged papers weave the relation into the prose; (6) embed figures with ![caption](url) using only listed URLs.';
+      const lenDir = (lang === 'ko')
+        ? '\\n분량 지침: 이 단락을 8~15개 문단(약 1800~3600자)으로 매우 충실하고 자세하게 작성하세요.'
+        : '\\nLength: write this section as 8-15 detailed paragraphs (~1500-3000 words).';
+      const user = evidence + '\\n\\n---\\n'
+        + (lang === 'ko' ? '작성할 단락: ' : 'Section to write: ') + sec.title + (sec.focus ? (' — ' + sec.focus) : '') + lenDir + '\\n'
+        + (lang === 'ko' ? '원 질문: ' : 'Question: ') + query;
+      return await llmComplete(backend, apiKey, model, sys, user, 9000);
+    }
+
+    // Orchestrator: assemble section drafts into one coherent report and
+    // STREAM it into #deep-answer. Preserves [ref:N] markers + figures.
+    async function assembleReport(query, drafts, lang, backend, apiKey, model) {
+      const body = drafts.map(function(d) {
+        return '## ' + d.title + '\\n' + (d.text || (lang === 'ko' ? '(내용 없음)' : '(no content)'));
+      }).join('\\n\\n');
+      const sys = (lang === 'ko')
+        ? '당신은 여러 단락 초안을 하나의 일관된 한국어 리서치 리포트로 취합하는 책임 편집장입니다. 규칙: (1) ``[ref:N]`` 인용 마커는 반드시 그대로 보존(번호 변경·삭제 금지). (2) 간결한 서론(질문 맥락)과 종합 결론을 추가. (3) **각 단락의 분량과 깊이를 최대한 보존하세요 — 요약·압축하지 말고**, 단락 간 명백히 중복되는 문장만 정리하며 매끄럽게 연결하고 ## 제목으로 구조화. (4) 연구 계보(기반→핵심→후속·응용→반론)가 한눈에 드러나게. (5) 초안에 있던 ![caption](url) figure 는 적절한 위치에 유지하되 새 URL 은 만들지 말 것. (6) 초안에 없는 사실을 새로 지어내지 말 것.'
+        : 'You are the lead editor assembling section drafts into ONE coherent Korean research report. Keep all [ref:N] markers exactly (never renumber or drop them); add a short intro and synthesizing conclusion; PRESERVE the depth and length of each section — do NOT summarize or compress, only trim clearly duplicated sentences across sections; structure with ## headings; make the research lineage (foundation→core→extension/application→counterpoint) clear; keep ![caption](url) figures from the drafts but invent no new URLs; do not fabricate facts beyond the drafts.';
+      const user = (lang === 'ko' ? '원 질문: ' : 'Question: ') + query + '\\n\\n'
+        + (lang === 'ko' ? '단락 초안:' : 'Section drafts:') + '\\n\\n' + body;
+      const spec = { max_tokens: 32000, thinking: 8000 };
+      const prompt = { system: sys, user: user };
+      const onDelta = function(txt) { DEEP.currentAnswer += txt; renderDeepAnswer(DEEP.currentAnswer); };
+      DEEP.lastBackend = backend;
+      DEEP.lastModel = model;
+      if (backend === 'anthropic') return callAnthropic(apiKey, model, prompt, spec, onDelta);
+      if (backend === 'openai') return callOpenAI(apiKey, model, prompt, spec, onDelta);
+      if (backend === 'google') return callGoogle(apiKey, model, prompt, spec, onDelta);
+      throw new Error('Unsupported backend: ' + backend);
+    }
+
+    // Render the report-section progress as a SEPARATE numbered list that
+    // starts at 1 (independent of the graph list above it).
+    function deepRenderSections(sections) {
+      const wrap = document.getElementById('deep-plan');
+      if (!wrap) return;
+      const old = document.getElementById('deep-sec-wrap');
+      if (old) old.remove();
+      const secWrap = document.createElement('div');
+      secWrap.id = 'deep-sec-wrap';
+      const hdr = document.createElement('div');
+      hdr.className = 'deep-plan-title deep-sec-title';
+      hdr.textContent = '\U0001F4DD 리포트 단락 (' + sections.length + ')';
+      secWrap.appendChild(hdr);
+      const ol = document.createElement('ol');
+      ol.className = 'deep-plan-list';
+      for (let i = 0; i < sections.length; i++) {
+        const li = document.createElement('li');
+        li.id = 'deep-sec-' + i;
+        const t = document.createElement('span'); t.className = 'rtext';
+        t.textContent = sections[i].title;
+        const stat = document.createElement('span'); stat.className = 'rstat';
+        stat.textContent = '대기';
+        li.appendChild(t); li.appendChild(stat);
+        ol.appendChild(li);
+      }
+      secWrap.appendChild(ol);
+      wrap.appendChild(secWrap);
+    }
+
+    function deepMarkSection(i, statusText, done) {
+      const li = document.getElementById('deep-sec-' + i);
+      if (!li) return;
+      const stat = li.querySelector('.rstat');
+      if (stat) stat.textContent = statusText;
+      if (done) li.classList.add('done');
+    }
+
+    // ── Two-stage planning for Deeper Research ─────────────────────────
+    // Plan 1: decide WHAT to investigate before searching (pre-search).
+    function buildInvestigationPrompt(query, lang) {
+      const sys = (lang === 'ko')
+        ? '당신은 학술 리서치 플래너입니다. 사용자의 질문에 깊이 있게 답하려면 어떤 측면을 조사해야 하는지 정하세요. 서로 다른 각도를 다루는 3~6개의 조사 관점(하위 질문)으로 분해하되, 각각은 독립적으로 문헌 검색이 가능한 구체적 문장이어야 합니다. 고유명사(저자명·모델명·데이터셋)는 관점에 그대로 유지하세요. 오직 문자열 JSON 배열만 출력: ["...","..."]'
+        : 'You are an academic research planner. Decide which aspects must be investigated to answer the question in depth. Decompose into 3-6 investigation angles (sub-questions), each a specific, independently searchable statement; keep proper nouns (author/model/dataset names) intact. Output ONLY a JSON array of strings.';
+      const user = (lang === 'ko' ? '질문: ' : 'Question: ') + query
+        + (lang === 'ko' ? '\\n\\n3~6개의 조사 관점을 JSON 배열로.' : '\\n\\nReturn 3-6 aspects as a JSON array.');
+      return { system: sys, user: user };
+    }
+
+    async function planInvestigation(query, lang, backend, apiKey) {
+      const fallback = [query];
+      const model = resolveModel(backend, 'fast');
+      if (!model) return fallback;
+      const pp = buildInvestigationPrompt(query, lang);
+      let text = '';
+      try {
+        text = await Promise.race([
+          llmComplete(backend, apiKey, model, pp.system, pp.user, 800),
+          new Promise(function(_, rej) { setTimeout(function() { rej(new Error('plan-timeout')); }, 15000); }),
+        ]);
+      } catch (e) { return fallback; }
+      let arr = null;
+      try { const m = String(text).match(/\\[[\\s\\S]*\\]/); if (m) arr = JSON.parse(m[0]); } catch (e) { arr = null; }
+      if (!Array.isArray(arr)) return fallback;
+      const out = [];
+      for (const v of arr) {
+        if (typeof v === 'string' && v.trim()) out.push(v.trim());
+        if (out.length >= 6) break;
+      }
+      return out.length ? out : fallback;
+    }
+
+    // Retrieve seed candidates for ONE investigation aspect. Returns [].
+    async function retrieveSeeds(index, q) {
+      const qv = await embedQuery(q);
+      if (index.dim && qv.length !== index.dim) return [];
+      const tf = parseTimeFilter(q);
+      const jf = parseJournalFilter(q, index);
+      const chrono = isChronological(q);
+      const authorHit = matchCorpusAuthor(q, index);
+      if (authorHit) {
+        return authorCandidates(index, authorHit, qv, tf, chrono, jf) || [];
+      }
+      const cands = hybridRetrieve(index, qv, q, tf, jf, 16);
+      if (!cands.length) return [];
+      return await rerankCandidates(q, cands, 6);
+    }
+
+    // Render the investigation plan (Plan 1) as a separate numbered list,
+    // prepended above the connection graph.
+    function deepRenderAspects(aspects) {
+      const wrap = document.getElementById('deep-plan');
+      if (!wrap) return;
+      const old = document.getElementById('deep-asp-wrap');
+      if (old) old.remove();
+      const w = document.createElement('div');
+      w.id = 'deep-asp-wrap';
+      const hdr = document.createElement('div');
+      hdr.className = 'deep-plan-title';
+      hdr.textContent = '\U0001F52D 조사 계획 (' + aspects.length + ')';
+      w.appendChild(hdr);
+      const ol = document.createElement('ol');
+      ol.className = 'deep-plan-list';
+      for (let i = 0; i < aspects.length; i++) {
+        const li = document.createElement('li');
+        li.id = 'deep-asp-' + i;
+        const t = document.createElement('span'); t.className = 'rtext';
+        t.textContent = aspects[i];
+        const st = document.createElement('span'); st.className = 'rstat';
+        st.textContent = '대기';
+        li.appendChild(t); li.appendChild(st);
+        ol.appendChild(li);
+      }
+      w.appendChild(ol);
+      wrap.insertBefore(w, wrap.firstChild);
+      wrap.classList.add('active');
+      wrap.style.display = 'block';
+    }
+
+    function deepMarkAspect(i, statusText, done) {
+      const li = document.getElementById('deep-asp-' + i);
+      if (!li) return;
+      const st = li.querySelector('.rstat');
+      if (st) st.textContent = statusText;
+      if (done) li.classList.add('done');
+    }
+
+    // Deeper Research orchestrator: two-stage planning (investigate -> connect)
+    // around connection-graph expansion. Returns true if an answer was made.
+    async function runDeeperResearch(index, query) {
+      const lang = detectLang(query);
+      const apiKey = _LLM_KEY || _ANTHROPIC_KEY || _OPENAI_KEY || (window._GEMINI_KEY || '');
+      const backend = detectBackend(apiKey);
+      if (!backend) {
+        throw new Error('알 수 없는 API key 형식입니다 (Anthropic sk-ant- / OpenAI sk- / Google AIza).');
+      }
+      const topModel = resolveModel(backend, 'top');
+      const topLabel = (MODEL_LABEL[backend] && MODEL_LABEL[backend].top) || topModel;
+      // PLAN 1 — investigation plan (pre-search): what aspects to research.
+      deepSetStatus('\U0001F52D 조사 계획 수립 중...');
+      const aspects = await planInvestigation(query, lang, backend, apiKey);
+      deepRenderAspects(aspects);
+      // SEED retrieval per aspect (union) — broader than a single query.
+      const seedMap = new Map();
+      for (let ai = 0; ai < aspects.length; ai++) {
+        deepMarkAspect(ai, '검색 중...', false);
+        deepSetStatus('\U0001F50D 핵심 논문 검색 중 (' + (ai + 1) + '/' + aspects.length + ')...');
+        let sc = [];
+        try {
+          sc = await retrieveSeeds(index, aspects[ai]);
+        } catch (e) {
+          if (e && e.message && e.message.indexOf('embed-proxy-unreachable') === 0) throw e;
+          console.warn('[aspect] failed:', e && e.message || e);
+          deepMarkAspect(ai, '실패', true);
+          continue;
+        }
+        for (const s of sc) {
+          const slug = s.chunk.slug;
+          if (!seedMap.has(slug)) seedMap.set(slug, { slug: slug, paper: s.paper, chunks: [], best: s.rrf || 0, isSeed: true });
+          const e = seedMap.get(slug);
+          e.chunks.push({ section: s.chunk.section, text: s.chunk.text });
+          if ((s.rrf || 0) > e.best) e.best = s.rrf || 0;
+        }
+        deepMarkAspect(ai, sc.length + '편', true);
+      }
+      if (!seedMap.size) {
+        deepSetStatus('관련 논문을 찾지 못했어요. 질의를 다시 입력해보세요.', true);
+        return false;
+      }
+      // Cap seeds (rank by best RRF) so connected papers get budget.
+      const cappedSeeds = Array.from(seedMap.values()).sort(function(a, b) { return b.best - a.best; }).slice(0, 14);
+      const seedSet = new Set(cappedSeeds.map(function(s) { return s.slug; }));
+      // 2) Graph expansion — pull connected papers (typed) of the seeds.
+      deepSetStatus('\U0001F578️ 연결된 후속·반론·기반 논문 확장 중...');
+      const conn = await loadConnections();
+      const expand = new Map();
+      for (const seed of seedSet) {
+        const lst = conn[seed] || [];
+        for (const c of lst) {
+          if (!c || !c.slug || seedSet.has(c.slug)) continue;
+          if (!index.papers[c.slug]) continue;  // must exist in this topic index
+          if (!expand.has(c.slug)) {
+            expand.set(c.slug, { slug: c.slug, relation: c.relation || 'related', reason: c.reason || '', count: 0 });
+          }
+          const ex = expand.get(c.slug);
+          ex.count += 1;
+          // If another seed flags this target as dissent (counterpoint/alternative),
+          // let that relation win the tag + ranking boost so rebuttals aren't buried.
+          if (relBoost(c.relation || 'related') > relBoost(ex.relation)) {
+            ex.relation = c.relation || 'related';
+            ex.reason = c.reason || ex.reason;
+          }
+        }
+      }
+      // Rank by centrality (# seeds linking), gently boosting dissent
+      // (counterpoint / alternative) so rebuttals aren't buried.
+      function relBoost(rel) { return (rel === 'counterpoint' || rel === 'alternative') ? 0.5 : 0; }
+      const connectedRanked = Array.from(expand.values())
+        .sort(function(a, b) { return (b.count + relBoost(b.relation)) - (a.count + relBoost(a.relation)); })
+        .slice(0, 40);
+      const connectedEntries = [];
+      for (const c of connectedRanked) {
+        const paper = index.papers[c.slug];
+        const ch = bestChunkForSlug(index, c.slug);
+        if (!paper || !ch) continue;
+        connectedEntries.push({ slug: c.slug, paper: paper, chunks: [ch], best: 0, isSeed: false, relation: c.relation, reason: c.reason });
+      }
+      deepRenderExpansion(cappedSeeds, connectedEntries);
+      // Evidence set (seeds first, then connected). Renumber refs.
+      const all = cappedSeeds.concat(connectedEntries).slice(0, 50);
+      DEEP.currentRefs = all.map(function(s, i) {
+        return { n: i + 1, slug: s.slug, title: s.paper.title, year: s.paper.year,
+          url: s.paper.url, external_url: s.paper.external_url || '',
+          authors: s.paper.authors || [], first_author: s.paper.first_author || '',
+          doi: s.paper.doi || '', arxiv: s.paper.arxiv || '', figures: s.paper.figures || [] };
+      });
+      // PLAN 2 — connection/report-structure plan (post-expansion, fine-grained).
+      deepSetStatus('\U0001F9E9 리포트 구조 설계 중 (' + all.length + '편 연결)...');
+      const sections = await planReportSections(query, all, aspects, lang, backend, apiKey);
+      deepRenderSections(sections);
+      // MAP — per-section agents write in parallel (each on its assigned refs).
+      deepSetStatus('✍️ 단락별 작성 중 (' + sections.length + '개 에이전트 · ' + topLabel + ')...');
+      const drafts = await Promise.all(sections.map(function(sec, i) {
+        deepMarkSection(i, '작성 중...', false);
+        return writeSection(query, all, lang, backend, apiKey, topModel, sec)
+          .then(function(txt) { deepMarkSection(i, txt ? '완료' : '내용 없음', true); return { title: sec.title, text: txt }; })
+          .catch(function(e) {
+            if (isAuthError(e)) throw e;  // bad key → fail fast to the outer retry
+            console.warn('[section] failed:', e && e.message || e);
+            deepMarkSection(i, '실패', true);
+            return { title: sec.title, text: '' };
+          });
+      }));
+      // 6) Orchestrator assembles + streams the final report into #deep-answer.
+      deepSetStatus('\U0001F9F5 최종 리포트 취합 중 (' + topLabel + ')...');
+      // The assembler can throw (e.g. a provider rejects the large max_tokens,
+      // or a mid-stream network error). Don't lose the whole report: clear the
+      // partial stream and let the ref-integrity guard below rebuild from the
+      // section drafts (which already carry correct [ref:N]).
+      try {
+        await assembleReport(query, drafts, lang, backend, apiKey, topModel);
+      } catch (e) {
+        if (isAuthError(e)) throw e;  // bad key → outer re-prompt/retry
+        console.warn('[deeper] assembler failed — falling back to drafts:', e && e.message || e);
+        DEEP.currentAnswer = '';
+      }
+      // Guard: the assembler is a 2nd LLM pass. If it dropped all [ref:N] or
+      // introduced markers the section agents never cited (renumber / hallucination),
+      // fall back to the concatenated section drafts whose [ref:N] are correct —
+      // a wrong-paper citation is worse than losing the assembler's polish.
+      const draftNums = new Set();
+      for (const d of drafts) { collectCitedNums(d.text || '').forEach(function(n) { draftNums.add(n); }); }
+      const ansNums = collectCitedNums(DEEP.currentAnswer || '');
+      let invented = false;
+      ansNums.forEach(function(n) { if (!draftNums.has(n)) invented = true; });
+      if (draftNums.size && (ansNums.size === 0 || invented)) {
+        console.warn('[deeper] assembler citations diverged from section drafts — using concatenated drafts');
+        DEEP.currentAnswer = drafts.map(function(d) { return '## ' + d.title + '\\n\\n' + (d.text || ''); }).join('\\n\\n');
+        renderDeepAnswer(DEEP.currentAnswer);
+      }
+      finalizeDeepAnswer();
+      return true;
+    }
+
     async function runDeepResearch(query) {
       query = (query || '').trim();
       if (!query) return;
@@ -1945,11 +2473,20 @@ def _run_topic_index(topic=None):
       clearEl(document.getElementById('deep-answer'));
       document.getElementById('deep-refs').style.display = 'none';
       document.getElementById('deep-figures').style.display = 'none';
+      const _dp = document.getElementById('deep-plan');
+      if (_dp) { _dp.style.display = 'none'; _dp.classList.remove('active'); clearEl(document.getElementById('deep-plan-list')); const _sw = document.getElementById('deep-sec-wrap'); if (_sw) _sw.remove(); const _aw = document.getElementById('deep-asp-wrap'); if (_aw) _aw.remove(); }
       DEEP.currentAnswer = '';
       DEEP.currentRefs = [];
       deepUpdateButtons(false);
       try {
         const index = await deepLoadIndex();
+        const _deeperEl = document.getElementById('deep-deeper');
+        if (_deeperEl && _deeperEl.checked) {
+          const ok = await runDeeperResearch(index, query);
+          DEEP._authRetry = 0;
+          if (ok) { deepSetStatus('✅ 완료'); setTimeout(() => deepSetStatus(''), 2500); }
+          return;
+        }
         deepSetStatus('\U0001F50D 질의 임베딩 중... (' + (index.model || 'embedding') + ')');
         const queryVec = await embedQuery(query);
         // 차원 상수는 인덱스 헤더(index.dim)를 따른다 — 질의 임베딩 차원이
@@ -2370,6 +2907,28 @@ def _run_topic_index(topic=None):
         const q = document.getElementById('search-input').value;
         if (q && q.trim()) runDeepResearch(q);
       });
+      // Deeper checkbox: forces Long length + top-tier model and disables the
+      // length/model dropdowns (the multi-agent report ignores them anyway).
+      const deeperCb = document.getElementById('deep-deeper');
+      if (deeperCb) {
+        const applyDeeper = function() {
+          const on = deeperCb.checked;
+          const lenSel = document.getElementById('deep-length');
+          const modSel = document.getElementById('deep-model');
+          if (lenSel) { if (on) lenSel.value = 'long'; lenSel.disabled = on; }
+          if (modSel) modSel.disabled = on;
+          const note = document.getElementById('deep-deeper-note');
+          if (note) {
+            if (on) {
+              const key = _LLM_KEY || _ANTHROPIC_KEY || _OPENAI_KEY || (window._GEMINI_KEY || '');
+              const lbl = (MODEL_LABEL[detectBackend(key)] || {}).top || '최상위 모델';
+              note.textContent = '→ Long · ' + lbl + ' · 단락별 에이전트';
+            } else { note.textContent = ''; }
+          }
+        };
+        deeperCb.addEventListener('change', applyDeeper);
+        applyDeeper();
+      }
     });"""
 
     # --- Build-time: inject API keys from env vars into JS ---
@@ -2657,6 +3216,10 @@ def _run_topic_index(topic=None):
         '          <option value="fast">Fast (cheap)</option>\n'
         '          <option value="smart">Smart (best)</option>\n'
         '        </select>\n'
+        '        <label class="deep-deeper-lbl" title="체크 시: 핵심 논문의 연결 그래프(후속·반론·기반·응용)를 따라 확장하고, 단락별 에이전트가 작성한 뒤 오케스트레이터가 취합합니다. 분량 Long·최상위 모델이 자동 적용 (LLM 호출·시간·비용 증가).">\n'
+        '          <input type="checkbox" id="deep-deeper"> Deeper\n'
+        '        </label>\n'
+        '        <span class="deep-deeper-note" id="deep-deeper-note"></span>\n'
         '        <button class="deep-btn" id="deep-rerun" disabled title="현재 질의를 선택한 모델·분량으로 다시 실행">&#x21BB; 재시작</button>\n'
         '        <div class="deep-actions">\n'
         '          <button class="deep-btn" id="deep-copy" disabled title="Copy markdown">&#x1F4CB; Copy</button>\n'
@@ -2669,6 +3232,10 @@ def _run_topic_index(topic=None):
         '        </div>\n'
         '      </div>\n'
         '      <div class="deep-status" id="deep-status"></div>\n'
+        '      <div class="deep-plan" id="deep-plan" style="display:none">\n'
+        '        <div class="deep-plan-title">&#x1F5FA;&#xFE0F; Research plan</div>\n'
+        '        <ol class="deep-plan-list" id="deep-plan-list"></ol>\n'
+        '      </div>\n'
         '      <div class="deep-body" id="deep-body">\n'
         '        <div class="deep-answer" id="deep-answer"></div>\n'
         '        <div class="deep-refs" id="deep-refs" style="display:none">\n'
@@ -2720,9 +3287,19 @@ def _run_topic_index(topic=None):
     # Cloudflare deployment never sees it.
     try:
         import urllib.request as _urllib_request
+        import time as _time
         _api_key = get_zotero_api_key()
         _user_id = get_zotero_user_id()
-        if _api_key and _user_id:
+        # The map is shared across all topics + git-ignored (localhost only).
+        # Re-paginating the whole Zotero library on every topic build only risks
+        # an API hang for no benefit, so reuse a recent (<24h) file. Force a
+        # refresh by deleting docs/_zotero_keys.json; skip entirely with
+        # SKIP_ZOTERO_KEYS=1.
+        _zk_existing = Path(DOCS_DIR) / "_zotero_keys.json"
+        _zk_fresh = _zk_existing.exists() and (_time.time() - _zk_existing.stat().st_mtime) < 86400
+        if os.environ.get("SKIP_ZOTERO_KEYS") or _zk_fresh:
+            print(f"Zotero keys: reusing existing {_zk_existing} (fresh; skip re-fetch)")
+        elif _api_key and _user_id:
             _items = []
             _start = 0
             _limit = 100
