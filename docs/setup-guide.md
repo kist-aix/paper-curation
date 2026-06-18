@@ -156,7 +156,7 @@ python pipeline/setup.py
 
 ## Pipeline Scripts
 
-모든 스크립트는 `pipeline/config_loader.py`를 통해 `config.json`을 읽습니다. 하드코딩된 인증 정보는 없습니다.
+단일 진입점은 `run_full.py` (3축 오케스트레이터)이고, 아래 개별 스크립트는 디버깅·복구용입니다. 모든 스크립트는 `pipeline/config_loader.py`를 통해 `config.json`을 읽습니다. 하드코딩된 인증 정보는 없습니다.
 
 | Script | Purpose |
 |--------|---------|
@@ -169,7 +169,7 @@ python pipeline/setup.py
 | `pipeline/generate_timelines.py` | Bottom-up 타임라인 생성 (Opus + PaperBanana) |
 | `pipeline/review_to_html.py` | review.md → index.html 변환 |
 | `pipeline/build_topic_index.py` | Topic 인덱스 페이지 생성 |
-| `pipeline/prepare_deploy.py` | PNG→WebP 변환 + GitHub Pages 배포 |
+| `pipeline/prepare_deploy.py` | PNG→WebP 변환 + Cloudflare + gh-pages 배포 |
 
 ## PaperBanana (타임라인 생성용, 선택)
 

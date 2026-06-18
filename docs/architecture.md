@@ -18,7 +18,7 @@
 | | 설명 |
 |---|---|
 | **입력** | 추출된 텍스트 + Figure |
-| **처리** | <ul><li>Claude Haiku가 한국어 리뷰 6개 섹션 작성 (Essence · Motivation · Achievement · How · Originality · Evaluation)</li><li>기술 용어는 원문 그대로 유지</li><li>병렬 4건 동시 처리</li></ul> |
+| **처리** | <ul><li>Claude Haiku가 한국어 리뷰 6개 섹션 작성 (Essence · Motivation · Achievement · How · Originality · Evaluation)</li><li>기술 용어는 원문 그대로 유지</li><li>동시 처리 (기본 16, Tier 4)</li></ul> |
 | **출력** | <ul><li><code>papers/{slug}/review.md</code></li><li><code>papers/{slug}/index.html</code></li></ul> |
 | **활용** | 브라우저에서 리뷰 열람, Figure 인라인 표시, Related Papers 자동 연결 |
 
@@ -45,7 +45,7 @@
 |---|---|
 | **입력** | 전체 리뷰 + 개인 메모(<code>notes/</code>) |
 | **처리** | <ul><li>Section-aware chunking</li><li>Google <code>gemini-embedding-001</code> 임베딩 (768d, <code>task_type=RETRIEVAL_DOCUMENT</code>, L2 정규화 후 int8 양자화)</li><li>BM25 sparse 텀도 함께 인덱싱 (hybrid 검색용)</li><li>개인 메모도 인덱싱되어 다음 질의에 반영</li></ul> |
-| **출력** | <code>_search_index.json</code> |
+| **출력** | <code>_search_index.json</code> + <code>_search_index_emb.bin</code> |
 | **활용** | 토픽 페이지에서 자연어 질의 → 질의 임베딩은 worker <code>/api/embed</code> (배포) 또는 <code>pipeline/serve_local.py</code> (로컬) 가 <code>gemini-embedding-001</code> (<code>task_type=RETRIEVAL_QUERY</code>) 로 대신 계산 → **hybrid 검색** (BM25 + dense, RRF 융합) → LLM 이 상위 후보를 한 문장씩 re-rank → 사용자 키 prefix 자동 감지로 **Anthropic / OpenAI / Google 중 하나**가 논문 근거 답변 스트리밍. 검색에는 독자 키가 전혀 필요 없고, 키(BYOK)는 답변 생성에만 쓰입니다. 응답은 자연어 본문 + 클릭 가능 `[N]` 인용 + 자동 figure 인라인. Fast/Smart 토글 라벨은 감지된 백엔드의 실제 모델명을 표시 (예: `Fast (cost: Haiku 4.5)`) |
 
 ### 6. 인덱스 + 네트워크
@@ -72,7 +72,7 @@
 | `run_full.py` 오케스트레이터 | 3축(`--mode/--source/--images`) 단일 진입점. 검색·등록·sync·리뷰·후처리·배포 자동 체인. dry-run plan 출력 |
 | `find_pdf()` ID-first | Zotero attachment → DOI → arXiv → fuzzy(강화) 순서. 과거 fuzzy 오매칭 근본 원인 제거 |
 | `--strict-pdf` | fuzzy 완전 차단 모드. 신규/복구 리뷰에 권장 |
-| `classify_papers.py` (Phase 3) | SPECTER2 임베딩 → UMAP transform 5D → `hdbscan.approximate_predict` (density-faithful primary sub-cluster) → outlier(-1) 는 768D centroid 코사인 최단점으로 강제 배정 → `all_categories` = centroid 거리 top-N parent. LLM 호출 0. `py312` 자동 라우팅 필요 (위 Python 환경 참고). |
+| `classify_papers.py` (Phase 3) | SPECTER2 임베딩 → UMAP transform 5D → `hdbscan.approximate_predict` (density-faithful primary sub-cluster) → outlier(-1) 는 768D centroid 코사인 최단점으로 강제 배정 → `all_categories` = centroid 거리 top-N parent. LLM 호출 0. `py312` 단독 — 진입점이 `_env_guard.force_py312()` 로 py312 자동 재실행. |
 | `_resolve_topic_modeling_python()` | `topic_modeling.py` / `classify_papers.py` 만 `py312` 인터프리터로 라우팅. `PAPER_CURATION_PY312` env var 로 절대 경로 override 가능. 현재 인터프리터의 conda prefix 에서 형제 env 자동 발견 |
 | `find_pdf()` cross-platform basename | Zotero linked attachment 이 Windows 절대경로 (`C:\Users\…\foo.pdf`) 로 저장된 경우 macOS `os.path.basename` 이 백슬래시를 분리자로 인식 못해 매칭 실패하던 버그. `path.replace("\\", "/").rsplit("/", 1)[-1]` 로 해결 |
 | `make_slug()` 40-char collision fix | 25-char prefix matching 이 다른 논문을 거짓 매칭하던 버그 (예: "A Hierarchical Framework for Humanoid Locomotion" ↔ "A hierarchical framework for measuring scientific impact"). 비교 길이를 `min(40, min(len(a), len(b)))` 로 변경, 10-char floor 추가. 짧은 제목의 자기-자신 매칭 (예: "Robot Learning from Human Videos: A Survey", 35 norm chars) 보존 |

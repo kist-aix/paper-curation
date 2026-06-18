@@ -102,13 +102,14 @@ pip install -r requirements.txt
 brew install --cask temurin   # Java for opendataloader-pdf
 ```
 
-Legacy dual-env (py314 main + sibling py312) still works via the same
-probe — `run_update_force._resolve_topic_modeling_python()` routes only
-`topic_modeling.py` / `classify_papers.py` to py312 when the current
-interpreter can't run the real UMAP/HDBSCAN path (numba `CALL_KW` on
-3.14, or Windows Smart App Control blocking numba/llvmlite). Priority:
+**py312-only** — Python 3.14 is unsupported (numba can't handle its
+`CALL_KW` opcode). Every entry point (`__main__`) calls
+`_env_guard.force_py312()`, so launching under another interpreter auto
+re-execs into py312 rather than crashing. If a topic-modeling step still
+needs to route to the py312 interpreter (e.g. a dependency missing in the
+current env), `run_update_force._resolve_topic_modeling_python()` finds it:
 `PAPER_CURATION_PY312` env var → sibling `<base>/envs/py312` →
-`which python3.12` → `sys.executable`.
+`which python3.12`. py312 is never bypassed for py314.
 
 ## Korean network workarounds
 
@@ -176,7 +177,7 @@ schema_version: v1
 ---
 ```
 
-Migration script: `pipeline/migrate_to_toolschema.py`. Originals are
+Migration script: `pipeline/_archive/migrate_to_toolschema.py` (one-time, now archived). Originals are
 preserved at `docs/papers/.legacy/{slug}_v0.md`. Re-running the
 migration is idempotent (existing backups are kept).
 
