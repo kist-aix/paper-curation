@@ -993,14 +993,22 @@ def _run_topic_index(topic=None):
       DEEP._journals = s;
       return s;
     }
+    // 흔한 단어이기도 한 단일어 저널명(Science, Matter...)은 venue cue 가 있을
+    // 때만 필터로 인정 — "AI for science" 같은 도메인 표현 오인식 방지. 멀티워드
+    // 저널명(Nature Communications, Science Robotics...)은 cue 없이도 매칭.
+    var _JCUE = /저널|학술지|학회지|journal|게재|등재|실린|지에|published in/i;
+    var _JSTOP = { science: 1, matter: 1, joule: 1, chaos: 1, brain: 1, patterns: 1, device: 1, sensors: 1 };
     function parseJournalFilter(query, index) {
       const q = String(query || '').toLowerCase();
       if (/preprint|프리프린트|아카이브/.test(q) || /arxiv\\s*(?:만|only|논문)?/.test(q))
         return { kind: 'preprint', label: 'preprint' };
+      const cue = _JCUE.test(query);
       const set = _journalSet(index);
       let best = null;
       for (const lc in set) {
-        if (lc.length >= 5 && q.indexOf(lc) >= 0 && (!best || lc.length > best.length)) best = lc;
+        if (lc.length < 5 || q.indexOf(lc) < 0) continue;
+        if (!cue && _JSTOP[lc]) continue;       // 흔한-단어 저널명은 cue 있을 때만
+        if (!best || lc.length > best.length) best = lc;
       }
       return best ? { kind: 'journal', lc: best, label: set[best] } : null;
     }
