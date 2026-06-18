@@ -65,6 +65,21 @@ def get_zotero_api_key():
     return cfg.get("zotero", {}).get("api_key", "") or os.environ.get("ZOTERO_API_KEY", "")
 
 
+def get_google_key():
+    """Google(Gemini) API 키. env(GOOGLE_API_KEY/GEMINI_API_KEY) 우선, 없으면
+    config.json(gemini_api_key/google_api_key). figure 검증·TTS·임베딩 공용 해석기.
+
+    참고: figure 검증처럼 'env 키 유무'를 Gemini on/off 스위치로 쓰던 호출부는
+    이 함수가 config.json 까지 보므로 env 를 pop 해도 키가 남는다. 그런 곳은
+    PAPER_CURATION_NO_GEMINI 환경 플래그로 명시 비활성화한다
+    (reextract_figures.py 의 geometric-only 모드 참조)."""
+    cfg = load_config()
+    return (os.environ.get("GOOGLE_API_KEY")
+            or os.environ.get("GEMINI_API_KEY")
+            or cfg.get("gemini_api_key", "")
+            or cfg.get("google_api_key", "")) or ""
+
+
 def get_local_model_config():
     """로컬 LLM fallback (Ollama / LM Studio / llama.cpp / vLLM) 설정.
 

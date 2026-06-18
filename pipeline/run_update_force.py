@@ -34,7 +34,7 @@ from datetime import datetime
 from config_loader import (
     PAPERS_DIR as _PAPERS_DIR, PIPELINE_DIR, _ssl_ctx,
     get_zotero_api_key, get_zotero_user_id, get_collection_key, get_collections, get_zotero_dir,
-    get_topic_dir,
+    get_topic_dir, get_google_key,
 )
 from lib.categories import category_slug
 PAPERS_DIR = str(_PAPERS_DIR)
@@ -723,7 +723,11 @@ def extract_figures(pdf_path, slug_dir):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from api.extract import pre_validate_figure
 
-    have_gemini = bool(os.environ.get("GOOGLE_API_KEY", "").strip())
+    # 키 해석: env(GOOGLE_API_KEY/GEMINI_API_KEY) → config.json. 단 reextract_figures
+    # 가 geometric-only 강제 시 세팅하는 PAPER_CURATION_NO_GEMINI 가 있으면 키 유무와
+    # 무관하게 Gemini 검증을 끈다 (env pop 만으론 config.json 키가 남아 스위치가 안 먹음).
+    have_gemini = (not os.environ.get("PAPER_CURATION_NO_GEMINI")
+                   and bool(get_google_key().strip()))
     # Log a degraded-Gemini warning at most once per run instead of silently
     # accepting full pages when the validator throws.
     _gemini_warned = {"done": False}
@@ -744,7 +748,7 @@ def extract_figures(pdf_path, slug_dir):
         try:
             from google import genai
             from google.genai import types
-            client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+            client = genai.Client(api_key=get_google_key())
             with open(img_path, "rb") as f:
                 img_bytes = f.read()
             prompt = (f"Evaluate cropping of this academic figure.\nCaption: {caption}\n"

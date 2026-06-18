@@ -28,7 +28,7 @@ from google import genai
 from google.genai import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config_loader import PAPERS_DIR as _PAPERS_DIR  # noqa: E402
+from config_loader import PAPERS_DIR as _PAPERS_DIR, get_google_key  # noqa: E402
 
 PAPERS = Path(_PAPERS_DIR)
 DOCS = PAPERS.parent
@@ -347,9 +347,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    api_key = get_google_key()  # env(GEMINI/GOOGLE) → config.json(gemini_api_key/google_api_key)
     if not api_key:
-        print("ERROR: GEMINI_API_KEY 또는 GOOGLE_API_KEY 가 필요합니다.", file=sys.stderr)
+        print("ERROR: GEMINI_API_KEY/GOOGLE_API_KEY (env) 또는 config.json(google_api_key) 가 필요합니다.",
+              file=sys.stderr)
         return 1
 
     slug = resolve_slug(args.slug)

@@ -386,6 +386,9 @@ def main():
     # whole process so every worker thread sees no key.
     os.environ.pop("GOOGLE_API_KEY", None)
     os.environ.pop("GEMINI_API_KEY", None)
+    # env pop 만으론 부족하다: extract_figures 의 키 해석이 env→config.json 순이라
+    # config.json 에 키가 있으면 Gemini 검증이 다시 켜진다. 명시 플래그로 확실히 끈다.
+    os.environ["PAPER_CURATION_NO_GEMINI"] = "1"
 
     if args.scrub_only:
         slugs = ([s.strip() for s in args.slugs.split(",")] if args.slugs
