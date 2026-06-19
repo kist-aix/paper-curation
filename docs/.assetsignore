@@ -6,6 +6,7 @@ ai4s+scisci/
 # Local dev caches — never deployed
 _local_keys.json
 _zotero_keys.json
+_zotero_meta.json
 
 # Obsidian / Claude Code / OMC runtime files
 .obsidian/

@@ -3344,7 +3344,9 @@ def _run_topic_index(topic=None):
         # refresh by deleting docs/_zotero_keys.json; skip entirely with
         # SKIP_ZOTERO_KEYS=1.
         _zk_existing = Path(DOCS_DIR) / "_zotero_keys.json"
-        _zk_fresh = _zk_existing.exists() and (_time.time() - _zk_existing.stat().st_mtime) < 86400
+        _zm_existing = Path(DOCS_DIR) / "_zotero_meta.json"
+        _zk_fresh = (_zk_existing.exists() and _zm_existing.exists()
+                     and (_time.time() - _zk_existing.stat().st_mtime) < 86400)
         if os.environ.get("SKIP_ZOTERO_KEYS") or _zk_fresh:
             print(f"Zotero keys: reusing existing {_zk_existing} (fresh; skip re-fetch)")
         elif _api_key and _user_id:
@@ -3379,8 +3381,13 @@ def _run_topic_index(topic=None):
             # stored title differs (truncation, punctuation, version suffix) even
             # when a PDF exists. DOI/arXiv give a robust ID-first fallback.
             _title_to_key, _doi_to_key, _arxiv_to_key = {}, {}, {}
+            _zmeta = {}  # normalized-title -> {url, doi} for build_search_index
             for _it in _items:
                 _d2 = _it.get("data", {})
+                _zt = re.sub(r"[^a-z0-9]", "", (_d2.get("title", "") or "").lower())
+                if _zt:
+                    _zmeta.setdefault(_zt, {"url": (_d2.get("url") or "").strip(),
+                                            "doi": (_d2.get("DOI") or "").strip()})
                 _k = _it.get("key", "")
                 if not _k:
                     continue
@@ -3454,6 +3461,11 @@ def _run_topic_index(topic=None):
                 _zk_path = Path(DOCS_DIR) / "_zotero_keys.json"
                 _zk_path.write_text(json.dumps(_slug_to_key), encoding="utf-8")
                 print(f"Zotero keys: {_zk_path} ({len(_slug_to_key)} matched, for localhost dev, git-ignored)")
+            # Title -> {url, doi} map so build_search_index can give non-DOI
+            # papers a real external URL (Zotero `url`). Local-only, git-ignored.
+            _zm_path = Path(DOCS_DIR) / "_zotero_meta.json"
+            _zm_path.write_text(json.dumps(_zmeta, ensure_ascii=False), encoding="utf-8")
+            print(f"Zotero meta: {_zm_path} ({len(_zmeta)} titles, url/doi enrichment, git-ignored)")
     except Exception as _e:
         print(f"Zotero keys skipped: {_e}")
 

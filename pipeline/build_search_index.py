@@ -40,6 +40,56 @@ PIPELINE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PIPELINE_DIR))
 from config_loader import DOCS_DIR, PAPERS_DIR, PROJECT_ROOT, get_topic_dir, get_papers_index_path
 
+# Zotero metadata (normalized-title -> {url, doi}) captured by build_topic_index.
+# Gives a real external URL for papers whose review.md frontmatter has a
+# placeholder DOI ("미제공"/"N/A"/"-") or none. Optional + local-only.
+_ZMETA_CACHE = None
+
+
+def _zotero_meta():
+    global _ZMETA_CACHE
+    if _ZMETA_CACHE is None:
+        _ZMETA_CACHE = {}
+        try:
+            _p = DOCS_DIR / "_zotero_meta.json"
+            if _p.exists():
+                _ZMETA_CACHE = json.load(open(_p, encoding="utf-8"))
+        except Exception:
+            _ZMETA_CACHE = {}
+    return _ZMETA_CACHE
+
+
+def _znorm(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _resolve_external(title, doi, arxiv):
+    """(clean_doi, clean_arxiv, external_url): prefer a valid 10.x DOI, then an
+    arXiv id (incl. one mislabeled into the doi field), then a Zotero URL."""
+    doi = (doi or "").strip()
+    arxiv = (arxiv or "").strip()
+    if not arxiv and re.search(r"ar[xX]iv", doi):
+        m = re.search(r"(\d{4}\.\d{4,5})", doi)
+        if m:
+            arxiv = m.group(1)
+    if not re.match(r"^10\.\d{3,}/", doi):
+        doi = ""  # drop placeholders / mislabeled ids
+    z = _zotero_meta().get(_znorm(title)) or {}
+    if not doi:
+        zd = (z.get("doi") or "").strip()
+        if re.match(r"^10\.\d{3,}/", zd):
+            doi = zd
+    zurl = (z.get("url") or "").strip()
+    if doi:
+        ext = f"https://doi.org/{doi}"
+    elif arxiv:
+        ext = f"https://arxiv.org/abs/{arxiv}"
+    elif zurl.startswith("http"):
+        ext = zurl
+    else:
+        ext = ""
+    return doi, arxiv, ext
+
 
 def _load_gemini_key_from_config() -> str:
     """Fallback: read gemini/google api key from config.json (written by setup.py)."""
@@ -563,12 +613,10 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
         # from anywhere.
         _doi = (parsed.get("doi") or p.get("doi") or "").strip()
         _arxiv = (parsed.get("arxiv") or p.get("arxiv") or "").strip()
-        if _doi:
-            _ext_url = f"https://doi.org/{_doi}" if not _doi.startswith("http") else _doi
-        elif _arxiv:
-            _ext_url = f"https://arxiv.org/abs/{_arxiv}"
-        else:
-            _ext_url = ""
+        # Clean placeholder DOIs + extract a mislabeled arXiv id, and fall back
+        # to the real Zotero URL so non-DOI papers still get a portable link.
+        _doi, _arxiv, _ext_url = _resolve_external(
+            parsed.get("title") or p.get("title") or "", _doi, _arxiv)
 
         papers_meta[slug] = {
             "title": parsed["title"],
