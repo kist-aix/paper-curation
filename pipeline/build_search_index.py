@@ -561,7 +561,69 @@ def embed_batch(client, texts: list, model: str) -> list:
     raise RuntimeError(f"embed_batch failed after {EMBED_MAX_ATTEMPTS} attempts: {last_err}")
 
 
-def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
+# ── text.md 고신호 본문 청크 (로컬 토픽 전용) ─────────────────────────────
+# review.md 는 정량 디테일(수치/데이터셋/하이퍼파라미터)을 요약하며 떨군다. A/B 실험
+# 결과 매몰 사실 질의 적중률이 review-only 대비 크게 오른다(ai4s 6%→56%, scisci
+# 47%→67%) — 일반 질의 회귀는 없었다. 단 원문 발췌라 저작권상 **배포 토픽엔 절대
+# 포함하지 않는다**(클라우드 비공개). docs/.assetsignore 로 로컬/배포를 자동 판별.
+_TXT_REF_RE = re.compile(r'(?im)^\s*#{0,4}\s*(references|bibliography|참고문헌|acknowledg(e?ments)?)\b')
+_TXT_SIGNAL = re.compile(r'(?i)\b(method|approach|propos|algorithm|model|train|fine-?tun|'
+                         r'dataset|corpus|experiment|evaluat|result|baseline|ablation|'
+                         r'accuracy|precision|recall|f1|auc|benchmark|metric|parameter|'
+                         r'hyper-?parameter|we (train|use|evaluate|propose|find|observe|measure|report))\b')
+_TXT_NUM = re.compile(r'\b\d+(?:\.\d+)?\s?%|\b\d+\.\d+\b')
+TEXTMD_MAX_CHUNKS = 5
+TEXTMD_CHAR_BUDGET = 9000
+
+
+def _text_windows(t, size=1400, overlap=200):
+    out, i = [], 0
+    while i < len(t):
+        out.append(t[i:i + size])
+        i += size - overlap
+    return out
+
+
+def textmd_high_signal_chunks(slug: str) -> list:
+    """text.md 의 References 이전 본문에서 method/experiment/수치 밀도 상위 윈도우만 추출."""
+    p = PAPERS_DIR / slug / "text.md"
+    if not p.exists():
+        return []
+    try:
+        t = p.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
+    m = _TXT_REF_RE.search(t)
+    if m:
+        t = t[:m.start()]
+    scored = []
+    for w in _text_windows(t):
+        s = len(_TXT_SIGNAL.findall(w)) + 0.5 * len(_TXT_NUM.findall(w))
+        if s >= 3:
+            scored.append((s, w))
+    scored.sort(key=lambda x: -x[0])
+    out, total = [], 0
+    for _, w in scored[:TEXTMD_MAX_CHUNKS]:
+        c = clean_chunk_text(w)[:MAX_CHUNK_CHARS]
+        if len(c) >= MIN_CHUNK_CHARS:
+            out.append(c)
+            total += len(c)
+        if total >= TEXTMD_CHAR_BUDGET:
+            break
+    return out
+
+
+def is_local_topic(topic: str) -> bool:
+    """배포(Cloudflare) 제외 토픽인지 — docs/.assetsignore 에 '{topic}/' 가 있으면 로컬."""
+    ai = DOCS_DIR / ".assetsignore"
+    if not ai.exists():
+        return False
+    want = f"{topic}/"
+    return any(line.strip() == want for line in ai.read_text(encoding="utf-8").splitlines())
+
+
+def build_index(topic: str, model: str, limit: int | None, dry_run: bool,
+                include_text: str = "auto"):
     topic_dir = get_topic_dir(topic)
     if not topic_dir.exists():
         print(f"ERROR: topic dir {topic_dir} does not exist")
@@ -583,10 +645,26 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
         topic_papers = topic_papers[:limit]
         print(f"      --limit={limit} -> using {len(topic_papers)}")
 
+    # --- text.md 보강 정책: 클라우드=review-only(A), 로컬=review+text(B) ---
+    local = is_local_topic(topic)
+    if include_text == "auto":
+        use_text = local
+    elif include_text == "yes":
+        if not local:
+            print(f"ERROR: --include-text=yes 는 배포(클라우드) 토픽 '{topic}' 에 허용되지 않음 "
+                  f"(원문 발췌가 _search_index.json 으로 클라우드에 노출됨). 로컬 토픽에서만 가능.")
+            sys.exit(4)
+        use_text = True
+    else:  # "no"
+        use_text = False
+    print(f"      [text.md 보강] {'ON — 로컬 토픽(B)' if use_text else 'OFF — review-only(A)'}"
+          f"  (local={local})")
+
     # --- Parse reviews ---
     papers_meta: dict = {}
     pending_chunks: list = []  # each: {slug, section, text}
     skipped = 0
+    text_chunk_count = 0
     print("[2/4] Parsing reviews and chunking...")
     for p in topic_papers:
         slug = p["slug"]
@@ -637,8 +715,18 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
                 "section": ch["section"],
                 "text": ch["text"],
             })
+        # 로컬 토픽: review 가 떨군 정량 디테일을 text.md 고신호 청크로 보강(B)
+        if use_text:
+            for _ti, _tc in enumerate(textmd_high_signal_chunks(slug)):
+                pending_chunks.append({
+                    "slug": slug,
+                    "section": f"Detail ({_ti + 1})",
+                    "text": _tc,
+                })
+                text_chunk_count += 1
 
-    print(f"      {len(papers_meta)} papers, {len(pending_chunks)} chunks, {skipped} skipped")
+    print(f"      {len(papers_meta)} papers, {len(pending_chunks)} chunks "
+          f"(review {len(pending_chunks) - text_chunk_count} + text.md {text_chunk_count}), {skipped} skipped")
 
     # --- Index personal notes from docs/notes/{topic}/ (git-ignored) ---
     # These are operator-authored markdown files (hypotheses, meeting notes,
@@ -842,9 +930,10 @@ def build_index(topic: str, model: str, limit: int | None, dry_run: bool):
     print("Done.")
 
 
-def _run_search_index(topic, *, model="gemini-embedding-001", limit=None, dry_run=False):
+def _run_search_index(topic, *, model="gemini-embedding-001", limit=None, dry_run=False,
+                      include_text="auto"):
     """Programmatic entrypoint for build_search_index."""
-    return build_index(topic, model, limit, dry_run)
+    return build_index(topic, model, limit, dry_run, include_text=include_text)
 
 
 def main():
@@ -853,8 +942,12 @@ def main():
     parser.add_argument("--model", default="gemini-embedding-001")
     parser.add_argument("--limit", type=int, default=None, help="limit number of papers (debug)")
     parser.add_argument("--dry-run", action="store_true", help="chunk only, no API calls")
+    parser.add_argument("--include-text", choices=["auto", "yes", "no"], default="auto",
+                        help="text.md 고신호 청크 보강. auto=로컬 토픽만 ON(클라우드 review-only). "
+                             "yes 는 배포 토픽에 거부됨(저작권).")
     args = parser.parse_args()
-    _run_search_index(topic=args.topic, model=args.model, limit=args.limit, dry_run=args.dry_run)
+    _run_search_index(topic=args.topic, model=args.model, limit=args.limit,
+                      dry_run=args.dry_run, include_text=args.include_text)
 
 
 if __name__ == "__main__":
