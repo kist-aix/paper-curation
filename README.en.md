@@ -407,4 +407,15 @@ Deep Research query -> Obsidian note -> re-index -> your notes cited in next que
 
 ---
 
+## Talks
+
+This project was presented at **AAiCON 2026** (National Science Museum, Daejeon, Korea · 2026.06.25–26).
+
+| Format | Slides |
+|--------|--------|
+| **Oral presentation** | [260625_이제현_AAiCon.pdf](docs/public/260625_이제현_AAiCon.pdf) |
+| **Poster** | [260625_이제현_AAiCon_poster.pdf](docs/public/260625_이제현_AAiCon_poster.pdf) |
+
+---
+
 *Built with Claude Code.* 🐱

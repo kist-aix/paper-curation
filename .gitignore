@@ -49,6 +49,10 @@
 !docs/operations.md
 !docs/architecture.md
 
+# Public assets (conference talk slides, etc.) — tracked on master + GitHub-served
+!docs/public/
+!docs/public/**
+
 # docs/ is the Cloudflare Workers deploy source, NOT a GitHub-served asset.
 # Only the landing redirect, setup guide, and wrangler .assetsignore are
 # tracked. Full content (docs/papers/, docs/{humanoid,physical-ai}/, etc.)

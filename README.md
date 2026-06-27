@@ -108,6 +108,15 @@ PYTHONUTF8=1 python pipeline/serve_local.py     # http://localhost:8000 + /api/e
 | **[Architecture & Internals](docs/architecture.md)** | 파이프라인 단계 상세 · 신뢰성 설계 · 내부 구조 · Karpathy LLM Wiki 비교 · 요구사항 |
 | **[English README](README.en.md)** | Full English documentation |
 
+## 발표
+
+이 프로젝트는 **AAiCON 2026** (국립중앙과학관, 2026.06.25–26)에서 발표되었습니다.
+
+| 형식 | 자료 |
+|------|------|
+| **구두 발표** | [260625_이제현_AAiCon.pdf](docs/public/260625_이제현_AAiCon.pdf) |
+| **포스터** | [260625_이제현_AAiCon_poster.pdf](docs/public/260625_이제현_AAiCon_poster.pdf) |
+
 ---
 
 *Built with Claude Code.* 🐱
