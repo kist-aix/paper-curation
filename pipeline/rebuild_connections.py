@@ -42,6 +42,7 @@ if _HERE not in sys.path:
 
 from lib.connections import (              # noqa: E402
     load_global_connections, make_bidirectional_deduped, filter_for_topic,
+    build_slug_resolver, load_index_slugs,
 )
 
 ROOT = os.path.dirname(_HERE)
@@ -76,7 +77,13 @@ def rebuild_data(topics, dry_run=False):
     Returns the set of source-key slugs (papers that have ≥1 connection) across
     all rebuilt topics — i.e. exactly the pages whose connection box can change.
     """
-    bidi = make_bidirectional_deduped(load_global_connections())
+    # Self-heal: remap renumbered endpoints to current slugs, prune deleted/
+    # ambiguous ones — so orphaned slug-titles disappear from every rebuilt view.
+    resolve = build_slug_resolver(load_index_slugs())
+    bidi = make_bidirectional_deduped(load_global_connections(), resolve=resolve)
+    st = resolve.stats
+    print(f"  normalized: {len(st['remapped'])} remapped (renumbered), "
+          f"{len(st['pruned'])} pruned (deleted/ambiguous)")
     slug_map = topic_slug_map()
     source_keys = set()
     for topic in topics:

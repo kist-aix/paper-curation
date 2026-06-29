@@ -40,6 +40,12 @@ sys.path.insert(0, _LIB_DIR)
 import conn_cache  # noqa: E402
 import connections  # noqa: E402  (the REAL merge/bidirectional logic)
 
+# sync_topic_connections now self-heals connection slugs against the real
+# _papers_index.json (remap renumbered, prune deleted). This test uses synthetic
+# slugs that aren't indexed, so force the resolver to identity (empty index = no
+# remap, no prune) to exercise the orthogonal bidirectional/cache logic.
+connections.load_index_slugs = lambda: set()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stub LLM generator: records the slugs it was asked to generate for, and returns
