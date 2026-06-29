@@ -57,13 +57,14 @@ def build_parser():
     p = argparse.ArgumentParser(description="Paper-curation end-to-end orchestrator (3-axis)")
     p.add_argument("--topic", required=True)
     p.add_argument("--mode", choices=["curate", "rebuild", "reclassify", "retime", "deploy",
-                                       "audit", "fix-matching", "dedup", "validate"],
+                                       "audit", "fix-matching", "dedup", "validate", "recover"],
                    required=True,
                    help="MECE action axis. curate/rebuild/reclassify/retime/deploy "
-                        "for pipeline runs; audit/fix-matching/dedup/validate "
+                        "for pipeline runs; audit/fix-matching/dedup/validate/recover "
                         "for standalone tooling (audit → audit_matching.py, "
                         "fix-matching → fix_matching.py, dedup → dedup_zotero.py, "
-                        "validate → validate_papers.py).")
+                        "validate → validate_papers.py, recover → auto_recover.py "
+                        "[dry-run unless --yes]).")
     p.add_argument("--source", choices=["web", "zotero"], default="zotero",
                    help="Input source. web=검색+등록+sync+review / zotero=sync+review.")
     p.add_argument("--images", choices=["skip", "changed", "all"], default=None,
@@ -213,6 +214,16 @@ def build_tool_plan(args):
         if args.yes or args.strict_pdf:
             # Reuse --yes as strict-gate flag for validate
             cmd.append("--strict")
+        return [(cmd, None, True)]
+    if args.mode == "recover":
+        # auto_recover wraps audit→judge→fix→re-review→re-audit. Default dry-run;
+        # --yes maps to --execute (destructive), mirroring fix-matching above.
+        cmd = [py, "-u", str(PIPELINE / "auto_recover.py"),
+               "--topic", args.topic]
+        if args.yes:
+            cmd.append("--execute")
+        if args.slugs:
+            cmd.extend(["--slugs", args.slugs])
         return [(cmd, None, True)]
     return None
 

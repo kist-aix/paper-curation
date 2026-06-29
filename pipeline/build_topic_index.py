@@ -1542,6 +1542,53 @@ def _run_topic_index(topic=None):
       return used;
     }
 
+    // T2-3 DR citation guard. The basic answer path had no protection against
+    // a [ref:N] whose N has no entry in the retrieved reference set
+    // (hallucination, or an off-by-one after re-ranking) — postProcessRefs
+    // rendered such a marker as a raw "[ref:N]" string pointing at nothing.
+    // This mirrors the Deeper assembler guard (see finalizeDeepAnswer caller):
+    // collect every cited N, treat any N with no DEEP.currentRefs[N-1] as
+    // dangling, strip those markers, and report which N were dropped so the UI
+    // can surface a subtle note. Pure + side-effect free so it stays unit
+    // testable in Node. Returns { answer, dropped, changed }; when nothing is
+    // dangling, changed===false and answer is the untouched input (the happy
+    // path must stay byte-identical). Disable via window._DR_CITE_GUARD=false.
+    function guardDanglingCitations(answer, refs) {
+      const text = String(answer || '');
+      const list = refs || [];
+      const dropped = [];
+      const seen = new Set();
+      for (const m of text.matchAll(/\\[ref:(\\d+)\\]/g)) {
+        const n = parseInt(m[1], 10);
+        if (list[n - 1]) continue;
+        if (!seen.has(n)) { seen.add(n); dropped.push(n); }
+      }
+      if (!dropped.length) return { answer: text, dropped: [], changed: false };
+      const bad = new Set(dropped);
+      const cleaned = text.replace(/\\[ref:(\\d+)\\]/g, function(mk, n) {
+        return bad.has(parseInt(n, 10)) ? '' : mk;
+      });
+      return { answer: cleaned, dropped: dropped.sort(function(a, b) { return a - b; }), changed: true };
+    }
+
+    // Subtle, non-intrusive caption shown below the answer body when the
+    // citation guard removed unverifiable [ref:N]. Idempotent: an empty/falsy
+    // list removes any prior note, so a clean run leaves no DOM trace.
+    function deepRenderCiteWarning(dropped) {
+      const body = document.getElementById('deep-body');
+      const prev = document.getElementById('deep-cite-warn');
+      if (prev) prev.remove();
+      if (!body || !dropped || !dropped.length) return;
+      const cap = document.createElement('div');
+      cap.id = 'deep-cite-warn';
+      cap.className = 'deep-cite-warn';
+      cap.style.cssText = 'margin:0.45rem 0 0;padding:0.35rem 0.7rem;font-size:0.72rem;color:#8a6d3b;background:#fcf8e3;border:1px solid #faebcc;border-radius:4px;line-height:1.4;';
+      cap.textContent = '⚠️ 출처에 없는 인용 ' + dropped.length + '건(' + dropped.map(function(n) { return '[' + n + ']'; }).join(', ') + ')을 제거했습니다.';
+      const answerEl = document.getElementById('deep-answer');
+      if (answerEl && answerEl.parentNode === body) body.insertBefore(cap, answerEl.nextSibling);
+      else body.appendChild(cap);
+    }
+
     function buildPrompt(query, selected, lang, fullTexts, deeper) {
       const systemKo = '당신은 학술 논문 큐레이션의 리서치 보조입니다. 아래에 제공된 논문 발췌문만을 근거로, 큐레이터의 "카테고리 요약" 스타일을 따라 답변하세요.\\n\\n스타일 지침:\\n- 서술형 한국어 문장 (불릿 나열은 꼭 필요할 때만)\\n- 2~5개 문단, 주제별 또는 시간순으로 자연스럽게 묶기\\n- **인용은 글 흐름에 녹여 쓰세요**. 매 주장 끝에 ``[ref:N]`` 마커만 붙입니다 (N=발췌문 번호) — 후처리가 작은 클릭 가능한 ⌈[N]⌉ 링크로 변환합니다. 본문에서는 **저자명·논문명·연도·시점을 어구로 다양하게 표현**해서 자연스럽게 읽히게 하세요:\\n  ▸ "He et al.에 의하면 ~[ref:1]"\\n  ▸ "최근 공개된 연구에 따르면 ~[ref:2]"\\n  ▸ "2024년에 밝혀진 바[ref:3]에 따르면 ~"\\n  ▸ "OmniH2O[ref:1]는 universal teleoperation을 보였고, 이어진 Expressive Whole-Body Control 연구[ref:4]가 이를 확장했다."\\n  ▸ "Sun et al.와 같이[ref:5], ~"\\n  ▸ "SPARK[ref:6]에서 보인 것처럼 ~"\\n  ▸ "이러한 접근은 초기 humanoid teleoperation 연구[ref:1, ref:2]에서 등장했고 ~"\\n  같은 어구를 반복하지 말고 매 문장마다 다른 표현을 선택하세요. 동일 논문을 한 단락 안에서 또 인용해야 하면 그때는 작가명 생략하고 "이 연구[ref:1]는 또한 ~" 같이 짧게.\\n  중요: ``[ref:N]`` 마커만 출력에 남기고, 우리가 생성하는 "Smith et al. (2024)" 같은 표준 표현은 따로 삽입하지 마세요 — 그건 References 섹션에서만 보여줍니다.\\n- 연관된 Figure는 본문의 적절한 위치에 ![caption](url) 형식으로 삽입 (발췌문의 Figures에 명시된 URL만 사용, 임의 URL 금지)\\n- 마지막 문단은 연구들을 종합하는 한두 문장\\n\\n답변 절차 (출력에 포함하지 말 것):\\n1. 먼저 내부적으로 질의를 분석하고, 어떤 논문들을 어떤 그룹/순서로 엮을지 계획을 세우세요.\\n2. 그런 다음 계획에 따라 최종 답변 본문만 작성하세요.\\n3. 제공된 발췌문 밖의 지식을 절대 사용하지 마세요.\\n4. 발췌문으로 뒷받침되지 않는 주장은 생략하세요.\\n5. 일부 논문에는 "ORIGINAL EXCERPT" 블록이 함께 제공될 수 있습니다. 시약 이름·분량·온도·시간·구체적 수치·실험 조건 등 정량적 디테일이 답변에 필요할 때는 그 원문 발췌를 우선 활용하세요.';
       const systemEn = 'You are a research assistant for an academic paper curation. Answer using ONLY the provided excerpts, following the curator\\'s "category overview" style.\\n\\nStyle guidelines:\\n- Narrative prose (use bullets only when truly needed)\\n- 2-5 paragraphs, grouped by theme or chronology\\n- **Weave citations into the flow.** Append only ``[ref:N]`` markers after each claim (N = excerpt number). A post-processor turns them into small clickable [N] superscripts. In the prose, **vary how you mention author / paper / year / temporal context**:\\n  ▸ "According to He et al., ~[ref:1]"\\n  ▸ "Recent work shows ~[ref:2]"\\n  ▸ "A 2024 study reports ~[ref:3]"\\n  ▸ "OmniH2O[ref:1] established universal teleoperation, later extended by Expressive Whole-Body Control[ref:4]."\\n  ▸ "As Sun et al. did[ref:5], ~"\\n  ▸ "As shown in SPARK[ref:6], ~"\\n  ▸ "This direction emerged in early humanoid teleoperation work[ref:1, ref:2] and ~"\\n  Vary the phrasing every sentence — avoid repeating the same lead-in. When the same paper is cited again within a paragraph, drop the author and use a short hand: "This work[ref:1] also ~".\\n  Important: keep only the ``[ref:N]`` marker — do NOT insert formal "Smith et al. (2024)" tags into the prose. Those appear only in the References section at the bottom.\\n- Embed relevant figures inline at natural positions using ![caption](url) markdown; only use figure URLs explicitly listed with the excerpts (no fabricated URLs)\\n- Close with one or two synthesizing sentences\\n\\nProcedure (do NOT include in output):\\n1. First analyse the query internally and plan which papers to cover and how to group/order them.\\n2. Then write only the final answer body according to your plan.\\n3. Do not use any knowledge beyond the excerpts.\\n4. Omit any claim you cannot back up with an excerpt.\\n5. Some papers may also include an "ORIGINAL EXCERPT" block alongside the summary. When the answer needs concrete quantitative detail (reagent names, amounts, temperatures, durations, specific numbers, experimental conditions), prefer the original excerpt over the summary.';
@@ -1883,6 +1930,22 @@ def _run_topic_index(topic=None):
     }
 
     function finalizeDeepAnswer() {
+      // T2-3 citation guard: strip [ref:N] that point at no retrieved paper
+      // before the references list / figures are built from cited nums, and
+      // surface a small note. Wrapped so any failure falls back to the prior
+      // (un-guarded) behavior. Disable with window._DR_CITE_GUARD = false.
+      try {
+        if (window._DR_CITE_GUARD !== false) {
+          const _cg = guardDanglingCitations(DEEP.currentAnswer, DEEP.currentRefs);
+          if (_cg.changed) {
+            DEEP.currentAnswer = _cg.answer;
+            renderDeepAnswer(DEEP.currentAnswer);
+            deepRenderCiteWarning(_cg.dropped);
+          } else {
+            deepRenderCiteWarning(null);
+          }
+        }
+      } catch (e) { console.warn('[cite-guard] skipped:', e && e.message || e); }
       const cited = collectCitedNums(DEEP.currentAnswer);
       const refsListEl = document.getElementById('deep-refs-list');
       clearEl(refsListEl);

@@ -23,6 +23,9 @@
 !pipeline/api/*.py
 !pipeline/_archive/
 !pipeline/_archive/*.py
+!pipeline/tests/
+!pipeline/tests/*.py
+!pipeline/tests/*.mjs
 
 # Cloudflare Worker function (handles /api/audio-email + serves static assets).
 # Deployed by `wrangler deploy` alongside docs/.

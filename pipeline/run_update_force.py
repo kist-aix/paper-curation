@@ -1743,6 +1743,10 @@ def main():
                         help="topic_modeling 연결 단계에서 max retry round 를 다 돌고도 막힌 "
                              "papers 를 로컬 OpenAI 호환 모델(Ollama/LM Studio 등)로 마저 연결. "
                              "config.json 의 local_model 또는 LOCAL_MODEL_BASE_URL/NAME 필요.")
+    parser.add_argument("--no-deploy", action="store_true",
+                        help="end-of-run prepare_deploy(wrangler deploy + gh-pages + master push)를 건너뛴다. "
+                             "무인 자동복구(auto_recover --execute)처럼 배포를 원치 않는 경우용. "
+                             "환경변수 PAPER_CURATION_NO_DEPLOY 로도 켤 수 있다.")
     # ── Phase 2: 3-axis mode (new, MECE). When --mode is set, it overrides the
     # legacy flag combinations and emits DeprecationWarnings for any legacy
     # flags that were also specified. Omitting --mode keeps 100% legacy
@@ -2316,7 +2320,12 @@ def main():
             os.environ.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CF_API_TOKEN")
         )
         has_account_id = bool(os.environ.get("CLOUDFLARE_ACCOUNT_ID"))
-        if has_cf_token and has_account_id:
+        no_deploy = (getattr(args, "no_deploy", False)
+                     or bool(os.environ.get("PAPER_CURATION_NO_DEPLOY")))
+        if no_deploy:
+            log("\n  [prepare_deploy] SKIP: deploy suppressed "
+                "(--no-deploy / PAPER_CURATION_NO_DEPLOY)")
+        elif has_cf_token and has_account_id:
             log("\n  [prepare_deploy] Cloudflare env vars found, deploying...")
             try:
                 result = subprocess.run(

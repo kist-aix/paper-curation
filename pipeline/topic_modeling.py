@@ -1117,6 +1117,21 @@ def _run_topic_model(topic="ai4s", *, skip_connections=False,
             candidates, topic_papers, client, local_fallback=local_fallback,
             priority_slugs=priority_slugs
         )
+        # T2-4: optional LLM audit of generated connections. Env VERIFY_CONNECTIONS
+        # (off|sample|strict, default sample) — sample = flag-only (log spurious,
+        # keep all); strict = drop spurious before persistence. Best-effort: any
+        # error/missing client leaves connections untouched (never blocks the run).
+        try:
+            from lib import verify
+            essence_by_slug = {
+                p["slug"]: {"title": p.get("title", ""),
+                            "essence": p.get("essence", "")}
+                for p in topic_papers
+            }
+            verify.apply_connection_verification(
+                connections, essence_by_slug, client, log=log)
+        except Exception as e:
+            log(f"  [verify] connections hook skipped: {str(e)[:80]}")
         from lib.connections import sync_topic_connections
         sync_topic_connections(connections, topic, slugs, topic_dir, log=log)
 

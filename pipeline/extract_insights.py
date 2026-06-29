@@ -606,6 +606,21 @@ def _run_insights(topic="ai4s", *, insights_only=False, connections_only=False,
         log("=" * 50)
 
         insights = extract_cross_category_insights(topic, cat_papers, cat_summaries, client)
+        # T2-4: verify cited evidence actually backs each cross-category insight.
+        # Default ON (cheap, few items); env VERIFY_INSIGHTS=0 disables. Drops/
+        # annotates unsupported insights. Uses the Anthropic (Haiku) client; if it
+        # is unavailable or anything fails, originals are kept untouched.
+        try:
+            from lib import verify
+            paper_meta = {
+                p["slug"].split("_")[0]: {"title": p.get("title", ""),
+                                          "essence": p.get("essence", "")}
+                for p in topic_papers
+            }
+            verify.apply_insight_verification(
+                insights, paper_meta, clients.get("anthropic"), log=log)
+        except Exception as e:
+            log(f"  [verify] insights hook skipped: {str(e)[:80]}")
         insights["generated_at"] = datetime.now().strftime("%Y-%m-%d")
         insights["topic"] = topic
         insights["paper_count"] = len(topic_papers)
