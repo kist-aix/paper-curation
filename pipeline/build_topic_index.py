@@ -1644,7 +1644,7 @@ def _run_topic_index(topic=None):
     }
 
     const MODEL_MAP = {
-      anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-4-6', top: 'claude-opus-4-8' },
+      anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-5', top: 'claude-opus-4-8' },
       openai:    { fast: 'gpt-4.1',          smart: 'gpt-5.5',           top: 'gpt-5.5' },
       google:    { fast: 'gemini-3.1-flash-lite', smart: 'gemini-3.5-flash', top: 'gemini-3.5-flash' },
     };
@@ -1699,12 +1699,11 @@ def _run_topic_index(topic=None):
         messages: [{ role: 'user', content: prompt.user }],
         stream: true,
       };
-      // Opus 4.8 does adaptive thinking by default and REJECTS the legacy
-      // budget-based thinking.type.enabled (HTTP 400). Only Sonnet 4.6 /
-      // Haiku 4.5 take the explicit budget form. (Mirrors the proven Python
-      // opus_streaming_call in generate_timelines.py, which sends no thinking
-      // param at all for claude-opus-4-8.)
-      if (!/opus-4-8/.test(model)) {
+      // Adaptive-thinking models (Opus 4.8, Sonnet 5, Fable 5) REJECT the
+      // legacy budget-based thinking.type.enabled (HTTP 400). Send it ONLY to
+      // models known to take the explicit budget form — whitelist, so any
+      // future model defaults to no thinking param (safe on both kinds).
+      if (/sonnet-4-6|haiku-4-5/.test(model)) {
         body.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
       }
       const resp = await deepFetch('https://api.anthropic.com/v1/messages', {

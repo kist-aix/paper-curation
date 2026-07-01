@@ -46,7 +46,7 @@ PY = sys.executable
 # medium 버킷 LLM 판정이 이 신뢰도 이상일 때만 확정으로 본다.
 MEDIUM_CONFIRM_THRESHOLD = float(os.environ.get("AUTO_RECOVER_CONFIDENCE", "0.7"))
 # medium 판정 모델 (Anthropic tool-use). 기본 Sonnet.
-JUDGE_MODEL = os.environ.get("AUTO_RECOVER_JUDGE_MODEL", "claude-sonnet-4-6")
+JUDGE_MODEL = os.environ.get("AUTO_RECOVER_JUDGE_MODEL", "claude-sonnet-5")
 
 
 # ── Anthropic tool-schema verdict ────────────────────────────────────────────

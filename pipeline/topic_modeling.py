@@ -35,6 +35,9 @@ _SPECTER2_LOCAL = Path(__file__).resolve().parent.parent / ".cache" / "base"
 SPECTER2_MODEL = str(_SPECTER2_LOCAL) if (_SPECTER2_LOCAL / "config.json").exists() \
                  else "allenai/specter2_base"
 
+# 서브토픽/카테고리 작명 + 연결 생성에 쓰는 Anthropic 모델.
+LLM_MODEL = os.environ.get("TOPIC_MODELING_LLM_MODEL", "claude-sonnet-5")
+
 
 def log(msg):
     ts = datetime.now().strftime("%H:%M:%S")
@@ -449,7 +452,7 @@ Rules:
 """
 
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=LLM_MODEL,
             max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -578,7 +581,7 @@ Rules:
 
     log(f"  Naming {n_cats} categories via Sonnet...")
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=LLM_MODEL,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -779,7 +782,7 @@ Rules:
     def process_batch(batch_slugs):
         prompt = _build_prompt(batch_slugs)
         resp = conn_client.messages.create(
-            model="claude-sonnet-4-6",
+            model=LLM_MODEL,
             # batch_size=25 × 후보 다수 선택 + 한국어 이유의 JSON 출력은 10k 토큰을
             # 넘겨 응답이 잘리고(Unterminated string) 배치 전체가 버려진다. 25편을
             # 여유 있게 담도록 상향.

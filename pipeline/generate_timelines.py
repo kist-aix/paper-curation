@@ -735,7 +735,8 @@ def generate_candidates(method_text, caption, prefix, candidates_dir, n=5):
 #   1) per-category color is distinct/appropriate and used consistently,
 #   2) emergence/disappearance and merging/branching of categories is clear,
 #   3) no spurious text (color names, category numbers, watermarks, counts, title).
-_JUDGE_MODEL = "claude-sonnet-4-6"
+# 출력이 후보 인덱스 정수 하나라 최저가 티어로 충분하다.
+_JUDGE_MODEL = os.environ.get("TIMELINE_JUDGE_MODEL", "claude-haiku-4-5")
 _JUDGE_CRITERIA = (
     "You are judging candidate timeline diagrams of how research categories evolve "
     "over time. Every candidate renders the SAME underlying data — pick the single "

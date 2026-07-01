@@ -1090,7 +1090,9 @@ REVIEW_TOOL_SCHEMA = {
 }
 
 WRITE_REVIEW_SCHEMA_VERSION = "v1"
-WRITE_REVIEW_MODEL = "claude-haiku-4-5"
+# 기존 review.md 는 재생성하지 않으므로 모델 변경은 신규 리뷰부터 적용된다
+# (캐시 키에 model 포함 — 변경 시 기존 캐시는 자연 무효).
+WRITE_REVIEW_MODEL = os.environ.get("WRITE_REVIEW_MODEL", "claude-sonnet-5")
 
 
 def write_review(item, slug_dir, figures):

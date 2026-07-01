@@ -81,7 +81,7 @@ def _est_tokens(text):
     return int(len(text) / 1.5)
 
 
-def _count_tokens(client, text, model="claude-sonnet-4-6"):
+def _count_tokens(client, text, model="claude-sonnet-5"):
     """Authoritative token count via Anthropic API (no output tokens spent).
     Falls back to _est_tokens on any API error."""
     try:
@@ -384,11 +384,15 @@ Output ONLY valid JSON in this exact format:
 # chain can move to the next backend.
 # ─────────────────────────────────────────────────────────────────────────────
 
+_CC_ANTHROPIC_MODEL = os.environ.get(
+    "EXTRACT_INSIGHTS_CC_ANTHROPIC_MODEL", "claude-sonnet-5")
+
+
 def _cc_anthropic_call(client, prompt, schema):
     if client is None:
         raise RuntimeError("Anthropic client unavailable")
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=_CC_ANTHROPIC_MODEL,
         max_tokens=8000,
         tools=[schema],
         tool_choice={"type": "tool", "name": schema["name"]},
