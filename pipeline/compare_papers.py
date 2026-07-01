@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+from urllib.parse import quote
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -96,6 +97,20 @@ def resolve_slugs(tokens, index):
     return resolved
 
 
+def _portable_url(doi, title):
+    """다운로드된 .html 에서도 살아있는 절대 URL — Deep Research refLink 와
+    동일 규칙: 유효 DOI → doi.org, doi 필드의 arXiv ID → arxiv.org,
+    없으면 제목 Scholar 검색."""
+    doi = (doi or "").strip()
+    if re.match(r"^10\.\d{3,}/\S+$", doi):
+        return "https://doi.org/" + quote(doi)
+    if "arxiv" in doi.lower():
+        m = re.search(r"(\d{4}\.\d{4,5})", doi)
+        if m:
+            return "https://arxiv.org/abs/" + m.group(1)
+    return ("https://scholar.google.com/scholar?q=" + quote(title or ""))
+
+
 def _parse_sections(md):
     """review.md → {section_name: text} (frontmatter stripped)."""
     body = re.sub(r"\A---\n[\s\S]*?\n---\n", "", md)
@@ -107,7 +122,7 @@ def _parse_sections(md):
     return out
 
 
-def load_paper(slug, index, slug_titles, all_conns):
+def load_paper(slug, index, slug_titles, slug_dois, all_conns):
     entry = next((p for p in index if p["slug"] == slug), None)
     if entry is None:
         raise SystemExit(f"'{slug}' not in _papers_index.json")
@@ -120,11 +135,13 @@ def load_paper(slug, index, slug_titles, all_conns):
     conns = []
     for c in (all_conns.get(slug) or [])[:8]:
         cslug = c.get("slug", "")
+        ctitle = slug_titles.get(cslug, cslug)
         conns.append({
             "slug": cslug,
-            "title": slug_titles.get(cslug, cslug),
+            "title": ctitle,
             "relation": _REL_LABELS.get(c.get("relation", ""), c.get("relation", "")),
             "reason": c.get("reason", ""),
+            "purl": _portable_url(slug_dois.get(cslug, ""), ctitle),
         })
     return {
         "slug": slug,
@@ -139,6 +156,7 @@ def load_paper(slug, index, slug_titles, all_conns):
                      .get("primary_category", "")),
         "sections": _parse_sections(md),
         "connections": conns,
+        "purl": _portable_url(entry.get("doi") or "", entry.get("title") or slug),
     }
 
 
@@ -425,7 +443,8 @@ def _paper_card(p, i):
                 if p["doi"] else "")
     review_href = f"../../{p['slug']}/index.html"
     return (f'<div class="cmp-card"><div class="cmp-card-num">P{i}</div>'
-            f'<div class="cmp-card-title"><a href="{review_href}">{RH.esc(p["title"])}</a></div>'
+            f'<div class="cmp-card-title"><a href="{review_href}" '
+            f'data-portable="{RH.esc(p["purl"])}">{RH.esc(p["title"])}</a></div>'
             f'<div class="cmp-card-meta">{RH.esc(authors)} ({RH.esc(p["date"])})'
             f'{doi_html}<br>{RH.esc(p["category"])}</div></div>')
 
@@ -444,7 +463,7 @@ def _graph_data(papers):
     compared = {p["slug"] for p in papers}
     nodes = [{"id": p["slug"], "label": f"P{i} · {p['title'][:34]}",
               "full": p["title"], "kind": "compared", "ci": i - 1,
-              "href": f"../../{p['slug']}/index.html"}
+              "href": f"../../{p['slug']}/index.html", "purl": p["purl"]}
              for i, p in enumerate(papers, 1)]
     conn_nodes = {}
     links, seen_pairs = [], set()
@@ -459,7 +478,7 @@ def _graph_data(papers):
                 n = conn_nodes.setdefault(tgt, {
                     "id": tgt, "label": c["title"][:34], "full": c["title"],
                     "kind": "conn", "deg": 0,
-                    "href": f"../../{tgt}/index.html"})
+                    "href": f"../../{tgt}/index.html", "purl": c["purl"]})
                 n["deg"] += 1
             links.append({"source": p["slug"], "target": tgt,
                           "relation": c["relation"],
@@ -506,7 +525,30 @@ _GRAPH_JS = r"""
   var link = svg.append('g').selectAll('line').data(data.links).join('line')
     .attr('stroke', function (l) { return REL[l.relation] || '#999'; })
     .attr('stroke-width', 2.2).attr('stroke-opacity', 0.6);
-  link.append('title').text(function (l) { return l.relation + ' — ' + l.reason; });
+  // 2px 선은 호버 판정이 불가능한 수준 — 투명 14px 히트 라인을 겹쳐 깔고
+  // 즉시 뜨는 커스텀 툴팁으로 관계+이유를 보여준다.
+  var tip = d3.select(el).append('div').attr('class', 'cmp-tip');
+  function escT(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  var hit = svg.append('g').selectAll('line').data(data.links).join('line')
+    .attr('stroke', '#000').attr('stroke-opacity', 0)
+    .attr('stroke-width', 14).attr('pointer-events', 'stroke')
+    .style('cursor', 'help')
+    .on('mouseover', function (ev, d) {
+      link.filter(function (x) { return x === d; })
+        .attr('stroke-opacity', 1).attr('stroke-width', 3.5);
+      tip.html('<b>' + escT(d.relation) + '</b><br>' + escT(d.reason))
+        .style('opacity', 1);
+    })
+    .on('mousemove', function (ev) {
+      var p = d3.pointer(ev, el);
+      var x = Math.max(0, Math.min(p[0] + 14, (el.clientWidth || W) - 335));
+      tip.style('left', x + 'px').style('top', (p[1] + 14) + 'px');
+    })
+    .on('mouseout', function (ev, d) {
+      link.filter(function (x) { return x === d; })
+        .attr('stroke-opacity', 0.6).attr('stroke-width', 2.2);
+      tip.style('opacity', 0);
+    });
   var node = svg.append('g').selectAll('g').data(data.nodes).join('g')
     .style('cursor', 'pointer')
     .call(d3.drag()
@@ -516,7 +558,12 @@ _GRAPH_JS = r"""
         if (!ev.active) sim.alphaTarget(0);
         if (d.kind !== 'compared') { d.fx = null; d.fy = null; }
       }))
-    .on('click', function (ev, d) { if (!ev.defaultPrevented && d.href) window.open(d.href, '_blank'); });
+    .on('click', function (ev, d) {
+      if (ev.defaultPrevented) return;
+      // 다운로드된 복사본에서는 로컬 상대경로가 깨지므로 portable URL(DOI 등)로.
+      var u = (window._CMP_PORTABLE && d.purl) ? d.purl : d.href;
+      if (u) window.open(u, '_blank');
+    });
   node.append('circle')
     .attr('r', r).attr('fill', fill)
     .attr('stroke', function (d) { return d.kind === 'shared' ? '#B8860B' : '#fff'; })
@@ -534,10 +581,12 @@ _GRAPH_JS = r"""
       d.x = Math.max(30, Math.min(W - 30, d.x));
       d.y = Math.max(26, Math.min(H - 30, d.y));
     });
-    link.attr('x1', function (l) { return l.source.x; })
-        .attr('y1', function (l) { return l.source.y; })
-        .attr('x2', function (l) { return l.target.x; })
-        .attr('y2', function (l) { return l.target.y; });
+    [link, hit].forEach(function (sel) {
+      sel.attr('x1', function (l) { return l.source.x; })
+         .attr('y1', function (l) { return l.source.y; })
+         .attr('x2', function (l) { return l.target.x; })
+         .attr('y2', function (l) { return l.target.y; });
+    });
     node.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
   });
 })();
@@ -581,7 +630,9 @@ _CMP_CSS = """
 /* review 페이지 CSS의 점수열 규칙(td:last-child = bold accent) 무효화 —
    비교표의 마지막 열은 점수가 아니라 마지막 논문이다. 강조는 <strong>으로만. */
 td:last-child { text-align: left; font-weight: inherit; color: inherit; }
-#cmp-graph { width: 100%; height: 540px; border: 1px solid #e0e0e8; border-radius: 10px; background: #fafbfc; margin: 0.6rem 0 0.4rem; }
+#cmp-graph { width: 100%; height: 540px; border: 1px solid #e0e0e8; border-radius: 10px; background: #fafbfc; margin: 0.6rem 0 0.4rem; position: relative; }
+.cmp-tip { position: absolute; max-width: 320px; background: rgba(26,26,46,0.94); color: #fff; font-size: 0.78rem; line-height: 1.5; padding: 0.5rem 0.75rem; border-radius: 8px; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; }
+.cmp-tip b { color: #FFD166; }
 .cmp-legend { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; font-size: 0.8rem; color: #555; margin: 0.4rem 0; }
 .cmp-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
 .cmp-chip-line { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
@@ -628,7 +679,10 @@ def build_html(papers, comp, md_text, theme, name, image_b64=None):
     # .md 다운로드: 마크다운 원문을 JS 문자열로 내장 (</ 는 태그 조기 종료 방지)
     md_js = json.dumps(md_text, ensure_ascii=False).replace("</", "<\\/")
     name_js = json.dumps(name)
-    dl_js = ("function _dl(blob, fname) { "
+    # 다운로드본은 로컬 상대링크가 깨지므로 data-portable(DOI/arXiv/Scholar)로
+    # 치환하고, _CMP_PORTABLE 플래그를 켜서 그래프 노드 클릭도 portable 로 보낸다.
+    dl_js = ("window._CMP_PORTABLE = false; "
+             "function _dl(blob, fname) { "
              "var a = document.createElement('a'); "
              "a.href = URL.createObjectURL(blob); "
              "a.download = fname; a.click(); "
@@ -637,7 +691,13 @@ def build_html(papers, comp, md_text, theme, name, image_b64=None):
              "_dl(new Blob([window._CMP_MD], {type: 'text/markdown'}), "
              "window._CMP_NAME + '.md'); } "
              "function downloadCmpHtml() { "
-             "var h = '<!DOCTYPE html>' + document.documentElement.outerHTML; "
+             "var root = document.documentElement.cloneNode(true); "
+             "root.querySelectorAll('a[data-portable]').forEach(function (a) { "
+             "var u = a.getAttribute('data-portable'); "
+             "if (u) { a.setAttribute('href', u); a.setAttribute('target', '_blank'); } }); "
+             "var h = '<!DOCTYPE html>' + root.outerHTML; "
+             "var flag = 'window._CMP_PORTABLE = '; "
+             "h = h.split(flag + 'false').join(flag + 'true'); "
              "_dl(new Blob([h], {type: 'text/html'}), "
              "window._CMP_NAME + '.html'); }")
 
@@ -699,8 +759,9 @@ def run_compare(slug_tokens):
     if not 2 <= len(slugs) <= MAX_PAPERS:
         raise SystemExit(f"논문 2~{MAX_PAPERS}편을 지정하세요 (현재 {len(slugs)})")
     slug_titles = {p["slug"]: (p.get("title") or p["slug"]) for p in index}
+    slug_dois = {p["slug"]: (p.get("doi") or "") for p in index}
     all_conns = RH._load_connections()
-    papers = [load_paper(s, index, slug_titles, all_conns) for s in slugs]
+    papers = [load_paper(s, index, slug_titles, slug_dois, all_conns) for s in slugs]
     log(f"Comparing {len(papers)} papers via {COMPARE_MODEL}:")
     for p in papers:
         log(f"  - {p['slug']} ({len(p['connections'])} connections)")
