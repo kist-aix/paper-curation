@@ -97,18 +97,31 @@ def resolve_slugs(tokens, index):
     return resolved
 
 
+_BSI = None
+
+
 def _portable_url(doi, title):
-    """다운로드된 .html 에서도 살아있는 절대 URL — Deep Research refLink 와
-    동일 규칙: 유효 DOI → doi.org, doi 필드의 arXiv ID → arxiv.org,
-    없으면 제목 Scholar 검색."""
-    doi = (doi or "").strip()
-    if re.match(r"^10\.\d{3,}/\S+$", doi):
-        return "https://doi.org/" + quote(doi)
-    if "arxiv" in doi.lower():
-        m = re.search(r"(\d{4}\.\d{4,5})", doi)
-        if m:
-            return "https://arxiv.org/abs/" + m.group(1)
-    return ("https://scholar.google.com/scholar?q=" + quote(title or ""))
+    """다운로드된 .html 에서도 살아있는 절대 URL. build_search_index 의
+    _resolve_external 재사용 — 유효 DOI → doi.org, arXiv → arxiv.org,
+    없으면 **Zotero 에 등록된 원문 URL** (_zotero_meta.json, 제목 매칭).
+    그마저 없을 때만 제목 Scholar 검색."""
+    global _BSI
+    ext = ""
+    try:
+        if _BSI is None:
+            import build_search_index as _bsi
+            _BSI = _bsi
+        _, _, ext = _BSI._resolve_external(title, doi, "")
+    except Exception:
+        # 폴백: DOI/arXiv 직접 해석 (Zotero meta 없이)
+        doi = (doi or "").strip()
+        if re.match(r"^10\.\d{3,}/\S+$", doi):
+            ext = "https://doi.org/" + quote(doi)
+        elif "arxiv" in doi.lower():
+            m = re.search(r"(\d{4}\.\d{4,5})", doi)
+            if m:
+                ext = "https://arxiv.org/abs/" + m.group(1)
+    return ext or ("https://scholar.google.com/scholar?q=" + quote(title or ""))
 
 
 def _parse_sections(md):
