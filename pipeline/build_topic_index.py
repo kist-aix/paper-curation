@@ -1571,6 +1571,38 @@ def _run_topic_index(topic=None):
       return { answer: cleaned, dropped: dropped.sort(function(a, b) { return a - b; }), changed: true };
     }
 
+    // 웹 검색 모드 답변의 인라인 마크다운 링크 [label](http…) 를 코퍼스 뒤
+    // 번호를 잇는 pseudo-ref 로 흡수한다. [ref:N] 마커로 치환해 두면
+    // postProcessRefs / References 목록 / export 경로가 웹 출처를 논문
+    // 레퍼런스와 동일하게 처리한다. 이미지 링크(![...])는 제외, 같은 URL 은
+    // 같은 번호를 재사용, 코퍼스 논문의 external_url 과 일치하면 그 번호를
+    // 그대로 쓴다. refs 배열은 제자리에서 늘어난다(호출부가 DEEP.currentRefs
+    // 를 넘김). 1회 치환 후 본문에 링크가 남지 않으므로 자연 멱등.
+    function absorbWebCitations(answer, refs) {
+      const text = String(answer || '');
+      const list = refs || [];
+      const byUrl = new Map();
+      for (let i = 0; i < list.length; i++) {
+        const u = list[i] && (list[i].external_url || list[i].url);
+        if (u && !byUrl.has(u)) byUrl.set(u, i + 1);
+      }
+      let changed = false;
+      const out = text.replace(/(!?)\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g, function(m, bang, label, url) {
+        if (bang) return m;
+        let n = byUrl.get(url);
+        if (!n) {
+          let host = '';
+          try { host = new URL(url).hostname.replace(/^www\\./, ''); } catch (e) {}
+          list.push({ title: label || host || url, url: url, external_url: url, web: true });
+          n = list.length;
+          byUrl.set(url, n);
+        }
+        changed = true;
+        return label + '[ref:' + n + ']';
+      });
+      return { answer: out, changed: changed };
+    }
+
     // Subtle, non-intrusive caption shown below the answer body when the
     // citation guard removed unverifiable [ref:N]. Idempotent: an empty/falsy
     // list removes any prior note, so a clean run leaves no DOM trace.
@@ -1693,7 +1725,7 @@ def _run_topic_index(topic=None):
     // 웹 검색 ON일 때 system 에 덧붙이는 규칙. 기본 규칙("발췌 외 지식 사용 금지")
     // 과 충돌하지 않도록 웹 출처의 사용 조건과 표기법을 명시한다 — [ref:N] 은
     // 코퍼스 발췌 전용이고, 웹 출처는 마크다운 링크로만 표기한다.
-    const WEB_SEARCH_ADDENDUM = '\\n\\nWEB SEARCH MODE: the web_search tool is enabled for this request. Corpus excerpts remain the PRIMARY source and [ref:N] markers apply ONLY to them. You MAY search the web when recent news, tech-company blog posts, or papers outside the corpus would materially improve the answer. Attribute every web-sourced claim inline as a markdown link [source name](url) — never with [ref:N]. If web results conflict with corpus excerpts, say so explicitly.';
+    const WEB_SEARCH_ADDENDUM = '\\n\\nWEB SEARCH MODE: the web_search tool is enabled for this request. Corpus excerpts remain the PRIMARY source and [ref:N] markers apply ONLY to them. You MAY search the web when recent news, tech-company blog posts, or papers outside the corpus would materially improve the answer. Attribute every web-sourced claim inline as a markdown link [source name](url) — never with [ref:N]. Use a descriptive source name (publication or article title), never a bare URL — the client converts each link into a numbered entry in the References list. If web results conflict with corpus excerpts, say so explicitly.';
 
     async function callAnthropic(apiKey, model, prompt, spec, onDelta) {
       let maxTokens = spec.max_tokens;
@@ -1955,6 +1987,18 @@ def _run_topic_index(topic=None):
     }
 
     function finalizeDeepAnswer() {
+      // 웹 검색 실행(토글 ON)의 인라인 웹 링크를 번호 레퍼런스로 흡수 —
+      // 일반 실행의 본문 링크는 건드리지 않는다. 인용 가드보다 먼저 돌아야
+      // 새로 붙은 번호가 가드에서 살아남는다.
+      try {
+        if (DEEP.webUsed) {
+          const _wc = absorbWebCitations(DEEP.currentAnswer, DEEP.currentRefs);
+          if (_wc.changed) {
+            DEEP.currentAnswer = _wc.answer;
+            renderDeepAnswer(DEEP.currentAnswer);
+          }
+        }
+      } catch (e) { console.warn('[web-cite] skipped:', e && e.message || e); }
       // T2-3 citation guard: strip [ref:N] that point at no retrieved paper
       // before the references list / figures are built from cited nums, and
       // surface a small note. Wrapped so any failure falls back to the prior
@@ -1980,13 +2024,20 @@ def _run_topic_index(topic=None):
           const ref = DEEP.currentRefs[n - 1];
           if (!ref) continue;
           const li = document.createElement('li');
-          li.appendChild(document.createTextNode('[' + n + '] '));
+          li.appendChild(document.createTextNode('[' + n + '] ' + (ref.web ? '\U0001F310 ' : '')));
           const link = document.createElement('a');
           link.href = ref.url;
           link.target = '_blank';
           link.textContent = ref.title;
           li.appendChild(link);
           if (ref.year) li.appendChild(document.createTextNode(' (' + ref.year + ')'));
+          else if (ref.web) {
+            // 웹 출처는 연도 대신 도메인으로 출처를 드러낸다 (제목이 이미
+            // 도메인과 같으면 중복 표기 생략).
+            let _h = '';
+            try { _h = new URL(ref.url).hostname.replace(/^www\\./, ''); } catch (e) {}
+            if (_h && _h !== ref.title) li.appendChild(document.createTextNode(' — ' + _h));
+          }
           // Local-only: render a 'Open PDF' button when we have a Zotero itemKey
           // for this paper. Clicking it triggers the zotero:// protocol handler
           // and the Zotero desktop app pops the PDF immediately.
@@ -2644,6 +2695,9 @@ def _run_topic_index(topic=None):
       if (_dp) { _dp.style.display = 'none'; _dp.classList.remove('active'); clearEl(document.getElementById('deep-plan-list')); const _sw = document.getElementById('deep-sec-wrap'); if (_sw) _sw.remove(); const _aw = document.getElementById('deep-asp-wrap'); if (_aw) _aw.remove(); }
       DEEP.currentAnswer = '';
       DEEP.currentRefs = [];
+      // 이 실행이 웹 검색 토글 ON 으로 시작됐는지 캡처 — finalize 의
+      // absorbWebCitations 게이트. 스트리밍 중 토글을 바꿔도 영향 없다.
+      DEEP.webUsed = deepWebSearchOn();
       deepUpdateButtons(false);
       deepBeginRun();
       try {
@@ -2885,6 +2939,8 @@ def _run_topic_index(topic=None):
           var n = ordered[i];
           var ref = DEEP.currentRefs[n - 1];
           if (!ref) continue;
+          // 웹 pseudo-ref 는 로컬 review 노트가 없으므로 일반 링크로.
+          if (ref.web) { lines.push('[' + n + '] [' + ref.title + '](' + ref.url + ')'); continue; }
           lines.push('[' + n + '] [[papers/' + ref.slug + '/review|' + ref.title + ']]' + (ref.year ? ' (' + ref.year + ')' : ''));
         }
       }
@@ -3466,7 +3522,7 @@ def _run_topic_index(topic=None):
         '          <option value="smart">Smart (best)</option>\n'
         '        </select>\n'
         '        <label class="deep-deeper-lbl" title="체크 시: 답변 생성에 웹 검색을 허용합니다 — 관련 뉴스·빅테크 블로그·코퍼스 밖 최신 논문 참조. Anthropic/Gemini 키에서 동작 (OpenAI 키는 미지원). 검색 호출 비용이 소액 추가됩니다. 기본 OFF = 코퍼스 발췌만 사용.">\n'
-        '          <input type="checkbox" id="deep-websearch"> &#x1F310; 웹 검색\n'
+        '          <input type="checkbox" id="deep-websearch"> &#x1F310; web\n'
         '        </label>\n'
         '        <label class="deep-deeper-lbl" title="체크 시: 핵심 논문의 연결 그래프(후속·반론·기반·응용)를 따라 확장하고, 단락별 에이전트가 작성한 뒤 오케스트레이터가 취합합니다. 분량 Long·최상위 모델이 자동 적용 (LLM 호출·시간·비용 증가).">\n'
         '          <input type="checkbox" id="deep-deeper"> Deeper\n'
