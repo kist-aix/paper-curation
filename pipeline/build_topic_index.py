@@ -628,7 +628,7 @@ def _run_topic_index(topic=None):
     .deep-plan-list li .rstat {{ color: #aaa; font-size: 0.73rem; margin-left: 0.45rem; }}
     .deep-plan-list li.done .rstat {{ color: {accent}; font-weight: 600; }}
     .deep-plan-list li.deep-sec-hdr {{ list-style: none; margin: 0.5rem 0 0.2rem -0.7rem; font-weight: 700; color: {accent_dark}; font-size: 0.76rem; }}
-    .deep-deeper-lbl {{ display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: #444; cursor: pointer; user-select: none; }}
+    .deep-deeper-lbl {{ display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: #444; cursor: pointer; user-select: none; white-space: nowrap; }}
     .deep-deeper-lbl input {{ cursor: pointer; }}
     .deep-deeper-note {{ font-size: 0.72rem; color: {accent}; font-weight: 600; }}
     .deep-body {{ padding: 1.2rem 1.5rem; display: none; }}
