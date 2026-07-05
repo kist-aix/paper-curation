@@ -144,7 +144,7 @@ def synthesize_report(course, lecture, evidence, client):
         "- 학습목표 3개를 모두 충실히 충족.\n"
         "- 논문을 단순 나열하지 말고 **연구 방법론·핵심 메시지 축**으로 엮고 연구 계보를 짚을 것.\n"
         "- 전문가 청중, 학술적 톤. 논문을 언급할 때 (제목, 연도)를 본문에 자연스럽게 명시.\n"
-        "- 마크다운(## 소제목, 단락). 서론 → 방법론/주제별 본론 → 종합·시사점 구조. **3500자 이상** 충실히.\n"
+        "- 마크다운(## 소제목, 단락). 서론 → 방법론·주제별 본론(각 논문의 문제의식·방법·핵심 결과와 수치·의의를 구체적으로) → 종합·시사점 구조. 각 논문을 충분히 깊게 다뤄 **최소 18,000자 이상**의 상세한 심층 강의로 작성(서둘러 마무리하지 말 것).\n"
         "- 메타 설명·머리말 없이 곧바로 강의 본문으로 시작.\n\n"
         f"=== 근거 ===\n{evidence}"
     )
@@ -155,11 +155,13 @@ def synthesize_report(course, lecture, evidence, client):
 
 
 # ── 오디오 (50분·2인·전문가·학술·한국어) ─────────────────────────────────────
-def make_audio(report_text, client, minutes=50):
+def make_audio(report_text, evidence, client, minutes=50):
     lang, speakers = "ko", 2
     roles = ROLES[lang][speakers]
-    direction = "질문·주제에 대한 답을 중심으로, 핵심 논문들을 방법론과 메시지로 엮어 전체 계보와 통찰을 심층 설명한다."
-    prompt = build_prompt(report_text, [], speakers, lang, "expert", minutes, "academic", "", direction)
+    direction = ("핵심 논문들을 방법론·핵심 메시지로 엮어 연구 계보와 통찰을 심층 설명한다. "
+                 "각 논문의 문제의식·방법·핵심 결과를 구체적으로 다루고, 분량을 끝까지 채우며 서둘러 마무리하지 말 것.")
+    source = report_text + (("\n\n---\n[상세 근거 — 오디오 심화용]\n" + evidence[:22000]) if evidence else "")
+    prompt = build_prompt(source, [], speakers, lang, "expert", minutes, "academic", "", direction)
     resp = client.models.generate_content(
         model="gemini-3.1-pro-preview", contents=prompt,
         config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=65536))
@@ -311,7 +313,7 @@ def run_lecture(L, led, args):
     dur_txt = "리포트만"
     if not args.no_audio:
         print("  3) 50분 오디오 생성")
-        mp3, script, dur = make_audio(report, client, minutes=led.get("audio", {}).get("minutes", 50))
+        mp3, script, dur = make_audio(report, evidence, client, minutes=led.get("audio", {}).get("minutes", 50))
         mp3_path = OUTDIR / f"lecture_{L['lecture']:02d}.mp3"
         mp3_path.write_bytes(mp3)
         (OUTDIR / f"lecture_{L['lecture']:02d}_script.txt").write_text(script, encoding="utf-8")
