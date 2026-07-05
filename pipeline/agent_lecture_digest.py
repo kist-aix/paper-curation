@@ -300,6 +300,67 @@ def md_to_html(md):
     return "\n".join(out)
 
 
+def gather_figures(core, per_paper=2, total_cap=10, max_bytes=300 * 1024):
+    """core 논문 폴더의 figures/fig*.webp 를 캡션과 함께 data-URI 로 수집(HTML 자체포함용)."""
+    figs = []
+    for c in core:
+        d = _find_dir(c["slug"])
+        if not d or not (d / "figures").is_dir():
+            continue
+        caps = {}
+        rm = d / "review.md"
+        if rm.exists():
+            md = rm.read_text(encoding="utf-8")
+            for m in re.finditer(r"!\[.*?\]\(figures/(fig\d+)[^)]*\)\s*\n+\*(.+?)\*", md):
+                caps[m.group(1)] = m.group(2).strip()
+        def _fnum(p):
+            mm = re.search(r"(\d+)", p.stem)
+            return int(mm.group(1)) if mm else 0
+        taken = 0
+        for w in sorted((d / "figures").glob("fig*.webp"), key=_fnum):
+            if taken >= per_paper:
+                break
+            data = w.read_bytes()
+            if len(data) > max_bytes:
+                continue
+            cap = re.sub(r"\s+", " ", caps.get(w.stem, "")).strip()
+            if re.fullmatch(r"(?:FIG|Fig|Figure)\.?\s*\d+[.\-:]?", cap or ""):
+                cap = ""
+            if len(cap) > 110:
+                cap = cap[:108] + "…"
+            figs.append({"uri": "data:image/webp;base64," + base64.b64encode(data).decode(),
+                         "caption": cap, "title": c["title"], "link": c["link"]})
+            taken += 1
+        if len(figs) >= total_cap:
+            break
+    return figs[:total_cap]
+
+
+def _fig_block(f):
+    lab = H.escape(f["title"])
+    cap = f' — {H.escape(f["caption"])}' if f["caption"] else ""
+    return (f'<figure class="paper-fig"><img src="{f["uri"]}" alt="{lab}" loading="lazy">'
+            f'<figcaption><a href="{H.escape(f["link"])}" target="_blank" rel="noopener">{lab}</a>{cap}</figcaption></figure>')
+
+
+def _interleave(body_html, figs):
+    """리포트 본문의 h2 섹션 경계마다 그림을 하나씩 끼워넣어 글·수식 벽을 분절."""
+    if not figs:
+        return body_html
+    parts = re.split(r"(?=<h2)", body_html)
+    if len(parts) < 2:
+        return '<div class="fig-gallery">' + "".join(_fig_block(f) for f in figs) + "</div>" + body_html
+    out, fi = [], 0
+    for part in parts:
+        out.append(part)
+        if fi < len(figs) and part.strip():
+            out.append(_fig_block(figs[fi]))
+            fi += 1
+    if fi < len(figs):
+        out.append('<div class="fig-gallery">' + "".join(_fig_block(f) for f in figs[fi:]) + "</div>")
+    return "".join(out)
+
+
 def make_html(course, lecture, report_md, core, related, web_sources, total):
     obj = "".join(f"<li>{H.escape(o)}</li>" for o in lecture["objectives"])
     core_html = "".join(
@@ -314,7 +375,7 @@ def make_html(course, lecture, report_md, core, related, web_sources, total):
         f'<li><a href="{H.escape(u)}" target="_blank" rel="noopener">🌐 {H.escape(t[:90])}</a></li>'
         for t, u in web_sources)
     web_block = f'<div class="card"><h3>🌐 웹 참고문헌</h3><ol>{web_html}</ol></div>' if web_html else ""
-    body = md_to_html(report_md)
+    body = _interleave(md_to_html(report_md), gather_figures(core))
     return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>제{lecture['lecture']}강 — {H.escape(lecture['title'])}</title>
@@ -332,6 +393,11 @@ h2{{font-size:1.14rem;color:#6B21A8;margin:1.7rem 0 .6rem;border-bottom:1px soli
 h3{{font-size:1.02rem;margin:1.1rem 0 .4rem}}
 p{{margin:.6rem 0}} a{{color:#7c3aed}}
 .foot{{color:#999;font-size:.82rem;border-top:1px solid #eee;margin-top:2rem;padding-top:1rem}}
+.paper-fig{{margin:1.3rem 0;text-align:center}}
+.paper-fig img{{max-width:min(100%,560px);border:1px solid #e6e6e6;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.07)}}
+.paper-fig figcaption{{font-size:.8rem;color:#777;margin-top:.45rem;font-style:italic;line-height:1.5}}
+.fig-gallery{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.1rem;margin:1.3rem 0}}
+.fig-gallery .paper-fig{{margin:0}}
 </style>
 {MATHJAX_HEAD}
 </head><body>
