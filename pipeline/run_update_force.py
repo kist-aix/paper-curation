@@ -2316,6 +2316,10 @@ def main():
         run_step("build_topic_index",
                  ["python", "pipeline/build_topic_index.py", topic], 600)
 
+        # Atom 피드(feed.xml) — build_topic_index 가 심은 autodiscovery <link> 의 대상.
+        run_step("build_rss",
+                 ["python", "pipeline/build_rss.py", topic], 300)
+
         # Deep Research search index (section-aware chunks + OpenAI embeddings).
         # Reads OPENAI_API_KEY from env or config.json; fails fast if missing.
         # Cleanup stale category narratives/timelines before building the

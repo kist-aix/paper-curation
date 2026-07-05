@@ -3481,6 +3481,8 @@ def _run_topic_index(topic=None):
         f'<meta property="og:url" content="https://paper-curation.jehyunlee.dev/{topic}/">\n'
         f'<meta property="og:image" content="https://paper-curation.jehyunlee.dev/{topic}/research_timeline.png">\n'
         '<meta name="twitter:card" content="summary_large_image">\n'
+        # Atom 피드 autodiscovery — RSS 리더가 feed.xml 을 자동 인식 (build_rss.py 생성)
+        f'<link rel="alternate" type="application/atom+xml" title="{esc(theme["title"])} — Paper Curation" href="feed.xml">\n'
         '<link rel="stylesheet" href="https://cdn.jsdelivr.net/font-kopub/1.0/kopubdotum.css">\n'
         '<script>window.MathJax={tex:{inlineMath:[[\'$\',\'$\'],[\'\\\\(\',\'\\\\)\']],displayMath:[[\'$$\',\'$$\'],[\'\\\\[\',\'\\\\]\']]}};</script>\n'
         '<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>\n'
@@ -3496,6 +3498,8 @@ def _run_topic_index(topic=None):
         f'      <div class="stat"><div class="stat-num">{num_cats}</div><div class="stat-label">MECE \uce74\ud14c\uace0\ub9ac</div></div>\n'
         f'      <div class="stat"><div class="stat-num">{TODAY}</div><div class="stat-label">\ud050\ub808\uc774\uc158 \uc77c\uc790</div></div>\n'
         '    </div>\n'
+        # Atom \ud53c\ub4dc \ub9c1\ud06c \u2014 hero(\ub2e4\ud06c \uadf8\ub77c\ub514\uc5b8\ud2b8) \uc704\ub77c \ud770\uc0c9+opacity \ub85c \uc774\uc9c8\uac10 \uc5c6\uac8c
+        '    <div style="margin-top:1rem;text-align:right"><a href="feed.xml" title="Atom \ud53c\ub4dc \uad6c\ub3c5 (RSS)" style="color:white;opacity:0.75;text-decoration:none;font-size:0.85rem;font-weight:600">&#x1F4E1; RSS</a></div>\n'
         '  </div>\n\n\n'
         + research_tl_html
         + render_insights_section()
