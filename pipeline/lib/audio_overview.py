@@ -519,7 +519,7 @@ function concatPcm(parts) {
 function pcmToMp3(pcm) {
   if (typeof lamejs === "undefined") throw new Error("MP3 인코더(lamejs) 로드 실패");
   const samples = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.length >> 1);
-  const enc = new lamejs.Mp3Encoder(1, SAMPLE_RATE, 128);
+  const enc = new lamejs.Mp3Encoder(1, SAMPLE_RATE, 64);
   const block = 1152, out = [];
   for (let i = 0; i < samples.length; i += block) {
     const buf = enc.encodeBuffer(samples.subarray(i, i + block));
@@ -624,12 +624,17 @@ async function runAudioGen() {
     try {
       const recipients = resolveAudioRecipients();
       if (recipients.length) {
-        setStatus("📧 이메일로 전송 중...");
-        const ok = await sendAudioEmail(blob, fname, ctx.title || "Audio Overview", s.lang, recipients);
-        if (ok) {
-          setStatus("✅ 완료 — 다운로드 가능 + 이메일 발송됨 (" + recipients.join(", ") + ")");
+        const MAX_MAIL_BYTES = 25 * 1024 * 1024;   // Resend/worker 첨부 상한
+        if (blob.size > MAX_MAIL_BYTES) {
+          setStatus("✅ 완료 — 다운로드 가능 (오디오 " + Math.round(blob.size / 1048576) + "MB > 이메일 첨부 한도 25MB → 이메일 생략. 위에서 MP3를 받으세요)");
         } else {
-          setStatus("✅ 완료 — 다운로드 가능 (이메일 발송은 실패. 위에서 직접 받으세요)");
+          setStatus("📧 이메일로 전송 중...");
+          const ok = await sendAudioEmail(blob, fname, ctx.title || "Audio Overview", s.lang, recipients);
+          if (ok) {
+            setStatus("✅ 완료 — 다운로드 가능 + 이메일 발송됨 (" + recipients.join(", ") + ")");
+          } else {
+            setStatus("✅ 완료 — 다운로드 가능 (이메일 발송 실패. 위에서 직접 받으세요)");
+          }
         }
       }
     } catch (mailErr) {
