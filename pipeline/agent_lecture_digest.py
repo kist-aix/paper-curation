@@ -194,12 +194,12 @@ def synthesize_report(course, lecture, evidence, client):
         f"당신은 '{course}' 심화 강의를 집필하는 전문 연구자입니다. **제{lecture['lecture']}강: {lecture['title']}**.\n\n"
         f"오늘의 학습목표:\n{obj}\n\n다루는 핵심 논문: {plist}\n\n"
         "이것은 **Deeper Research** 입니다. 아래 근거(내 코퍼스의 핵심 논문 + 연결 그래프 관련 논문)를 **최우선**으로 삼되, "
-        "**웹 검색을 적극 활용**해 관련·후속·반박 연구를 함께 소개하세요.\n\n"
+        "그리고 **반드시 google_search 웹 검색을 여러 번 수행**해 (a) 최근·후속·반박 연구, (b) 당시 통념이 뒤집힌 사례, (c) 다른 그룹의 대안적 관점을 찾아 함께 소개하세요. 코퍼스만으로 쓰지 말고 웹으로 시야를 넓힐 것.\n\n"
         "작성 지침:\n"
         "- 학습목표 3개를 모두 충실히 충족.\n"
         "- 논문 단순 나열 금지. **연구 방법론·핵심 메시지 축**으로 엮고 연구 계보를 짚을 것.\n"
         "- **계보·수정 서사 필수**: '당시엔 X로 여겨졌으나 후대 연구에서 Y로 밝혀졌다', '이 결과는 이후 ~에 의해 반박·정교화됐다' 같은 흐름을 웹·연결 논문으로 보강.\n"
-        "- 인용: 코퍼스 논문은 (제목, 연도)로 본문에 명시. **웹 출처는 반드시 마크다운 링크 [출처 제목](URL)** 로 인라인 표기.\n"
+        "- 인용: 코퍼스 논문은 (제목, 연도)로 본문에 명시. **웹 출처는 반드시 마크다운 링크 [출처 제목](URL)** 로 인라인 표기하고, 서로 다른 외부(웹) 출처를 **최소 4개 이상** 인용할 것.\n"
         "- 전문가 청중, 학술적 톤. 마크다운(## 소제목, 단락). 각 논문의 문제의식·방법·핵심 결과(수치)·의의를 구체적으로. **최소 18,000자 이상**의 상세 강의(서둘러 마무리 금지).\n"
         "- 메타·머리말 없이 곧바로 강의 본문으로 시작.\n\n"
         f"=== 근거 (코퍼스) ===\n{evidence}"
@@ -216,17 +216,38 @@ def synthesize_report(course, lecture, evidence, client):
 def make_audio(report_text, evidence, client, minutes=50):
     lang, speakers = "ko", 2
     roles = ROLES[lang][speakers]
-    direction = ("핵심 논문들을 방법론·핵심 메시지로 엮어 연구 계보와 통찰을 심층 설명하고, "
-                 "당시의 통념과 후대의 수정·반박까지 이야기로 짚는다. 분량을 끝까지 채우며 서둘러 마무리하지 말 것.")
-    source = report_text + (("\n\n---\n[상세 근거]\n" + evidence[:40000]) if evidence else "")
-    prompt = build_prompt(source, [], speakers, lang, "expert", minutes, "academic", "", direction)
-    resp = client.models.generate_content(
-        model=REPORT_MODEL, contents=prompt,
-        config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=65536))
-    script = (resp.text or "").strip()
+    labels = [r["label"] for r in roles]
+    rolelines = "\n".join(f"- {r['label']}: {r['desc']}" for r in roles)
+    source = report_text + (("\n\n---\n[상세 근거]\n" + evidence[:42000]) if evidence else "")
+    # 단일 호출은 한국어에서 심하게 under-fill → 소스를 조각내 조각마다 심층 대화 생성 후 이어붙여
+    # 길이를 콘텐츠에 비례하게 강제한다(≥40분 목표).
+    paras = [p for p in re.split(r"\n\s*\n", source) if p.strip()]
+    n_seg = max(6, min(9, len(source) // 4800))
+    if len(paras) >= n_seg:
+        per = -(-len(paras) // n_seg)
+        segs = ["\n\n".join(paras[i:i + per]) for i in range(0, len(paras), per)]
+    else:
+        sz = max(1, -(-len(source) // n_seg))
+        segs = [source[i:i + sz] for i in range(0, len(source), sz)]
+    scripts = []
+    for i, seg in enumerate(segs):
+        pos = ("도입부: 아주 짧게 한두 마디로 시작(장황한 인사 금지)" if i == 0
+               else "마무리: 핵심 통찰을 종합하며 자연스럽게 끝맺음" if i == len(segs) - 1
+               else "앞 대화에 자연스럽게 이어서 진행(재소개·재인사 금지)")
+        p = (f"당신은 전문가 청중용 학술 2인 팟캐스트 대본을 씁니다. 화자는 정확히 2명뿐:\n{rolelines}\n"
+             f"각 발화는 '{labels[0]}:' 또는 '{labels[1]}:' 로 시작(콜론+공백). 이 부분은 전체 {len(segs)}개 중 {i + 1}번째. {pos}.\n"
+             "아래 내용을 **최소 3,800자 이상, 8~14 turn**의 깊이 있는 한국어 대화로 작성. 방법·수치·연구 계보와 '당시엔 X로 여겨졌으나 후대엔 Y로 밝혀졌다'식 수정 서사를 구체적으로 풀되 청취자 눈높이 비유도 곁들일 것. 라벨 외 머리말·메타·프로그램명 금지.\n\n"
+             f"내용:\n{seg}")
+        r = client.models.generate_content(
+            model=REPORT_MODEL, contents=p,
+            config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=16384))
+        t = (r.text or "").strip()
+        if t:
+            scripts.append(t)
+        print(f"    대본 {i + 1}/{len(segs)} · {len(t):,}자", flush=True)
+    script = "\n".join(scripts)
     if not script:
         raise RuntimeError("대본 생성 실패")
-    labels = [r["label"] for r in roles]
     turns = parse_turns(script, labels)
     if turns:
         chunks = chunk_turns(turns, MAX_CHUNK_CHARS); cfg = speech_multi(roles); prefix = TTS_PREFIX[lang]
