@@ -179,15 +179,6 @@ a {{ color: {t['link_color']}; }}
 .conn-rel-badge.application {{ color: #EF4444; background: #FDECEC; }}
 .conn-ref {{ color: {t['accent']}; text-decoration: none; font-weight: 600; }}
 .conn-ref:hover {{ text-decoration: underline; }}
-/* 🧭 연구 지형 — Essence 직후 상단 컴팩트 요약 (하단 '같이 보면 좋은 논문' 의
-   축약본). 관계 칩은 하단 섹션과 동일한 .conn-rel-badge 색을 공유한다. */
-.landscape-box {{ background: {t['accent_bg']}; border: 1px solid {t['accent']}33; border-radius: 10px; padding: 0.7rem 1.1rem 0.8rem; margin: 0.8rem 0 1rem; }}
-.landscape-box h2 {{ color: {t['accent']}; font-size: 0.92rem; margin: 0 0 0.4rem; border: none; padding: 0; }}
-.landscape-item {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.5rem; padding: 0.4rem 0; border-top: 1px solid {t['accent']}1f; }}
-.landscape-item:first-of-type {{ border-top: none; padding-top: 0.1rem; }}
-.landscape-title {{ font-weight: 600; font-size: 0.87rem; color: #1a1a2e; text-decoration: none; }}
-.landscape-title:hover {{ color: {t['accent']}; text-decoration: underline; }}
-.landscape-reason {{ flex: 1 1 11rem; min-width: 0; color: #777; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 .review-fig {{ text-align: center; margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 12px; }}
 .review-fig img {{ max-width: min(100%, 700px); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: zoom-in; }}
 .lightbox {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; cursor: zoom-out; align-items: center; justify-content: center; }}
@@ -587,11 +578,6 @@ def convert_review(md_path, topic, slug_dir):
 
     body_parts.append('<hr>')
 
-    # 🧭 연구 지형 미니박스 삽입 위치. 기본값은 메타데이터 직후(Essence 가
-    # 없는 리뷰용), Essence 박스를 렌더하면 그 직후로 갱신된다. 실제 박스는
-    # 아래 connections 블록에서 만들어 이 인덱스에 insert 한다.
-    minibox_idx = len(body_parts)
-
     # Sections (eval badges moved INTO Evaluation section)
     for sec_title, sec_body in parsed_sections:
         sec_html = md_section_to_html(sec_body, slug_dir)
@@ -600,7 +586,6 @@ def convert_review(md_path, topic, slug_dir):
             if not sec_html.strip():
                 continue
             body_parts.append(f'<div class="essence-box"><h2>Essence</h2>\n{sec_html}</div>')
-            minibox_idx = len(body_parts)  # 미니박스는 Essence 직후에 놓는다
         elif sec_title.startswith('평가') or sec_title.lower().startswith('eval'):
             # Evaluation section — render as badges (not table)
             badges = []
@@ -678,35 +663,6 @@ def convert_review(md_path, topic, slug_dir):
             rel_order.get(c.get("relation", ""), 9),
             slug_dates.get(c.get("slug", ""), ""),
         ))
-
-        # 🧭 연구 지형 — 상단 컴팩트 요약(LLM 호출 0, 렌더 전용). 정렬된 연결
-        # 상위 4편만 한 줄씩: 관계 칩 + 제목 링크 + 이유 1줄(CSS 말줄임). 전체
-        # 목록/이유는 아래 '같이 보면 좋은 논문' 이 담당한다. conns 는 위
-        # `if conns:` 가드로 최소 1편 보장되므로 항상 렌더된다.
-        landscape_items = []
-        for c in conns[:4]:
-            lslug = c.get("slug", "")
-            lrel = c.get("relation", "alternative")
-            ltitle = slug_titles.get(lslug, lslug)
-            llabel = type_labels.get(lrel, lrel)
-            lreason = c.get("reason", "")
-            if not lreason:
-                _lrs = c.get("reasons") or []
-                lreason = _lrs[0].get("reason", "") if _lrs else ""
-            lreason_html = (f'<span class="landscape-reason">{esc(lreason)}</span>'
-                            if lreason else "")
-            landscape_items.append(
-                f'<div class="landscape-item">'
-                f'<span class="conn-rel-badge {esc(lrel)}">{esc(llabel)}</span>'
-                f'<a class="landscape-title" href="../{esc(lslug)}/index.html"'
-                f'{_purl_attr(lslug)} title="{esc(ltitle)}">{esc(ltitle)}</a>'
-                f'{lreason_html}'
-                f'</div>')
-        body_parts.insert(minibox_idx,
-            '<div class="landscape-box">'
-            '<h2>\U0001F9ED 연구 지형</h2>'
-            + "".join(landscape_items)
-            + '</div>')
 
         # num → slug map for turning paper-number references inside reason text
         # into links. LLM-written reasons reference papers two ways: bracketed
