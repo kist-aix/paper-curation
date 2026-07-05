@@ -367,6 +367,86 @@ def _interleave(body_html, figs):
     return "".join(out)
 
 
+def _node_label(p):
+    """3~5단어짜리 노드 라벨. LLM 호출 없이 제목/essence 키워드에서 축약."""
+    title = (p.get("title") or "").lower()
+    essence = (pidx().get(p.get("slug", ""), {}).get("essence") or "")
+    rules = [
+        (("emerg", "collective"), "위기 집단 반응"),
+        (("mobility", "link"), "이동성 링크 예측"),
+        (("connections", "human dynamics"), "동역학-네트워크 연결"),
+        (("emergency response",), "재난 대응 네트워크"),
+        (("big data",), "빅데이터 통계물리"),
+        (("impact", "mobility"), "이동성이 네트워크 형성"),
+        (("dominant attributes",), "지배 속성 커뮤니티"),
+        (("citation", "impact"), "인용 영향력 예측"),
+        (("poisson",), "인기도 동역학 모델"),
+        (("scientific impact",), "과학 영향력 정량화"),
+        (("failure",), "실패와 경력 경로"),
+        (("team",), "팀 규모와 혁신"),
+        (("creativity",), "창의성 확산"),
+        (("artificial intelligence",), "AI 과학 발견"),
+        (("large language",), "LLM 과학 발견"),
+    ]
+    for keys, lab in rules:
+        if all(k in title for k in keys):
+            return lab
+    src = re.sub(r"본 (?:논문|연구|박사학위 논문)은\s*", "", essence).strip()
+    src = re.sub(r"[,.;:()\\[\\]“”\"']", " ", src)
+    toks = re.findall(r"[가-힣A-Za-z0-9+-]+", src)
+    stop = {"활용하여", "분석한다", "제시한다", "규명한다", "보여준다", "논문은", "연구는", "통해"}
+    toks = [t for t in toks if t not in stop and len(t) > 1][:5]
+    return " ".join(toks[:5]) if toks else " ".join(re.findall(r"[A-Za-z0-9+-]+", p.get("title", ""))[:5])
+
+
+def make_connection_map(core, related):
+    """모바일 세로 스크롤용 인터랙티브 논문 연결지도."""
+    if not core:
+        return ""
+    conns = all_connections()
+    rel_by_core = {c["slug"]: [] for c in core}
+    placed = set()
+    for r in related:
+        for c in core:
+            edges = conns.get(c["slug"], [])
+            if any(e.get("slug") == r["slug"] for e in edges):
+                rel_by_core[c["slug"]].append(r)
+                placed.add(r["slug"])
+                break
+    for i, r in enumerate([r for r in related if r["slug"] not in placed]):
+        rel_by_core[core[i % len(core)]["slug"]].append(r)
+
+    def core_node(c, idx):
+        yr = H.escape(str(c.get("year") or ""))
+        lab = H.escape(_node_label(c))
+        ttl = H.escape(c["title"])
+        link = H.escape(c["link"])
+        branches = "".join(branch_node(r) for r in rel_by_core.get(c["slug"], [])[:3])
+        return (f'<div class="flow-item">'
+                f'<details class="flow-node core-node" open><summary>'
+                f'<span class="flow-index">{idx}</span><span class="flow-year">{yr}</span>'
+                f'<span class="flow-label">{lab}</span><span class="flow-title">{ttl}</span>'
+                f'</summary><div class="flow-detail"><a href="{link}" target="_blank" rel="noopener">논문 링크 열기</a></div></details>'
+                f'<div class="flow-branches">{branches}</div></div>')
+
+    def branch_node(r):
+        yr = H.escape(str(r.get("year") or ""))
+        lab = H.escape(_node_label(r))
+        ttl = H.escape(r["title"])
+        link = H.escape(r["link"])
+        rel = H.escape(REL_KO.get(r.get("relation"), r.get("relation", "related")))
+        reason = H.escape((r.get("reason") or "")[:180])
+        return (f'<details class="flow-node branch-node"><summary>'
+                f'<span class="branch-rel">{rel}</span><span class="flow-year mini">{yr}</span>'
+                f'<span class="flow-label">{lab}</span></summary>'
+                f'<div class="flow-detail"><b>{ttl}</b><br>{reason}<br><a href="{link}" target="_blank" rel="noopener">관련 논문 열기</a></div></details>')
+
+    items = "".join(core_node(c, i + 1) for i, c in enumerate(core))
+    return (f'<section class="connection-map"><h2>🧭 논문 연결 지도</h2>'
+            f'<p class="map-note">Dashun Wang 핵심 논문을 시간순 세로 축으로 놓고, 같이 보면 좋은 논문을 가지처럼 붙였다. 각 노드는 탭해서 연결 사유와 논문 링크를 열 수 있다.</p>'
+            f'<div class="flow-wrap">{items}</div></section>')
+
+
 def make_html(course, lecture, report_md, core, related, web_sources, total):
     obj = "".join(f"<li>{H.escape(o)}</li>" for o in lecture["objectives"])
     core_html = "".join(
@@ -381,6 +461,7 @@ def make_html(course, lecture, report_md, core, related, web_sources, total):
         f'<li><a href="{H.escape(u)}" target="_blank" rel="noopener">🌐 {H.escape(t[:90])}</a></li>'
         for t, u in web_sources)
     web_block = f'<div class="card"><h3>🌐 웹 참고문헌</h3><ol>{web_html}</ol></div>' if web_html else ""
+    conn_map = make_connection_map(core, related)
     body = _interleave(md_to_html(report_md), gather_figures(core))
     return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -404,6 +485,27 @@ p{{margin:.6rem 0}} a{{color:#7c3aed}}
 .paper-fig figcaption{{font-size:.8rem;color:#777;margin-top:.45rem;font-style:italic;line-height:1.5}}
 .fig-gallery{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.1rem;margin:1.3rem 0}}
 .fig-gallery .paper-fig{{margin:0}}
+.connection-map{{margin:2.4rem 0 1.2rem}}
+.map-note{{font-size:.88rem;color:#666;background:#fff;border-left:4px solid #7c3aed;border-radius:8px;padding:.75rem .9rem}}
+.flow-wrap{{position:relative;margin:1.2rem 0 0;padding-left:1.2rem}}
+.flow-wrap:before{{content:"";position:absolute;left:2.05rem;top:.4rem;bottom:.4rem;width:3px;background:linear-gradient(#7c3aed,#f97316);border-radius:999px;opacity:.35}}
+.flow-item{{position:relative;margin:0 0 1.25rem 0;padding-left:2.1rem}}
+.flow-index{{position:absolute;left:-2.35rem;top:.72rem;width:1.7rem;height:1.7rem;border-radius:50%;background:#7c3aed;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;box-shadow:0 0 0 5px #fbfbfd}}
+.flow-node{{border-radius:16px;background:#fff;border:1px solid #eadcff;box-shadow:0 1px 8px rgba(76,29,149,.06);overflow:visible}}
+.flow-node summary{{list-style:none;cursor:pointer;position:relative;padding:1.15rem 1rem .85rem 1rem;display:block}}
+.flow-node summary::-webkit-details-marker{{display:none}}
+.flow-year{{position:absolute;top:-.72rem;left:.85rem;background:#111827;color:#fff;border-radius:999px;padding:.12rem .58rem;font-weight:900;font-size:.88rem;letter-spacing:.01em;box-shadow:0 2px 8px rgba(0,0,0,.16)}}
+.flow-year.mini{{position:static;display:inline-block;margin-left:.35rem;background:#6b7280;font-size:.74rem;vertical-align:middle}}
+.flow-label{{display:block;font-size:1.02rem;font-weight:900;color:#1f2937;line-height:1.35;margin-top:.15rem}}
+.flow-title{{display:block;color:#6b7280;font-size:.78rem;line-height:1.35;margin-top:.2rem}}
+.flow-detail{{border-top:1px solid #f2e8ff;padding:.65rem 1rem .9rem;color:#555;font-size:.83rem;line-height:1.55}}
+.flow-detail a{{font-weight:700}}
+.flow-branches{{margin:.55rem 0 0 1rem;padding-left:1rem;border-left:2px dashed #ddd}}
+.branch-node{{margin:.55rem 0;border-color:#eee;background:#fffdf7;box-shadow:none}}
+.branch-node summary{{padding:.7rem .85rem}}
+.branch-node .flow-label{{font-size:.9rem;font-weight:800;color:#4b5563;margin-top:.35rem}}
+.branch-rel{{display:inline-block;background:#f3e8ff;color:#6b21a8;font-size:.7rem;font-weight:800;border-radius:999px;padding:.08rem .48rem}}
+@media (max-width:620px){{body{{padding:1.1rem .75rem}}.flow-wrap{{padding-left:.6rem}}.flow-wrap:before{{left:1.35rem}}.flow-item{{padding-left:1.55rem}}.flow-index{{left:-1.8rem}}.flow-title{{font-size:.74rem}}}}
 </style>
 {MATHJAX_HEAD}
 </head><body>
@@ -414,6 +516,7 @@ p{{margin:.6rem 0}} a{{color:#7c3aed}}
 <div class="card"><h3>🔗 함께 보는 관련 연구 ({len(related)}편)</h3><ul>{rel_html}</ul></div>
 {body}
 {web_block}
+{conn_map}
 <div class="foot">Dashun Wang 연구 흐름 따라잡기 · Deeper Research 자동 다이제스트 · Paper Curation</div>
 </body></html>"""
 
