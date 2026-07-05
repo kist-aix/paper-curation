@@ -24,6 +24,9 @@ requests
 pyzotero
 opendataloader-pdf
 
+# --- Audio Overview CLI fallback (generate_audio.py: PCM → MP3) ---
+lameenc
+
 # --- Topic modeling / classification (also required in the py312 env) ---
 numpy
 scikit-learn
