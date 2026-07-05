@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""자율 강의 다이제스트 엔진 — Dashun Wang 커리큘럼의 한 강을 처리한다.
+"""자율 강의 다이제스트 엔진 — Dashun Wang 커리큘럼의 한 강을 Deeper Research 로 처리.
 
-강 1개 → 핵심 논문 + 관련 논문(연결 1-hop) 근거 수집 → Gemini 심화 리포트(방법론·메시지 축)
-→ 50분 Audio Overview(2인·전문가·학술·한국어) → 자립형 HTML → 제N강·오늘의 학습목표를 명시해
-이메일 발송(다중 수신자) → 원장(curriculum.json)에 done 기록.
+강 1개 → 핵심 논문(내 코퍼스 우선) + 연결 그래프 1-hop 관련 논문 + **웹 검색(google_search)**
+→ Gemini 심화 리포트(방법론·계보·"당시엔 X였으나 후대엔 Y로 밝혀짐" 류 수정 서사, 인용/링크)
+→ 50분(≥40분) Audio Overview(2인·전문가·학술·한국어) → 링크·관련연구·참고문헌 갖춘 HTML
+→ 이메일(다중 수신자, 제N강·오늘의 학습목표 명시) → 원장(curriculum.json)에 done.
 
-맥미니에서 launchd 로 06:00 / 16:00 (+ 최초 킥오프 23:00) 발화:
-    python pipeline/agent_lecture_digest.py --due        # 지금 시각 기준 다음 예정 강 1개
-    python pipeline/agent_lecture_digest.py --lecture 1  # 특정 강 강제
-    python pipeline/agent_lecture_digest.py --lecture 1 --no-audio   # 오디오 없이 리포트+메일만(검증)
+맥미니 launchd:
+    python pipeline/agent_lecture_digest.py --due          # 지금 시각 기준 다음 예정 강
+    python pipeline/agent_lecture_digest.py --lecture 1     # 특정 강 강제
+    python pipeline/agent_lecture_digest.py --lecture 1 --no-audio   # 리포트+메일만(검증)
 """
 import argparse, json, os, re, sys, base64, urllib.request, urllib.error
 import html as H
 from pathlib import Path
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PIPE = Path(__file__).resolve().parent
 sys.path.insert(0, str(PIPE))
@@ -29,12 +30,18 @@ import lameenc  # noqa: E402
 
 PAPERS = Path(PAPERS_DIR)
 DOCS = Path(DOCS_DIR)
-# 산출물·원장은 맥미니 전용 디렉토리에 누적 (docs/ 밖 → pc_sync·git 과 분리, 에이전트 소유).
 AGENT_DIR = Path(os.environ.get("PC_AGENT_DIR", str(Path.home() / "pc_agent" / "dashun_wang")))
 LEDGER = AGENT_DIR / "curriculum.json"
 OUTDIR = AGENT_DIR / "lectures"
 REPORT_MODEL = "gemini-3.1-pro-preview"
 TTS_WORKERS = 4
+MATHJAX_HEAD = (
+    "<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\\\(','\\\\)']],"
+    "displayMath:[['$$','$$'],['\\\\[','\\\\]']]},"
+    "options:{skipHtmlTags:['script','noscript','style','textarea','pre','code']}};</script>\n"
+    '<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>'
+)
+
 
 def load_ledger():
     return json.loads(LEDGER.read_text(encoding="utf-8"))
@@ -44,39 +51,63 @@ def save_ledger(led):
     LEDGER.write_text(json.dumps(led, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-# ── 근거 수집 ──────────────────────────────────────────────────────────────
+# ── 코퍼스 인덱스 / 링크 ─────────────────────────────────────────────────────
+_PIDX = None
+def pidx():
+    global _PIDX
+    if _PIDX is None:
+        d = json.loads((PAPERS / "_papers_index.json").read_text(encoding="utf-8"))
+        _PIDX = {e["slug"]: e for e in d if e.get("slug")}
+    return _PIDX
+
+
+def _year(e):
+    y = e.get("year")
+    if isinstance(y, int) or (isinstance(y, str) and str(y).isdigit()):
+        return int(y)
+    dt = (e.get("date") or "")[:4]
+    return int(dt) if dt.isdigit() else None
+
+
+def paper_link(slug):
+    e = pidx().get(slug, {})
+    doi = (e.get("doi") or "").strip()
+    if doi and doi.lower() not in ("n/a", "미제공", "-", ""):
+        return "https://doi.org/" + doi.lstrip("https://doi.org/")
+    title = e.get("title") or slug.split("_", 1)[-1].replace("_", " ")
+    return "https://scholar.google.com/scholar?q=" + urllib.request.quote(title)
+
+
 def _find_dir(slug):
     if (PAPERS / slug).is_dir():
         return PAPERS / slug
+    pre = slug.split("_")[0] + "_"
     for d in PAPERS.iterdir():
-        if d.is_dir() and d.name.startswith(slug.split("_")[0] + "_"):
+        if d.is_dir() and d.name.startswith(pre):
             return d
     return None
 
 
-def read_review(slug, cap=2800):
+def read_review(slug, cap=3000):
     d = _find_dir(slug)
-    if not d:
-        return ""
-    rp = d / "review.md"
-    if not rp.exists():
-        return ""
-    t = rp.read_text(encoding="utf-8")
-    while t.startswith("---"):                      # strip YAML frontmatter
+    if not d or not (d / "review.md").exists():
+        return pidx().get(slug, {}).get("essence", "") or ""
+    t = (d / "review.md").read_text(encoding="utf-8")
+    while t.startswith("---"):
         lines = t.split("\n")
         end = next((i for i, l in enumerate(lines[1:], 1) if l.strip() == "---"), None)
         if end is None:
             break
         t = "\n".join(lines[end + 1:]).lstrip("\n")
-    t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)       # drop image embeds
+    t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
     return t.strip()[:cap]
 
 
-_CONN_CACHE = None
+_CONN = None
 def all_connections():
-    global _CONN_CACHE
-    if _CONN_CACHE is not None:
-        return _CONN_CACHE
+    global _CONN
+    if _CONN is not None:
+        return _CONN
     merged = {}
     for cp in DOCS.glob("*/_paper_connections.json"):
         try:
@@ -84,86 +115,113 @@ def all_connections():
         except Exception:
             continue
         for slug, edges in conn.items():
-            merged.setdefault(slug, [])
-            seen = {(e.get("slug"), e.get("relation")) for e in merged[slug]}
+            b = merged.setdefault(slug, [])
+            seen = {(e.get("slug"), e.get("relation")) for e in b}
             for e in edges if isinstance(edges, list) else []:
                 k = (e.get("slug"), e.get("relation"))
                 if k not in seen:
-                    merged[slug].append(e); seen.add(k)
-    _CONN_CACHE = merged
+                    b.append(e); seen.add(k)
+    _CONN = merged
     return merged
 
 
-def title_of(slug):
-    d = _find_dir(slug)
-    if d:
-        rp = d / "review.md"
-        if rp.exists():
-            m = re.search(r'(?m)^title:\s*"?(.+?)"?\s*$', rp.read_text(encoding="utf-8")[:2000])
-            if m:
-                return m.group(1)
-    return slug.split("_", 1)[-1].replace("_", " ")
+REL_KO = {"foundation": "기반", "extension": "후속·확장", "alternative": "대안",
+          "application": "응용", "counterpoint": "반론·수정"}
 
 
-def gather_evidence(lecture, related_per_paper=2, related_cap=8):
+def gather_evidence(lecture, related_cap=10):
+    """반환: (evidence_text, core[list], related[list]). core/related 는 HTML 링크용 메타 포함."""
+    idx = pidx()
+    core = []
+    for p in lecture["papers"]:
+        e = idx.get(p["slug"], {})
+        core.append({"slug": p["slug"], "title": p["title"], "year": p.get("year") or _year(e),
+                     "link": paper_link(p["slug"]), "review": read_review(p["slug"], 3000)})
+    core_slugs = {c["slug"] for c in core}
+
+    # 연결 그래프 1-hop 확장 — 빈도 + 반론/대안 우선
     conns = all_connections()
-    core = lecture["papers"]
-    core_slugs = {p["slug"] for p in core}
-    blocks = ["## 핵심 논문 (이 강의 대상)"]
-    for p in core:
-        rv = read_review(p["slug"])
-        blocks.append(f"### ({p['year']}) {p['title']}\n{rv or '(리뷰 없음)'}")
-    # related 1-hop
-    rel, seen = [], set()
-    for p in core:
-        for e in (conns.get(p["slug"]) or [])[:related_per_paper]:
+    score = {}
+    for c in core:
+        for e in conns.get(c["slug"], []):
             rs = e.get("slug")
-            if not rs or rs in core_slugs or rs in seen:
+            if not rs or rs in core_slugs:
                 continue
-            seen.add(rs)
-            rel.append(f"- [{e.get('relation','관련')}] {title_of(rs)} — {e.get('reason','')}")
-            if len(rel) >= related_cap:
-                break
-        if len(rel) >= related_cap:
-            break
-    if rel:
-        blocks.append("## 방법론적으로 연결된 관련 논문 (맥락)\n" + "\n".join(rel))
-    return "\n\n".join(blocks)
+            boost = 1.0 + (0.6 if e.get("relation") in ("counterpoint", "alternative") else 0)
+            cur = score.get(rs)
+            if not cur or boost > cur["boost"]:
+                score[rs] = {"boost": boost, "relation": e.get("relation", "related"), "reason": e.get("reason", "")}
+            score[rs]["count"] = score[rs].get("count", 0) + 1
+    ranked = sorted(score.items(), key=lambda kv: (kv[1]["count"] + kv[1]["boost"]), reverse=True)[:related_cap]
+    related = []
+    for rs, meta in ranked:
+        e = idx.get(rs, {})
+        related.append({"slug": rs, "title": e.get("title", rs.split("_", 1)[-1].replace("_", " ")),
+                        "year": _year(e), "link": paper_link(rs), "relation": meta["relation"],
+                        "reason": meta["reason"], "essence": (e.get("essence") or "")[:700]})
+
+    # LLM 근거 텍스트
+    blocks = ["## 핵심 논문 (내 코퍼스 — 최우선 근거)"]
+    for c in core:
+        blocks.append(f"### ({c['year']}) {c['title']}\n{c['review'] or '(요약 없음)'}")
+    if related:
+        blocks.append("## 연결 그래프 관련 논문 (내 코퍼스, 방법론적 연결)")
+        for r in related:
+            blocks.append(f"- [{REL_KO.get(r['relation'], r['relation'])}] ({r['year']}) {r['title']} — {r['reason']}\n  요지: {r['essence']}")
+    return "\n\n".join(blocks), core, related
 
 
-# ── 리포트 합성 (심화 Deeper) ───────────────────────────────────────────────
+# ── Deeper Research 리포트 합성 (코퍼스 우선 + 웹 검색) ──────────────────────
+def extract_web_sources(resp):
+    out, seen = [], set()
+    try:
+        gm = resp.candidates[0].grounding_metadata
+        for ch in (gm.grounding_chunks or []):
+            w = getattr(ch, "web", None)
+            uri = getattr(w, "uri", None) if w else None
+            if uri and uri not in seen:
+                seen.add(uri)
+                out.append((getattr(w, "title", "") or uri, uri))
+    except Exception:
+        pass
+    return out
+
+
 def synthesize_report(course, lecture, evidence, client):
     obj = "\n".join(f"  {i+1}. {o}" for i, o in enumerate(lecture["objectives"]))
     plist = ", ".join(f"({p['year']}) {p['title']}" for p in lecture["papers"])
     prompt = (
-        f"당신은 '{course}' 심화 강의를 집필하는 전문 연구자입니다. 이것은 **제{lecture['lecture']}강: {lecture['title']}** 입니다.\n\n"
-        f"오늘의 학습목표:\n{obj}\n\n"
-        f"이 강이 다루는 논문: {plist}\n\n"
-        "아래 근거(핵심 논문 리뷰 + 관련 논문 맥락)를 바탕으로 심층 한국어 강의 리포트를 작성하세요.\n"
-        "규칙:\n"
+        f"당신은 '{course}' 심화 강의를 집필하는 전문 연구자입니다. **제{lecture['lecture']}강: {lecture['title']}**.\n\n"
+        f"오늘의 학습목표:\n{obj}\n\n다루는 핵심 논문: {plist}\n\n"
+        "이것은 **Deeper Research** 입니다. 아래 근거(내 코퍼스의 핵심 논문 + 연결 그래프 관련 논문)를 **최우선**으로 삼되, "
+        "**웹 검색을 적극 활용**해 관련·후속·반박 연구를 함께 소개하세요.\n\n"
+        "작성 지침:\n"
         "- 학습목표 3개를 모두 충실히 충족.\n"
-        "- 논문을 단순 나열하지 말고 **연구 방법론·핵심 메시지 축**으로 엮고 연구 계보를 짚을 것.\n"
-        "- 전문가 청중, 학술적 톤. 논문을 언급할 때 (제목, 연도)를 본문에 자연스럽게 명시.\n"
-        "- 마크다운(## 소제목, 단락). 서론 → 방법론·주제별 본론(각 논문의 문제의식·방법·핵심 결과와 수치·의의를 구체적으로) → 종합·시사점 구조. 각 논문을 충분히 깊게 다뤄 **최소 18,000자 이상**의 상세한 심층 강의로 작성(서둘러 마무리하지 말 것).\n"
-        "- 메타 설명·머리말 없이 곧바로 강의 본문으로 시작.\n\n"
-        f"=== 근거 ===\n{evidence}"
+        "- 논문 단순 나열 금지. **연구 방법론·핵심 메시지 축**으로 엮고 연구 계보를 짚을 것.\n"
+        "- **계보·수정 서사 필수**: '당시엔 X로 여겨졌으나 후대 연구에서 Y로 밝혀졌다', '이 결과는 이후 ~에 의해 반박·정교화됐다' 같은 흐름을 웹·연결 논문으로 보강.\n"
+        "- 인용: 코퍼스 논문은 (제목, 연도)로 본문에 명시. **웹 출처는 반드시 마크다운 링크 [출처 제목](URL)** 로 인라인 표기.\n"
+        "- 전문가 청중, 학술적 톤. 마크다운(## 소제목, 단락). 각 논문의 문제의식·방법·핵심 결과(수치)·의의를 구체적으로. **최소 18,000자 이상**의 상세 강의(서둘러 마무리 금지).\n"
+        "- 메타·머리말 없이 곧바로 강의 본문으로 시작.\n\n"
+        f"=== 근거 (코퍼스) ===\n{evidence}"
     )
-    resp = client.models.generate_content(
-        model=REPORT_MODEL, contents=prompt,
-        config=types.GenerateContentConfig(temperature=0.6, max_output_tokens=32768))
-    return (resp.text or "").strip()
+    cfg = types.GenerateContentConfig(
+        temperature=0.6, max_output_tokens=40000,
+        tools=[types.Tool(google_search=types.GoogleSearch())])
+    resp = client.models.generate_content(model=REPORT_MODEL, contents=prompt, config=cfg)
+    report = (resp.text or "").strip()
+    return report, extract_web_sources(resp)
 
 
-# ── 오디오 (50분·2인·전문가·학술·한국어) ─────────────────────────────────────
+# ── 오디오 (2인·전문가·학술·한국어, ≥40분 목표) ─────────────────────────────
 def make_audio(report_text, evidence, client, minutes=50):
     lang, speakers = "ko", 2
     roles = ROLES[lang][speakers]
-    direction = ("핵심 논문들을 방법론·핵심 메시지로 엮어 연구 계보와 통찰을 심층 설명한다. "
-                 "각 논문의 문제의식·방법·핵심 결과를 구체적으로 다루고, 분량을 끝까지 채우며 서둘러 마무리하지 말 것.")
-    source = report_text + (("\n\n---\n[상세 근거 — 오디오 심화용]\n" + evidence[:22000]) if evidence else "")
+    direction = ("핵심 논문들을 방법론·핵심 메시지로 엮어 연구 계보와 통찰을 심층 설명하고, "
+                 "당시의 통념과 후대의 수정·반박까지 이야기로 짚는다. 분량을 끝까지 채우며 서둘러 마무리하지 말 것.")
+    source = report_text + (("\n\n---\n[상세 근거]\n" + evidence[:40000]) if evidence else "")
     prompt = build_prompt(source, [], speakers, lang, "expert", minutes, "academic", "", direction)
     resp = client.models.generate_content(
-        model="gemini-3.1-pro-preview", contents=prompt,
+        model=REPORT_MODEL, contents=prompt,
         config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=65536))
     script = (resp.text or "").strip()
     if not script:
@@ -180,69 +238,94 @@ def make_audio(report_text, evidence, client, minutes=50):
     with ThreadPoolExecutor(max_workers=TTS_WORKERS) as ex:
         futs = {ex.submit(tts_call, client, get(i), cfg): i for i in range(len(chunks))}
         done = 0
-        for fut in futs:
-            pass
-        from concurrent.futures import as_completed
         for fut in as_completed(futs):
-            i = futs[fut]; parts[i] = fut.result(); done += 1
+            parts[futs[fut]] = fut.result(); done += 1
             print(f"      [{done}/{len(chunks)}]", flush=True)
     pcm = concat_pcm([p for p in parts if p])
     enc = lameenc.Encoder(); enc.set_bit_rate(64); enc.set_in_sample_rate(SAMPLE_RATE); enc.set_channels(1); enc.set_quality(2)
     mp3 = enc.encode(pcm) + enc.flush()
-    dur_min = len(pcm) / 2 / SAMPLE_RATE / 60
-    return mp3, script, dur_min
+    return mp3, script, len(pcm) / 2 / SAMPLE_RATE / 60
 
 
-# ── HTML ────────────────────────────────────────────────────────────────────
+# ── HTML (링크·관련연구·참고문헌 정상) ───────────────────────────────────────
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+
+
 def md_to_html(md):
-    out = []
-    for block in re.split(r"\n\s*\n", md):
-        b = block.strip()
-        if not b:
-            continue
-        if b.startswith("### "):
-            out.append(f"<h3>{H.escape(b[4:])}</h3>")
-        elif b.startswith("## "):
-            out.append(f"<h2>{H.escape(b[3:])}</h2>")
-        elif b.startswith("# "):
-            out.append(f"<h2>{H.escape(b[2:])}</h2>")
+    md = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", md)          # 이미지 마크업 제거
+    out, para = [], []
+
+    def flush():
+        if not para:
+            return
+        t = H.escape("\n".join(para)).replace("\n", "<br>")
+        t = _LINK_RE.sub(lambda m: f'<a href="{m.group(2)}" target="_blank" rel="noopener">{m.group(1)}</a>', t)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+        out.append(f"<p>{t}</p>")
+        para.clear()
+
+    for line in md.split("\n"):
+        s = line.strip()
+        if not s:
+            flush(); continue
+        m = re.match(r"(#{1,3})\s+(.*)", s)
+        if m:
+            flush()
+            lvl = "h2" if len(m.group(1)) <= 2 else "h3"
+            out.append(f"<{lvl}>{H.escape(m.group(2))}</{lvl}>")
         else:
-            t = H.escape(b).replace("\n", "<br>")
-            t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
-            out.append(f"<p>{t}</p>")
+            para.append(line)
+    flush()
     return "\n".join(out)
 
 
-def make_html(course, lecture, report_md):
+def make_html(course, lecture, report_md, core, related, web_sources, total):
     obj = "".join(f"<li>{H.escape(o)}</li>" for o in lecture["objectives"])
-    papers = "".join(f"<li>({H.escape(str(p['year']))}) {H.escape(p['title'])}</li>" for p in lecture["papers"])
+    core_html = "".join(
+        f'<li><a href="{H.escape(c["link"])}" target="_blank" rel="noopener">({c["year"]}) {H.escape(c["title"])}</a></li>'
+        for c in core)
+    rel_html = "".join(
+        f'<li><span class="rel">{H.escape(REL_KO.get(r["relation"], r["relation"]))}</span> '
+        f'<a href="{H.escape(r["link"])}" target="_blank" rel="noopener">({r["year"]}) {H.escape(r["title"])}</a>'
+        f'<div class="reason">{H.escape(r["reason"])}</div></li>'
+        for r in related) or "<li>(없음)</li>"
+    web_html = "".join(
+        f'<li><a href="{H.escape(u)}" target="_blank" rel="noopener">🌐 {H.escape(t[:90])}</a></li>'
+        for t, u in web_sources)
+    web_block = f'<div class="card"><h3>🌐 웹 참고문헌</h3><ol>{web_html}</ol></div>' if web_html else ""
     body = md_to_html(report_md)
     return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>제{lecture['lecture']}강 — {H.escape(lecture['title'])}</title>
 <style>
-body{{font-family:'KoPub Dotum',-apple-system,'Noto Sans KR',sans-serif;line-height:1.8;color:#222;max-width:820px;margin:0 auto;padding:2rem 1.4rem;background:#fbfbfd}}
-.hero{{background:linear-gradient(135deg,#1a0d2a,#3a1a5c 55%,#6b21a8);color:#fff;border-radius:16px;padding:1.8rem 1.6rem;margin-bottom:1.6rem}}
-.hero .kicker{{opacity:.8;font-size:.85rem;font-weight:600}}
-.hero h1{{font-size:1.35rem;margin:.35rem 0 .2rem}}
-.card{{background:#fff;border:1px solid #eee;border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1.3rem}}
-.card h3{{font-size:.95rem;color:#6B21A8;margin-bottom:.5rem}}
-.card ul{{margin:0 0 0 1.1rem}} .card li{{margin:.2rem 0}}
-h2{{font-size:1.12rem;color:#6B21A8;margin:1.6rem 0 .6rem;border-bottom:1px solid #eee;padding-bottom:.3rem}}
-h3{{font-size:1rem;margin:1.1rem 0 .4rem}}
-p{{margin:.6rem 0}}
+body{{font-family:'KoPub Dotum',-apple-system,'Noto Sans KR',sans-serif;line-height:1.85;color:#222;max-width:860px;margin:0 auto;padding:2rem 1.4rem;background:#fbfbfd}}
+.hero{{background:linear-gradient(135deg,#1a0d2a,#3a1a5c 55%,#6b21a8);color:#fff;border-radius:16px;padding:1.9rem 1.7rem;margin-bottom:1.6rem}}
+.hero .kicker{{opacity:.82;font-size:.85rem;font-weight:600}}
+.hero h1{{font-size:1.4rem;margin:.35rem 0 .25rem}}
+.card{{background:#fff;border:1px solid #eee;border-radius:12px;padding:1.1rem 1.35rem;margin-bottom:1.3rem}}
+.card h3{{font-size:.95rem;color:#6B21A8;margin-bottom:.55rem}}
+.card ul,.card ol{{margin:0 0 0 1.15rem}} .card li{{margin:.35rem 0}}
+.rel{{display:inline-block;font-size:.72rem;font-weight:700;color:#6B21A8;background:#f3e8ff;border-radius:999px;padding:.05rem .5rem;margin-right:.35rem}}
+.reason{{font-size:.85rem;color:#666;margin:.15rem 0 .2rem}}
+h2{{font-size:1.14rem;color:#6B21A8;margin:1.7rem 0 .6rem;border-bottom:1px solid #eee;padding-bottom:.3rem}}
+h3{{font-size:1.02rem;margin:1.1rem 0 .4rem}}
+p{{margin:.6rem 0}} a{{color:#7c3aed}}
 .foot{{color:#999;font-size:.82rem;border-top:1px solid #eee;margin-top:2rem;padding-top:1rem}}
-</style></head><body>
-<div class="hero"><div class="kicker">{H.escape(course)} · 제{lecture['lecture']}강 / {{TOTAL}}</div>
+</style>
+{MATHJAX_HEAD}
+</head><body>
+<div class="hero"><div class="kicker">{H.escape(course)} · 제{lecture['lecture']}강 / {total}</div>
 <h1>{H.escape(lecture['title'])}</h1><div style="opacity:.85;font-size:.9rem">{H.escape(lecture['scheduled_at'])}</div></div>
 <div class="card"><h3>🎯 오늘의 학습목표</h3><ul>{obj}</ul></div>
-<div class="card"><h3>📄 다루는 논문 ({len(lecture['papers'])}편)</h3><ul>{papers}</ul></div>
+<div class="card"><h3>📄 다루는 논문 ({len(core)}편, 내 코퍼스)</h3><ul>{core_html}</ul></div>
+<div class="card"><h3>🔗 함께 보는 관련 연구 ({len(related)}편)</h3><ul>{rel_html}</ul></div>
 {body}
-<div class="foot">Dashun Wang 연구 흐름 따라잡기 · 자동 생성 다이제스트 · Paper Curation</div>
+{web_block}
+<div class="foot">Dashun Wang 연구 흐름 따라잡기 · Deeper Research 자동 다이제스트 · Paper Curation</div>
 </body></html>"""
 
 
-# ── 이메일 (Resend, 다중 수신자, UA로 CF 1010 우회) ──────────────────────────
+# ── 이메일 (Resend, 다중 수신자) ─────────────────────────────────────────────
 def send_email(recipients, subject, html_body, attachments):
     resend = os.environ.get("RESEND_API_KEY", "")
     if not resend:
@@ -253,9 +336,7 @@ def send_email(recipients, subject, html_body, attachments):
         lk = json.loads(p.read_text(encoding="utf-8"))
     payload = {
         "from": lk.get("audio_from") or "Paper Curation <onboarding@resend.dev>",
-        "to": recipients,
-        "subject": subject,
-        "html": html_body,
+        "to": recipients, "subject": subject, "html": html_body,
         "attachments": [{"filename": fn, "content": base64.b64encode(data).decode()} for fn, data in attachments],
     }
     if lk.get("audio_reply_to"):
@@ -288,64 +369,57 @@ def pick_lecture(led, args):
 
 
 def run_lecture(L, led, args):
-    total = led["total"]
-    course = led["course"]
-    recipients = led["recipients"]
-    print(f"[agent] 제{L['lecture']}강/{total} · {L['title']} · {len(L['papers'])}편")
+    total, course, recipients = led["total"], led["course"], led["recipients"]
+    print(f"[agent] 제{L['lecture']}강/{total} · {L['title']} · 핵심 {len(L['papers'])}편")
     client = genai.Client(api_key=get_google_key())
 
-    print("  1) 근거 수집")
-    evidence = gather_evidence(L)
-    print(f"     근거 {len(evidence):,}자")
-    print("  2) 심화 리포트 합성")
-    report = synthesize_report(course, L, evidence, client)
+    print("  1) 근거 수집 (핵심 + 연결 그래프)")
+    evidence, core, related = gather_evidence(L)
+    print(f"     근거 {len(evidence):,}자 · 관련논문 {len(related)}편")
+    print("  2) Deeper Research 리포트 합성 (웹 검색 포함)")
+    report, web_sources = synthesize_report(course, L, evidence, client)
     if not report:
         sys.exit("리포트 합성 실패")
-    print(f"     리포트 {len(report):,}자")
+    print(f"     리포트 {len(report):,}자 · 웹 출처 {len(web_sources)}개")
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    html = make_html(course, L, report).replace("{TOTAL}", str(total))
-    html_path = OUTDIR / f"lecture_{L['lecture']:02d}.html"
-    html_path.write_text(html, encoding="utf-8")
+    tag = re.sub(r"[^가-힣A-Za-z0-9]+", "_", L["title"])[:30]
+    html = make_html(course, L, report, core, related, web_sources, total)
+    (OUTDIR / f"lecture_{L['lecture']:02d}.html").write_text(html, encoding="utf-8")
     (OUTDIR / f"lecture_{L['lecture']:02d}_report.md").write_text(report, encoding="utf-8")
 
-    attachments = [(f"제{L['lecture']}강_{re.sub(r'[^가-힣A-Za-z0-9]+','_',L['title'])[:30]}.html", html.encode("utf-8"))]
-    dur_txt = "리포트만"
+    attachments = [(f"제{L['lecture']}강_{tag}.html", html.encode("utf-8"))]
     if not args.no_audio:
-        print("  3) 50분 오디오 생성")
+        print("  3) 오디오 생성 (≥40분 목표)")
         mp3, script, dur = make_audio(report, evidence, client, minutes=led.get("audio", {}).get("minutes", 50))
-        mp3_path = OUTDIR / f"lecture_{L['lecture']:02d}.mp3"
-        mp3_path.write_bytes(mp3)
+        (OUTDIR / f"lecture_{L['lecture']:02d}.mp3").write_bytes(mp3)
         (OUTDIR / f"lecture_{L['lecture']:02d}_script.txt").write_text(script, encoding="utf-8")
         attachments.append((f"제{L['lecture']}강.mp3", mp3))
-        dur_txt = f"{len(mp3)/1048576:.1f}MB · ~{dur:.0f}분"
-        print(f"     {dur_txt}")
+        print(f"     {len(mp3)/1048576:.1f}MB · ~{dur:.0f}분")
 
     print("  4) 이메일 발송")
     obj_html = "".join(f"<li>{H.escape(o)}</li>" for o in L["objectives"])
-    plist_html = "".join(f"<li>({p['year']}) {H.escape(p['title'])}</li>" for p in L["papers"])
-    body = (f"<p><b>{H.escape(course)} · 제{L['lecture']}강 / {total}</b></p>"
-            f"<h2>{H.escape(L['title'])}</h2>"
+    core_html = "".join(f'<li><a href="{H.escape(c["link"])}">({c["year"]}) {H.escape(c["title"])}</a></li>' for c in core)
+    body = (f"<p><b>{H.escape(course)} · 제{L['lecture']}강 / {total}</b></p><h2>{H.escape(L['title'])}</h2>"
             f"<p><b>🎯 오늘의 학습목표</b></p><ul>{obj_html}</ul>"
-            f"<p><b>📄 다루는 논문 ({len(L['papers'])}편)</b></p><ul>{plist_html}</ul>"
-            f"<p>첨부: Deeper Research 리포트(HTML)" + ("" if args.no_audio else " + 50분 Audio Overview(MP3, 2인·전문가·학술)") + "</p>"
+            f"<p><b>📄 다루는 논문 ({len(core)}편)</b> · 🔗 관련 연구 {len(related)}편 · 🌐 웹 출처 {len(web_sources)}개</p><ul>{core_html}</ul>"
+            f"<p>첨부: Deeper Research 리포트(HTML, 링크·관련연구·참고문헌 포함)"
+            + ("" if args.no_audio else " + Audio Overview(MP3, 2인·전문가·학술)") + "</p>"
             f"<p style='color:#999;font-size:.85rem'>Paper Curation 자동 발송 · {L['scheduled_at']}</p>")
-    subject = f"[제{L['lecture']}강/{total}] {L['title']}"
-    st, resp = send_email(recipients, subject, body, attachments)
+    st, resp = send_email(recipients, f"[제{L['lecture']}강/{total}] {L['title']}", body, attachments)
     ok = st == 200
     print(f"     이메일 {'성공' if ok else '실패'} (status {st}) {resp}  → {recipients}")
 
     if ok and not args.no_audio:
-        L["status"] = "done"
-        L["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-        L["artifacts"] = {"html": str(html_path), "audio_mb": round(len(mp3) / 1048576, 1)}
+        L["status"] = "done"; L["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        L["artifacts"] = {"related": len(related), "web_sources": len(web_sources), "audio_mb": round(len(mp3) / 1048576, 1)}
         save_ledger(led)
         print(f"[agent] 제{L['lecture']}강 done 기록.")
     return ok
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Dashun Wang 강의 다이제스트 엔진")
+    ap = argparse.ArgumentParser(description="Dashun Wang 강의 다이제스트 엔진 (Deeper Research)")
     ap.add_argument("--lecture", type=int, help="특정 강 번호 강제")
     ap.add_argument("--due", action="store_true", help="지금 시각 기준 다음 예정 강 1개")
     ap.add_argument("--no-audio", action="store_true", help="오디오 생략(리포트+메일만, 검증용)")
