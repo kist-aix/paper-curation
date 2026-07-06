@@ -279,10 +279,21 @@ def speech_multi(roles: list[dict]) -> types.SpeechConfig:
 
 
 def tts_call(client: genai.Client, text: str, cfg: types.SpeechConfig) -> bytes:
-    resp = client.models.generate_content(
-        model=TTS_MODEL, contents=text,
-        config=types.GenerateContentConfig(response_modalities=["AUDIO"], speech_config=cfg))
-    return resp.candidates[0].content.parts[0].inline_data.data
+    last = None
+    for attempt in range(1, 3):
+        try:
+            resp = client.models.generate_content(
+                model=TTS_MODEL, contents=text,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"], speech_config=cfg,
+                    http_options=types.HttpOptions(timeout=180_000)))
+            return resp.candidates[0].content.parts[0].inline_data.data
+        except Exception as e:
+            last = e
+            if attempt == 2:
+                break
+            print(f"      TTS retry {attempt}/2: {type(e).__name__}", flush=True)
+    raise last
 
 
 def pool_synth(client, items, fn) -> list[bytes]:

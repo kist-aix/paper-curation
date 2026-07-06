@@ -40,7 +40,7 @@ AGENT_DIR = Path(os.environ.get("PC_AGENT_DIR", str(Path.home() / "pc_agent" / "
 LEDGER = AGENT_DIR / "curriculum.json"
 OUTDIR = AGENT_DIR / "lectures"
 REPORT_MODEL = "gemini-3.1-pro-preview"
-TTS_WORKERS = 4
+TTS_WORKERS = 2
 MATHJAX_HEAD = (
     "<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\\\(','\\\\)']],"
     "displayMath:[['$$','$$'],['\\\\[','\\\\]']]},"
