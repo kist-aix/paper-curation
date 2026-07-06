@@ -75,7 +75,7 @@ def parse_cpu_time(s: str) -> float:
 
 def digest_procs() -> list[Proc]:
     try:
-        cp = run(["/bin/ps", "-ww", "-axo", "pid=,ppid=,etimes=,time=,stat=,command="], timeout=15)
+        cp = run(["/bin/ps", "-ww", "-axo", "pid=,ppid=,etime=,time=,stat=,command="], timeout=15)
     except Exception as e:
         log(f"ps failed: {e}")
         return []
@@ -90,7 +90,7 @@ def digest_procs() -> list[Proc]:
         if len(parts) < 6:
             continue
         try:
-            out.append(Proc(int(parts[0]), int(parts[1]), int(parts[2]), parse_cpu_time(parts[3]), parts[4], parts[5]))
+            out.append(Proc(int(parts[0]), int(parts[1]), int(parse_cpu_time(parts[2])), parse_cpu_time(parts[3]), parts[4], parts[5]))
         except Exception:
             continue
     return sorted(out, key=lambda p: p.elapsed, reverse=True)
