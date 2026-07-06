@@ -63,12 +63,15 @@ def parse_cpu_time(s: str) -> float:
     if "-" in s:
         d, s = s.split("-", 1)
         days = int(d or 0)
-    parts = [int(x) for x in s.split(":")]
-    if len(parts) == 2:
-        h, m, sec = 0, parts[0], parts[1]
-    elif len(parts) == 3:
-        h, m, sec = parts
-    else:
+    raw = s.split(":")
+    try:
+        if len(raw) == 2:
+            h, m, sec = 0, int(raw[0]), float(raw[1])
+        elif len(raw) == 3:
+            h, m, sec = int(raw[0]), int(raw[1]), float(raw[2])
+        else:
+            return 0.0
+    except ValueError:
         return 0.0
     return float(days * 86400 + h * 3600 + m * 60 + sec)
 
