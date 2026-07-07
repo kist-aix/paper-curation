@@ -1095,6 +1095,82 @@ WRITE_REVIEW_SCHEMA_VERSION = "v1"
 WRITE_REVIEW_MODEL = os.environ.get("WRITE_REVIEW_MODEL", "claude-sonnet-5")
 
 
+_REVIEW_STR_TAGS = ("essence", "known", "gap", "why", "approach", "achievement",
+                    "how", "originality", "limitation", "verdict")
+_REVIEW_INT_TAGS = ("fig_essence", "fig_achievement", "fig_how",
+                    "novelty", "technical", "significance", "clarity", "overall")
+
+
+def _salvage_review_data(data):
+    """Recover a structured review when the model invoked `emit_review` but
+    dumped the XML-tagged review into one field instead of filling the schema.
+
+    Three observed claude-sonnet-5 failure modes:
+      A) everything crammed into `essence` (with a trailing `</invoke>`);
+      B) `essence` is clean but the rest is stuffed into `known`/`how`/
+         `originality` using antml `<parameter name="x">…</parameter>` syntax;
+      C) clean fields plus a `<parameter name="x">…</parameter>` blob (for
+         known/gap/why/approach) appended inside `essence`.
+    All render as empty sections + default 3/3/3/3/3 scores. Normalize the
+    tool-parameter syntax and re-parse every field. No-op for clean responses.
+    """
+    d = dict(data or {})
+    other = [t for t in _REVIEW_STR_TAGS if t != "essence"]
+
+    def _norm(s):
+        s = re.sub(r'<parameter name="([^"]+)">(.*?)</parameter>', r'<\1>\2</\1>',
+                   s or "", flags=re.S)
+        s = re.sub(r'<parameter name="([^"]+)">', r'<\1>', s)
+        s = re.sub(r'</parameter[^>]*>', '', s)
+        return s.replace("</invoke>", "")
+
+    normed = {k: _norm(v) for k, v in d.items() if isinstance(v, str)}
+    combined = "\n".join(normed.values())
+    tagged = "</essence>" in combined or any(
+        ("<%s>" % t) in combined or ("</%s>" % t) in combined for t in other)
+    if not tagged:
+        return data  # well-formed
+
+    strip_tags = re.compile(
+        r"</?(?:%s|fig_\w+|novelty|technical|significance|clarity|overall)>"
+        % "|".join(_REVIEW_STR_TAGS))
+    fixed = dict(d)
+
+    er = normed.get("essence", "")
+    if "<essence>" in er:
+        m = re.search(r"<essence>(.*?)</essence>", er, re.S)
+        essence = m.group(1) if m else er
+    elif "</essence>" in er:
+        essence = er.split("</essence>", 1)[0]
+    else:
+        essence = re.split(r"<(?:%s|fig_\w+)>" % "|".join(other), er, 1)[0]
+    essence = strip_tags.sub("", essence).strip()
+    if essence:
+        fixed["essence"] = essence
+
+    for t in other:
+        m = re.search(r"<%s>(.*?)</%s>" % (t, t), combined, re.S)
+        if m and m.group(1).strip():
+            val = m.group(1)
+        else:
+            # carrier field: keep only the leading text before the first
+            # leaked tag (handles `known` holding a `<parameter …>` blob, a
+            # bare `</known>`, or a spilled `<gap>…` sequence).
+            cur = normed.get(t, "")
+            val = re.split(
+                r"<(?:/?)(?:parameter|%s|fig_\w+|novelty|technical|"
+                r"significance|clarity|overall)\b" % "|".join(_REVIEW_STR_TAGS),
+                cur, 1, flags=re.S)[0]
+        val = strip_tags.sub("", val).strip()
+        if val:
+            fixed[t] = val
+    for t in _REVIEW_INT_TAGS:
+        m = re.search(r"<%s>\s*(\d+)" % t, combined)
+        if m:
+            fixed[t] = int(m.group(1))
+    return fixed
+
+
 def write_review(item, slug_dir, figures):
     text_path = os.path.join(slug_dir, "text.md")
     if not os.path.exists(text_path):
@@ -1163,6 +1239,7 @@ def write_review(item, slug_dir, figures):
             cache_dir, prompt, WRITE_REVIEW_MODEL, _make_call,
             schema_version=WRITE_REVIEW_SCHEMA_VERSION,
         )
+        data = _salvage_review_data(data)
 
         # Build figure insertions
         def fig_block(fig_num_str):
