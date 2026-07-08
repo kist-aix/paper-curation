@@ -463,7 +463,10 @@ def _inline(text):
 # .html 다운로드: 링크를 portable URL 로 치환하고 figure 를 data URI 로
 # 인라인한 자기완결 복사본을 만든다 (플레인 문자열 — JS 문자열 안 개행 없음).
 _DL_JS = r"""
-function downloadPageHtml() {
+async function downloadPageHtml() {
+  var btn = document.querySelector('.dl-btn');
+  var oldLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '이미지 임베딩 중…'; }
   var root = document.documentElement.cloneNode(true);
   root.querySelectorAll('a[data-portable]').forEach(function (a) {
     var u = a.getAttribute('data-portable');
@@ -471,16 +474,37 @@ function downloadPageHtml() {
   });
   var live = document.querySelectorAll('img');
   var cloned = root.querySelectorAll('img');
-  for (var i = 0; i < live.length && i < cloned.length; i++) {
-    var img = live[i];
-    var src = img.getAttribute('src') || '';
-    if (!src || src.indexOf('data:') === 0 || !img.complete || !img.naturalWidth) continue;
+  async function toDataUrl(src, liveImg) {
+    // 1) Fetch the exact bytes (same-origin: local server or Cloudflare). This
+    //    embeds the real webp/png losslessly and never taints — unlike canvas.
     try {
-      var c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
-      c.getContext('2d').drawImage(img, 0, 0);
-      cloned[i].setAttribute('src', c.toDataURL('image/webp', 0.92));
-    } catch (e) { /* cross-origin 등 실패 시 원본 경로 유지 */ }
+      var resp = await fetch(src, { cache: 'force-cache' });
+      if (resp && resp.ok) {
+        var blob = await resp.blob();
+        return await new Promise(function (res, rej) {
+          var fr = new FileReader();
+          fr.onload = function () { res(fr.result); };
+          fr.onerror = rej;
+          fr.readAsDataURL(blob);
+        });
+      }
+    } catch (e) { /* fall through to canvas */ }
+    // 2) Canvas fallback (when fetch is blocked, e.g. file:// origin).
+    try {
+      if (liveImg && liveImg.complete && liveImg.naturalWidth) {
+        var c = document.createElement('canvas');
+        c.width = liveImg.naturalWidth; c.height = liveImg.naturalHeight;
+        c.getContext('2d').drawImage(liveImg, 0, 0);
+        return c.toDataURL('image/webp', 0.92);
+      }
+    } catch (e) { /* tainted → keep original path */ }
+    return null;
+  }
+  for (var i = 0; i < live.length && i < cloned.length; i++) {
+    var src = cloned[i].getAttribute('src') || '';
+    if (!src || src.indexOf('data:') === 0) continue;
+    var dataUrl = await toDataUrl(src, live[i]);
+    if (dataUrl) cloned[i].setAttribute('src', dataUrl);
   }
   var h = '<!DOCTYPE html>' + root.outerHTML;
   var b = new Blob([h], { type: 'text/html' });
@@ -489,6 +513,7 @@ function downloadPageHtml() {
   a.download = window._PAGE_SLUG + '.html';
   a.click();
   URL.revokeObjectURL(a.href);
+  if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
 }
 """
 
