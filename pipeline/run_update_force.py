@@ -776,6 +776,7 @@ def extract_figures(pdf_path, slug_dir):
     # fig_num globally by ADJACENT-GRAPHIC AREA (prefer the real caption over a
     # body-text mention on another page) and cap EMITTED figures by area.
     candidates = []  # each: dict(fig_num, page, caption, box, hull, graphic_area)
+    orphan_caps = []  # 캡션은 있는데 소유 그래픽이 없는 경우 — 페이지 영역 폴백 후보
 
     for pn in range(min(30, len(doc))):
         page = doc[pn]
@@ -813,6 +814,11 @@ def extract_figures(pdf_path, slug_dir):
                         "fig_num": int(m.group(1)), "caption": lt[:120],
                         "x0": lb[0], "top": lb[1], "x1": lb[2],
                         "bottom": max(lb[3], tb["bbox"][3]),
+                        # 캡션다움: 번호 뒤 구두점("Figure 1." / "Fig. 1:" 등).
+                        # 본문 언급("Fig. 1 shows …")과 구분하는 신호 — dedup에서
+                        # 진짜 캡션이 본문 언급에게 밀리지 않게 한다.
+                        "caplike": bool(re.match(
+                            r"(?:Figure|Fig\.?)\s*[0-9]+\s*[.:|)\]—–-]", lt, re.I)),
                     })
                     break
         if not caps:
@@ -860,7 +866,19 @@ def extract_figures(pdf_path, slug_dir):
             adj_rects = assigned[id(c)]
             if not adj_rects:
                 # No graphic content owned by this caption → body-text mention
-                # or un-extractable figure. DROP it (never emit a full page).
+                # or un-extractable figure. 과거엔 DROP했지만, 등록 시 '모든
+                # 그림' 보장을 위해 페이지 영역 폴백 후보로 보관한다 (최종
+                # 렌더는 함수 끝의 완성 단계).
+                above = [cc["bottom"] for cc in caps if cc["bottom"] < c["top"] - 4]
+                below = [cc["top"] for cc in caps if cc["top"] > c["bottom"] + 4]
+                orphan_caps.append({
+                    "fig_num": c["fig_num"], "page": pn, "caption": c["caption"],
+                    "top": c["top"], "bottom": c["bottom"],
+                    "caplike": c["caplike"],
+                    "floor": (max(above) + 4) if above else 0.0,
+                    "ceil": (min(below) - 4) if below else ph,
+                    "pw": pw, "ph": ph,
+                })
                 continue
             hull = _union_rects(adj_rects)
             graphic_area = sum((r[2] - r[0]) * (r[3] - r[1]) for r in adj_rects)
@@ -880,6 +898,7 @@ def extract_figures(pdf_path, slug_dir):
                 by0 = max(0, min(by0, c["bottom"] + 2))
             candidates.append({
                 "fig_num": c["fig_num"], "page": pn, "caption": c["caption"],
+                "caplike": c["caplike"],
                 "box": [bx0, by0, bx1, by1],
                 "hull": hull, "graphic_area": graphic_area,
                 "pw": pw, "ph": ph,
@@ -891,14 +910,21 @@ def extract_figures(pdf_path, slug_dir):
     best_by_num = {}
     for c in candidates:
         prev = best_by_num.get(c["fig_num"])
-        if prev is None or c["graphic_area"] > prev["graphic_area"]:
+        if prev is None or (
+            (c.get("caplike", False), c["graphic_area"])
+            > (prev.get("caplike", False), prev["graphic_area"])
+        ):
             best_by_num[c["fig_num"]] = c
     # Cap emitted figures to the LOWEST 5 figure numbers. Main-body figures
     # (1-5) come before appendix figures, and in some papers (e.g. NLP papers
     # with many "Prompt for ..." boxes in the appendix) the appendix figures
     # have far larger area and would crowd out the real figures under an
     # area-based cap. Figure number is the more reliable importance signal.
-    chosen = sorted(best_by_num.values(), key=lambda c: c["fig_num"])[:5]
+    all_nums = sorted(best_by_num.values(), key=lambda c: c["fig_num"])
+    # review 임베드 후보는 기존과 동일하게 top-5. 6번 이후는 아래 완성 단계에서
+    # geometric-only로 저장만 한다 (등록 시 '모든 그림' 보관 — 채팅 인라인 그림용).
+    chosen = all_nums[:5]
+    extras = all_nums[5:20]
 
     figures = []
     for c in chosen:
@@ -984,6 +1010,77 @@ def extract_figures(pdf_path, slug_dir):
                     continue
 
         figures.append({"name": str(fig_num), "page": pn, "caption": caption})
+
+    # ── 등록 시 '모든 그림' 보장 (채팅 인라인 그림 완전성) ──────────────
+    # (a) 6번 이후 그림: geometric-only 저장 (Gemini 라운드 없음 — 비용 억제).
+    #     review 반환(figures)에는 넣지 않아 기존 임베드 동작 불변.
+    for c in extras:
+        out = os.path.join(fig_dir, f"fig{c['fig_num']}.png")
+        page = doc[c["page"]]
+        x0, y0, x1, y1 = c["box"]
+        for scale in [3, 2, 1]:
+            try:
+                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale),
+                                      clip=fitz.Rect(x0, y0, x1, y1))
+                pix.save(out)
+                break
+            except Exception:
+                continue
+
+    # (b) 캡션은 있는데 산출물이 없는/깨진 그림: 캡션 기준 페이지 영역 크롭
+    #     폴백. figure-above-caption 관례(위 영역) 우선, 얕으면 아래 영역.
+    #     본문 일부가 섞일 수 있는 최후 폴백이지만 '그림이 아예 안 나오는'
+    #     상태를 없앤다 (예: 과거 9159 fig1 = 0-byte).
+    def _fig_ok(p):
+        return os.path.exists(p) and os.path.getsize(p) > 1024
+
+    have = set()
+    for c in all_nums:
+        if _fig_ok(os.path.join(fig_dir, f"fig{c['fig_num']}.png")):
+            have.add(c["fig_num"])
+    # 렌더 실패/0-byte로 끝난 검출 후보도 폴백 대상으로 승격
+    for c in all_nums:
+        if c["fig_num"] in have:
+            continue
+        orphan_caps.append({
+            "fig_num": c["fig_num"], "page": c["page"], "caption": c["caption"],
+            "caplike": c.get("caplike", False),
+            "top": min(c["ph"], c["box"][3] + 2),
+            "bottom": min(c["ph"], c["box"][3] + 14),
+            "floor": 0.0, "ceil": c["ph"], "pw": c["pw"], "ph": c["ph"],
+        })
+    done_orphans = set()
+    for o in sorted(orphan_caps, key=lambda o: (o["fig_num"], not o.get("caplike", False), o["page"], o["top"])):
+        num = o["fig_num"]
+        if num in have or num in done_orphans or num > 20:
+            continue
+        page = doc[o["page"]]
+        opw, oph = o["pw"], o["ph"]
+        y0a = max(0.0, o["top"] - 0.55 * oph, o["floor"])
+        y1a = max(0.0, o["top"] - 2)
+        y0b = min(oph, o["bottom"] + 2)
+        y1b = min(oph, o["bottom"] + 0.55 * oph, o["ceil"])
+        if y1a - y0a >= 60:
+            ry0, ry1 = y0a, y1a
+        elif y1b - y0b >= 60:
+            ry0, ry1 = y0b, y1b
+        else:
+            continue
+        out = os.path.join(fig_dir, f"fig{num}.png")
+        try:
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2),
+                                  clip=fitz.Rect(12, ry0, opw - 12, ry1))
+            pix.save(out)
+        except Exception:
+            continue
+        if _fig_ok(out):
+            done_orphans.add(num)
+            log(f"  fig{num}: geometric 검출 실패 → 캡션 기준 페이지 영역 폴백")
+        else:
+            try:
+                os.remove(out)
+            except OSError:
+                pass
 
     doc.close()
     return figures
