@@ -2,6 +2,7 @@
 ai4s/
 scisci/
 ai4s+scisci/
+smart-laboratory/
 
 # Local dev caches — never deployed
 _local_keys.json
@@ -31,3 +32,12 @@ papers/*/originality.md
 
 # Cross-topic 통합 Deep Research (로컬 전용)
 _cross/
+
+# Cloudflare Workers 25 MiB asset 한도 초과 — GitHub 로만 제공
+public/260715_AIX_clinic_paper_curation.pdf
+
+# Agent/WIP · 런타임 · 잡파일 (비공개; 일부 25MiB 초과)
+_agent/
+.gjc/
+.DS_Store
+.assetsignore.pre-physicalai

@@ -608,6 +608,14 @@ def convert_review(md_path, topic, slug_dir):
         body_parts.append(f'<blockquote><p>{meta_html}{pdf_btn}</p></blockquote>')
 
     body_parts.append('<hr>')
+    # 인공지능기본법 제31조 고지 + 원문 저작권/출처 안내 (배포 대상=arXiv·OpenReview 공개 프리프린트)
+    body_parts.append(
+        '<div class="ai-notice" style="margin:0.6rem 0;padding:0.55rem 0.85rem;'
+        'background:#fff8e1;border:1px solid #ffe0a3;border-radius:8px;'
+        'font-size:0.82rem;color:#7a5b00;line-height:1.55;">'
+        '&#9888;&#65039; 이 페이지의 요약&middot;평가&middot;해설은 <strong>생성형 AI(Claude)</strong>가 '
+        '자동 생성한 2차적 분석물입니다. 논문 원문의 저작권은 <strong>원저작자</strong>에게 있으며, '
+        '정확한 내용은 원문(위 DOI&middot;arXiv 등 출처)을 확인하세요.</div>')
 
     # Sections (eval badges moved INTO Evaluation section)
     for sec_title, sec_body in parsed_sections:
@@ -862,6 +870,7 @@ window._PAGE_SLUG = {json.dumps(slug_dir_name)};
 </script>
 {audio_script_block(audio_ctx)}
 <footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
+게재 논문은 arXiv&middot;OpenReview 등 공개 프리프린트이며 원문 저작권은 원저작자에게 귀속됩니다 &middot; 이 페이지의 리뷰&middot;요약&middot;해설은 생성형 AI가 생성한 2차적 분석물입니다<br>
 Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
 </footer>
 </body>

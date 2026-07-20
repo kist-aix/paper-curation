@@ -3705,6 +3705,10 @@ def _run_topic_index(topic=None, cross=None):
         '<div class="container">\n'
         '  <div class="hero">\n'
         f'    <h1>{esc(theme["title"])} &#8212; Paper Curation</h1>\n'
+        '    <div class="ai-notice" style="margin:0.7rem 0 0.3rem;padding:0.55rem 0.9rem;background:#fff8e1;border:1px solid #ffe0a3;border-radius:8px;font-size:0.82rem;color:#7a5b00;line-height:1.55;">'
+        '&#9888;&#65039; 이 사이트의 리뷰&middot;요약&middot;타임라인&middot;Deep Research 답변은 <strong>생성형 AI</strong>가 자동 생성한 결과물입니다. '
+        '게재 논문은 arXiv&middot;OpenReview 등 공개 프리프린트이며, 원문 저작권은 <strong>원저작자</strong>에게 있습니다.'
+        '</div>\n'
         '    <div class="stats">\n'
         f'      <div class="stat"><div class="stat-num">{unique_papers}</div><div class="stat-label">\ub9ac\ubdf0 \uc644\ub8cc</div></div>\n'
         f'      <div class="stat"><div class="stat-num">{num_cats}</div><div class="stat-label">MECE \uce74\ud14c\uace0\ub9ac</div></div>\n'
@@ -3793,7 +3797,8 @@ def _run_topic_index(topic=None, cross=None):
         + _audio_script(_GEMINI_KEY, mode="deep", provider_js=_AUDIO_PROVIDER_JS,
                         local_emails=_LOCAL_EMAILS) + "\n"
         + '<footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">'
-        'Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com'
+        '게재 논문은 arXiv&middot;OpenReview 등 공개 프리프린트이며 저작권은 원저작자에게 귀속됩니다 &middot; 리뷰&middot;요약&middot;Deep Research 답변은 생성형 AI가 생성한 결과물입니다'
+        '<br>Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com'
         '</footer>\n\n'
         '</body>\n</html>'
     )
