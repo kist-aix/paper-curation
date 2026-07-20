@@ -421,6 +421,66 @@ def _reinject_local_keys(docs_dir=None, *, verbose=True):
     return n
 
 
+def _deploy_slugs(topics):
+    import json
+    idx = json.load(open(os.path.join(PAPERS_DIR, "_papers_index.json"), encoding="utf-8"))
+    tset = set(topics or [])
+    return sorted({e["slug"] for e in idx if tset & set(e.get("topics") or [])})
+
+
+def _restore_full_copies(snaps):
+    """Restore the full (ungated) local HTML snapshots taken before public re-render."""
+    for p, data in (snaps or {}).items():
+        try:
+            with open(p, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            print(f"  WARN: failed to restore full local copy {p}: {e}")
+
+
+def _render_public_copies(topics):
+    """Snapshot full local HTML for the deploy topics, then re-render those pages
+    in PUBLIC mode (PC_PUBLIC_BUILD=1) so the *uploaded* copy is license-gated
+    (figure/ND/audio). The full snapshot is restored in the finally, so the LOCAL
+    working tree stays fully unrestricted. Returns {path: full_bytes}."""
+    topics = topics or _discover_deployable_topics()
+    slugs = _deploy_slugs(topics)
+    paths = [str(get_topic_dir(t) / "index.html") for t in topics]
+    for s in slugs:
+        paths.append(os.path.join(PAPERS_DIR, s, "index.html"))
+    snaps = {}
+    for p in paths:
+        try:
+            with open(p, "rb") as f:
+                snaps[p] = f.read()
+        except Exception:
+            pass
+    print(f"\nStep 5.9: Re-rendering {len(topics)} topic(s) + {len(slugs)} papers "
+          f"in PUBLIC mode (license gating; local stays full)...")
+    _pd = os.path.dirname(os.path.abspath(__file__))
+    if _pd not in sys.path:
+        sys.path.insert(0, _pd)
+    prev = {k: os.environ.get(k) for k in ("PC_PUBLIC_BUILD", "SKIP_ZOTERO_KEYS")}
+    os.environ["PC_PUBLIC_BUILD"] = "1"
+    os.environ["SKIP_ZOTERO_KEYS"] = "1"
+    try:
+        import review_to_html as _rth
+        import build_topic_index as _bti
+        _rth._run_review_to_html(slugs=slugs)
+        for t in topics:
+            _bti._run_topic_index(t)
+    except Exception:
+        _restore_full_copies(snaps)
+        raise
+    finally:
+        for k, v in prev.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return snaps
+
+
 def _run_deploy(topic="ai4s", *, quality=90, dry_run=False, push=False,
                 topics=None, workers=8, cf_strict=False):
     """Programmatic entrypoint for prepare_deploy."""
@@ -536,6 +596,9 @@ def _run_deploy(topic="ai4s", *, quality=90, dry_run=False, push=False,
         os.remove(png_path)
         deleted += 1
     print(f"  Deleted: {deleted} PNGs, Preserved: {preserved}")
+
+    # Step 5.9: 배포 사본만 PUBLIC 모드로 재렌더(라이선스 게이팅). 로컬 full 은 finally 에서 복원.
+    _full_snaps = _render_public_copies(topics) if push else {}
 
     # Step 6: Strip API keys from HTML for deploy (local working tree restored after commit)
     print("\nStep 6: Stripping API keys from deployed HTML (local keys preserved)...")
@@ -693,6 +756,9 @@ def _run_deploy(topic="ai4s", *, quality=90, dry_run=False, push=False,
         _restore_originals()
         if _originals:
             print(f"  Restored {len(_originals)} local HTML files (API keys preserved for local dev)")
+        _restore_full_copies(_full_snaps)
+        if _full_snaps:
+            print(f"  Restored {len(_full_snaps)} local HTML files to full (ungated) view")
 
     print(f"\nDone! Total savings: {(total_orig - total_webp) / 1048576:.0f} MB")
 

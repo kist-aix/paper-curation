@@ -581,7 +581,9 @@ def convert_review(md_path, topic, slug_dir):
         _dm = re.search(r"(?m)^doi:\s*(.*)$", _b)
         _fm_doi = _dm.group(1).strip().strip('"').strip("'") if _dm else ""
     _lic_cls = _lic.normalize(_lic_raw)
-    _is_public = bool(set(_paper_topics(_slug)) & _deploy_topics())
+    # 게이팅은 배포 사본(PC_PUBLIC_BUILD=1)에서만 — 로컬 렌더는 항상 full
+    _is_public = (os.environ.get("PC_PUBLIC_BUILD") == "1"
+                  and bool(set(_paper_topics(_slug)) & _deploy_topics()))
     _fig_strict = os.environ.get("PC_FIGURE_POLICY", "") == "strict"
     _allow_figs = (not _is_public) or _lic.figure_public_ok(_lic_cls, strict=_fig_strict)
     _nd_restrict = (_is_public and _lic.is_nd(_lic_cls)
@@ -855,7 +857,10 @@ def convert_review(md_path, topic, slug_dir):
                 "relation": type_labels.get(c.get("relation", ""), c.get("relation", "")),
                 "reason": reason_txt,
             })
-    audio_ctx = {"title": title, "review": md, "connections": audio_connections}
+    # ND 논문은 audio overview(리뷰 기반 2차적 저작물)를 만들지 못하게 + 리뷰 텍스트 임베드도 생략
+    audio_ctx = {"title": title,
+                 "review": ("" if _nd_restrict else md),
+                 "connections": ([] if _nd_restrict else audio_connections)}
 
     # OG 소셜 카드 — 링크 공유 시 제목/Essence/대표 figure 가 카드로 뜬다.
     # 이미지 URL 은 절대경로여야 크롤러가 읽는다. figures/…​.png 는 배포 시
@@ -935,7 +940,7 @@ def convert_review(md_path, topic, slug_dir):
 </head>
 <body>
 {body_html}
-{audio_modal_html()}
+{"" if _nd_restrict else audio_modal_html()}
 <div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
@@ -955,7 +960,7 @@ document.addEventListener('DOMContentLoaded', function() {{
 window._PAGE_SLUG = {json.dumps(slug_dir_name)};
 {_DL_JS}
 </script>
-{audio_script_block(audio_ctx)}
+{"" if _nd_restrict else audio_script_block(audio_ctx)}
 <footer style="text-align:center;padding:2rem 0 1rem;color:#999;font-size:0.85rem;border-top:1px solid #eee;margin-top:3rem;">
 게재 논문은 arXiv&middot;OpenReview 등 공개 프리프린트이며 원문 저작권은 원저작자에게 귀속됩니다 &middot; 이 페이지의 리뷰&middot;요약&middot;해설은 생성형 AI가 생성한 2차적 분석물입니다<br>
 Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com

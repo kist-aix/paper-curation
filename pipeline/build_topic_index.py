@@ -353,7 +353,8 @@ def _run_topic_index(topic=None, cross=None):
             return f'<a href="https://arxiv.org/abs/{esc(aid)}" target="_blank">arXiv:{esc(aid)}</a>'
         return ""
 
-    _is_deploy = _is_deploy_topic(topic)
+    # 게이팅은 배포 사본(PC_PUBLIC_BUILD=1)에서만 — 로컬 렌더는 항상 full
+    _is_deploy = _is_deploy_topic(topic) and os.environ.get("PC_PUBLIC_BUILD") == "1"
     _fig_strict = os.environ.get("PC_FIGURE_POLICY", "") == "strict"
     _nd_suppress = os.environ.get("PC_ND_POLICY", "suppress") != "show"
     def render_paper_card(paper, num, cat_slug):
