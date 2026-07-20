@@ -25,6 +25,21 @@ from lib.audio_overview import (
 )
 PAPERS_DIR = str(_PAPERS_DIR)
 
+from lib import license_util as _lic
+
+
+def _is_deploy_topic(topic):
+    """True unless the topic is excluded from Cloudflare via docs/.assetsignore."""
+    docs = os.path.dirname(PAPERS_DIR)
+    try:
+        for raw in open(os.path.join(docs, ".assetsignore"), encoding="utf-8"):
+            s = raw.strip().rstrip("/")
+            if s and not s.startswith("#") and "/" not in s and s == topic:
+                return False
+    except Exception:
+        pass
+    return True
+
 def get_topic():
     if len(sys.argv) > 1:
         return sys.argv[1]
@@ -285,6 +300,7 @@ def _run_topic_index(topic=None, cross=None):
             "fig_src": (f"../papers/{dir_name}/figures/fig1.webp" if os.path.exists(os.path.join(PAPERS_DIR, dir_name, "figures", "fig1.webp"))
                         else f"../papers/{dir_name}/figures/fig1.png") if has_fig else None,
             "fig_caption": fig_caption,
+            "license": p_idx.get("license", ""),
         }
         # Multi-class: add to ALL matching categories, with per-category sub_category
         sub_categories_map = p_cls.get("sub_categories", {})
@@ -337,6 +353,9 @@ def _run_topic_index(topic=None, cross=None):
             return f'<a href="https://arxiv.org/abs/{esc(aid)}" target="_blank">arXiv:{esc(aid)}</a>'
         return ""
 
+    _is_deploy = _is_deploy_topic(topic)
+    _fig_strict = os.environ.get("PC_FIGURE_POLICY", "") == "strict"
+    _nd_suppress = os.environ.get("PC_ND_POLICY", "suppress") != "show"
     def render_paper_card(paper, num, cat_slug):
         score = paper["overall_score"]
         score_disp = f"{int(score)}/5" if score and score > 0 else "N/A"
@@ -347,6 +366,8 @@ def _run_topic_index(topic=None, cross=None):
         if paper["journal"]: meta_parts.append(f'<strong>Journal</strong>: {esc(paper["journal"])}')
         dl = make_doi_link(paper["doi"], paper["arxiv"])
         if dl: meta_parts.append(f'<strong>DOI</strong>: {dl}')
+        _cls = _lic.normalize(paper.get("license", ""))
+        meta_parts.append(f'<strong>License</strong>: {esc(_lic.label(_cls))}')
         meta_html = " | ".join(meta_parts)
         badges = []
         for label, key in [("Novelty", "novelty"), ("Technical Soundness", "technical_soundness"),
@@ -355,34 +376,51 @@ def _run_topic_index(topic=None, cross=None):
             if val is not None: badges.append(f'<span class="score-badge">{label}: {val}</span>')
         if score and score > 0: badges.append(f'<span class="score-badge">Overall: {int(score)}</span>')
         badges_html = " ".join(badges)
+        _nd_public = _is_deploy and _lic.is_nd(_cls) and _nd_suppress
         fig_html = ""
         if paper["has_fig"]:
             cap = paper.get("fig_caption", "")
             cap_html = f'<p class="fig-caption">{esc(cap)}</p>' if cap else ""
-            fig_html = (
-                '\n          <div class="paper-fig">'
-                f'<img data-src="{esc(paper["fig_src"])}" alt="Figure" class="lazy">'
-                f'{cap_html}</div>'
-            )
+            if _is_deploy and not _lic.figure_public_ok(_cls, strict=_fig_strict):
+                fig_html = (
+                    '\n          <div class="paper-fig">'
+                    '<div class="fig-gated" style="padding:0.8rem;color:#999;font-size:0.8rem;">'
+                    '&#128274; 원문 도표는 라이선스상 재현하지 않습니다</div>'
+                    f'{cap_html}</div>'
+                )
+            else:
+                fig_html = (
+                    '\n          <div class="paper-fig">'
+                    f'<img data-src="{esc(paper["fig_src"])}" alt="Figure" class="lazy">'
+                    f'{cap_html}</div>'
+                )
         essence_html = ""
-        if paper["essence"]:
+        eval_html = ""
+        if _nd_public:
             essence_html = (
                 '\n          <div class="section">'
-                '\n            <div class="section-label">Essence</div>'
-                f'\n            <p>{esc(paper["essence"])}</p>'
+                '\n            <p style="color:#8a2a20;font-size:0.85rem;">'
+                '&#128274; 변경금지(ND) 라이선스 — 2차적 저작물(AI 리뷰)의 공개가 제한됩니다. 원문을 확인하세요.</p>'
                 '\n          </div>'
             )
-        eval_html = ""
-        if badges or paper["verdict"]:
-            inner = ""
-            if badges_html: inner += f'<div class="scores">{badges_html}</div>\n            '
-            if paper["verdict"]: inner += f'<p class="verdict">{esc(paper["verdict"])}</p>'
-            eval_html = (
-                '\n          <div class="section">'
-                '\n            <div class="section-label">Evaluation</div>'
-                f'\n            {inner}'
-                '\n          </div>'
-            )
+        else:
+            if paper["essence"]:
+                essence_html = (
+                    '\n          <div class="section">'
+                    '\n            <div class="section-label">Essence</div>'
+                    f'\n            <p>{esc(paper["essence"])}</p>'
+                    '\n          </div>'
+                )
+            if badges or paper["verdict"]:
+                inner = ""
+                if badges_html: inner += f'<div class="scores">{badges_html}</div>\n            '
+                if paper["verdict"]: inner += f'<p class="verdict">{esc(paper["verdict"])}</p>'
+                eval_html = (
+                    '\n          <div class="section">'
+                    '\n            <div class="section-label">Evaluation</div>'
+                    f'\n            {inner}'
+                    '\n          </div>'
+                )
         # Link to ../papers/{slug}/index.html
         link_href = f"../papers/{esc(paper['dir'])}/index.html"
         return (

@@ -65,6 +65,47 @@ _connections_cache = {}
 
 _BSI = None
 
+from lib import license_util as _lic
+
+_DEPLOY_TOPICS = None
+def _deploy_topics():
+    """Topic dirs actually published to Cloudflare (index.html, not in .assetsignore)."""
+    global _DEPLOY_TOPICS
+    if _DEPLOY_TOPICS is None:
+        docs = os.path.dirname(PAPERS)
+        ai = set()
+        try:
+            for raw in open(os.path.join(docs, ".assetsignore"), encoding="utf-8"):
+                s = raw.strip().rstrip("/")
+                if s and not s.startswith("#") and "/" not in s:
+                    ai.add(s)
+        except Exception:
+            pass
+        dep = set()
+        try:
+            for d in os.listdir(docs):
+                if (os.path.isdir(os.path.join(docs, d))
+                        and os.path.exists(os.path.join(docs, d, "index.html"))
+                        and d not in ai and d not in {"papers", "notes", "public"}):
+                    dep.add(d)
+        except Exception:
+            pass
+        _DEPLOY_TOPICS = dep
+    return _DEPLOY_TOPICS
+
+_PIDX = None
+def _paper_topics(slug):
+    """The topic list for a slug (used to decide if its page is publicly featured)."""
+    global _PIDX
+    if _PIDX is None:
+        _PIDX = {}
+        try:
+            for e in json.load(open(os.path.join(PAPERS, "_papers_index.json"), encoding="utf-8")):
+                _PIDX[e["slug"]] = e.get("topics") or []
+        except Exception:
+            pass
+    return _PIDX.get(slug, [])
+
 
 def _portable_url(doi, title):
     """다운로드된 .html 에서도 살아있는 절대 URL. build_search_index 의
@@ -529,6 +570,23 @@ def convert_review(md_path, topic, slug_dir):
     with open(md_path, 'r', encoding='utf-8') as f:
         md = f.read()
 
+    # ── License / deploy 정책 (frontmatter 가 authoritative) ──
+    _slug = os.path.basename(slug_dir)
+    _fm_m = re.match(r"^---\n(.*?)\n---\n", md, re.DOTALL)
+    _lic_raw = _fm_doi = ""
+    if _fm_m:
+        _b = _fm_m.group(1)
+        _lm = re.search(r"(?m)^license:\s*(.*)$", _b)
+        _lic_raw = _lm.group(1).strip().strip('"').strip("'") if _lm else ""
+        _dm = re.search(r"(?m)^doi:\s*(.*)$", _b)
+        _fm_doi = _dm.group(1).strip().strip('"').strip("'") if _dm else ""
+    _lic_cls = _lic.normalize(_lic_raw)
+    _is_public = bool(set(_paper_topics(_slug)) & _deploy_topics())
+    _fig_strict = os.environ.get("PC_FIGURE_POLICY", "") == "strict"
+    _allow_figs = (not _is_public) or _lic.figure_public_ok(_lic_cls, strict=_fig_strict)
+    _nd_restrict = (_is_public and _lic.is_nd(_lic_cls)
+                    and os.environ.get("PC_ND_POLICY", "suppress") != "show")
+
     # Strip YAML frontmatter (중첩 포함, DOI 등 값 내부 --- 구분)
     while md.startswith("---"):
         lines = md.split("\n")
@@ -616,6 +674,9 @@ def convert_review(md_path, topic, slug_dir):
         '&#9888;&#65039; 이 페이지의 요약&middot;평가&middot;해설은 <strong>생성형 AI(Claude)</strong>가 '
         '자동 생성한 2차적 분석물입니다. 논문 원문의 저작권은 <strong>원저작자</strong>에게 있으며, '
         '정확한 내용은 원문(위 DOI&middot;arXiv 등 출처)을 확인하세요.</div>')
+    body_parts.append(
+        f'<p style="font-size:0.8rem;color:#777;margin:0.2rem 0 0;">'
+        f'라이선스: <strong>{esc(_lic.label(_lic_cls))}</strong></p>')
 
     # Sections (eval badges moved INTO Evaluation section)
     for sec_title, sec_body in parsed_sections:
@@ -830,6 +891,32 @@ def convert_review(md_path, topic, slug_dir):
         + f'<meta name="twitter:card" content="{"summary_large_image" if og_img else "summary"}">'
     )
 
+    # 배포 공개 페이지: 라이선스 정책에 따라 figure(원본) gate + ND(2차적) 제한
+    if _nd_restrict:
+        _src = _portable_url(_fm_doi, title)
+        body_html = (
+            f'<h1>{esc(title)}</h1>'
+            + (f'<blockquote><p>{_inline(meta_line)}</p></blockquote>' if meta_line else '')
+            + f'<p style="font-size:0.8rem;color:#777;margin:0.2rem 0;">라이선스: <strong>{esc(_lic.label(_lic_cls))}</strong></p>'
+            + '<div class="ai-notice" style="margin:0.8rem 0;padding:0.7rem 0.9rem;'
+              'background:#fdecea;border:1px solid #f5b7b1;border-radius:8px;'
+              'font-size:0.9rem;color:#8a2a20;line-height:1.6;">'
+              '&#128274; 이 논문은 <strong>변경금지(NoDerivatives)</strong> 라이선스라 '
+              '2차적 저작물(AI 리뷰&middot;요약)의 공개가 제한됩니다. 원문에서 확인하세요: '
+              f'<a href="{esc(_src)}" target="_blank" rel="noopener" style="color:#8a2a20;font-weight:700;">원문 보기 &rarr;</a></div>'
+            + f'<div class="back"><a href="{theme["back_href"]}">&larr; 목록으로 돌아가기</a></div>'
+        )
+    else:
+        body_html = "\n".join(body_parts)
+        if not _allow_figs:
+            body_html = re.sub(
+                r'(<div class="review-fig">)<img[^>]*>',
+                (r'\1<div class="fig-gated" style="padding:1.2rem;color:#999;'
+                 r'font-size:0.85rem;line-height:1.5;">'
+                 '&#128274; 원문 도표는 라이선스(위 표시)상 여기서 재현하지 않습니다 &mdash; 원문에서 확인하세요.'
+                 '</div>'),
+                body_html)
+
     # Assemble
     css = get_css(theme) + "\n" + get_audio_css(theme)
     html = f"""<!DOCTYPE html>
@@ -847,7 +934,7 @@ def convert_review(md_path, topic, slug_dir):
 </style>
 </head>
 <body>
-{chr(10).join(body_parts)}
+{body_html}
 {audio_modal_html()}
 <div id="lightbox" class="lightbox"><img id="lightbox-img" alt=""></div>
 <script>

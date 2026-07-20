@@ -69,6 +69,7 @@ def parse_review(slug):
             "authors": (fm.get("authors") or [])[:5],
             "date": normalize_date_to_yyyymm(str(fm.get("date") or "")),
             "doi": str(fm.get("doi") or ""),
+            "license": str(fm.get("license") or ""),
             "essence": str(fm.get("essence") or "")[:500],
             "score": float(scores_dict.get("overall", fm.get("score", 0)) or 0),
             "has_pdf": os.path.exists(os.path.join(PAPERS_DIR, slug, "text.md")),
@@ -147,6 +148,7 @@ def parse_review(slug):
         "verdict": verdict,
         "text_md_sha256": text_md_sha256,
         "doi_verified": doi_verified,
+        "license": "",
     }
 
 
@@ -188,6 +190,7 @@ def _run_build_index(topic="ai4s"):
             "authors": parsed["authors"],
             "date": parsed["date"],
             "doi": parsed["doi"],
+            "license": parsed.get("license", ""),
             "topics": prev.get("topics", [topic]),
             "primary_topic": prev.get("primary_topic", topic),
             "classifications": classifications,
