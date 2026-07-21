@@ -355,3 +355,20 @@ def get_topic_dir(topic: str) -> Path:
 def get_papers_index_path() -> Path:
     """papers/_papers_index.json 경로 반환."""
     return PAPERS_DIR / "_papers_index.json"
+
+# ---------------------------------------------------------------------------
+# Gemini usage instrumentation (dashboard 종량제 그래프)
+# ---------------------------------------------------------------------------
+# Every pipeline entry point imports config_loader, and so does the PaperBanana
+# wrapper (lib/paperbanana.py) before it runs PaperBanana's agents in-process.
+# Installing the google-genai monkey-patch here guarantees that *all* Gemini
+# calls report token usage to PC_USAGE_ENDPOINT — the pipeline's own
+# generate_content/TTS *and* PaperBanana's image + agent calls, which build
+# their own genai.Client and never call usage_log directly. Failure-swallowing;
+# never fatal to config loading.
+try:
+    import usage_log as _usage_log
+
+    _usage_log.instrument_genai()
+except Exception:
+    pass

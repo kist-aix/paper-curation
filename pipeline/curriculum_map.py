@@ -13,7 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, FancyBboxPatch
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -51,6 +51,7 @@ def build_curriculum_map(out_path):
     lm.set_korean_font()
     L = lm.compute_layout(1)                    # constellation-wide fields
     ppos, hub, nums, idx, edges = L["ppos"], L["hub"], L["nums"], L["idx"], L["edges"]
+    title_of = L["title_of"]
     led = ald.load_ledger()
     course = led.get("course", "Dashun Wang 커리큘럼")
 
@@ -86,14 +87,37 @@ def build_curriculum_map(out_path):
             return (L_HI + L_LO) / 2
         return L_HI - (_rank[y] / (len(distinct) - 1)) * (L_HI - L_LO)
 
-    fig, ax = plt.subplots(figsize=(16.2, 9.6), dpi=160)
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
+    # ── 네트워크를 1:1 정사각으로 채워 중앙 정렬 (x·y 독립 스케일) ─────────────
+    pts = np.array([ppos[s] for s in featured], dtype=float)
+    cmin, cmax = pts.min(0), pts.max(0)
+    cloud_c = (cmin + cmax) / 2.0
+    cspan = cmax - cmin                                     # [dx, dy]
+    TARGET = 0.72                                           # 네트워크가 채우는 정사각 변 길이
+    sx = TARGET / (cspan[0] or 1.0)
+    sy = TARGET / (cspan[1] or 1.0)                         # x·y 독립 → bbox 가 정사각(1:1)
+    CENTER = np.array([0.5, 0.5])
+
+    def T(p):
+        d = np.asarray(p, float) - cloud_c
+        return CENTER + np.array([d[0] * sx, d[1] * sy])
+
+    tppos = {s: T(ppos[s]) for s in ppos}
+    thub = {n: T(hub[n]) for n in nums}
+
+    fig = plt.figure(figsize=(11.6, 11.6), dpi=160)        # 1:1
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.set_aspect("equal"); ax.axis("off")
     ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white", zorder=0))
 
+    def Wof(y, lo, hi):
+        """연도 → 선 굵기: 오래된=가늘게, 최신=굵게."""
+        if y is None or len(distinct) <= 1:
+            return (lo + hi) / 2
+        return lo + (_rank[y] / (len(distinct) - 1)) * (hi - lo)
+
     wangset, otherset = set(wang), set(other)
-    # (1) 기타 그룹 논문 -> 연관 있다고 판단된 Wang 그룹 논문 연결선
-    #     (회색, 기타 논문 연도로 gradation: 오래될수록 밝게)
-    g_segs, g_cols = [], []
+    # (1) 기타 → 연관 Wang 논문 연결선 (회색, 연도 gradation · 최신일수록 굵게)
+    g_segs, g_cols, g_lws = [], [], []
     for a, b in edges:
         if a in wangset and b in otherset:
             g, w = b, a
@@ -101,90 +125,98 @@ def build_curriculum_map(out_path):
             g, w = a, b
         else:
             continue
-        g_segs.append([ppos[g], ppos[w]]); g_cols.append(gray_rgb(Lof(year[g])))
-    ax.add_collection(LineCollection(g_segs, colors=g_cols, linewidths=0.5,
-                                     alpha=0.35, zorder=1))
-    # (2) Wang 그룹 논문 시간순(오래된->새로운) 연결선 (주황 spine, 연도 gradation)
+        g_segs.append([tppos[g], tppos[w]])
+        g_cols.append(gray_rgb(Lof(year[g])))
+        g_lws.append(Wof(year[g], 0.25, 1.5))
+    ax.add_collection(LineCollection(g_segs, colors=g_cols, linewidths=g_lws,
+                                     alpha=0.33, zorder=1))
+    # (2) Wang 시간순 연결선 (주황 spine, 연도 gradation · 최신일수록 굵게)
     wsorted = sorted([w for w in wang if year.get(w)], key=lambda w: (year[w], w))
-    s_segs = [[ppos[wsorted[i]], ppos[wsorted[i + 1]]] for i in range(len(wsorted) - 1)]
-    s_cols = [wang_rgb(Lof(year[wsorted[i]])) for i in range(len(wsorted) - 1)]
-    ax.add_collection(LineCollection(s_segs, colors=s_cols, linewidths=1.3,
-                                     alpha=0.75, zorder=2, capstyle="round"))
-
-    # faint lecture-number hubs for spatial context
-    for n in nums:
-        h = hub[n]
-        ax.text(h[0], h[1], str(n), fontsize=17, color="#EAEDF0",
-                fontweight="bold", ha="center", va="center", zorder=2)
+    s_segs, s_cols, s_lws = [], [], []
+    for i in range(len(wsorted) - 1):
+        yb = year[wsorted[i + 1]]                           # 더 최신 쪽 끝점 기준
+        s_segs.append([tppos[wsorted[i]], tppos[wsorted[i + 1]]])
+        s_cols.append(wang_rgb(Lof(yb)))
+        s_lws.append(Wof(yb, 0.7, 3.4))
+    ax.add_collection(LineCollection(s_segs, colors=s_cols, linewidths=s_lws,
+                                     alpha=0.8, zorder=2, capstyle="round"))
 
     # nodes: gray (other) behind, orange (Wang) in front
     for s in other:
-        c = gray_rgb(Lof(year[s])); pp = ppos[s]
-        ax.scatter([pp[0]], [pp[1]], s=52, facecolor=[c], edgecolors="#FFFFFF",
+        c = gray_rgb(Lof(year[s])); pp = tppos[s]
+        ax.scatter([pp[0]], [pp[1]], s=46, facecolor=[c], edgecolors="#FFFFFF",
                    linewidths=0.5, alpha=0.96, zorder=3)
     for s in wang:
         Lv = Lof(year[s])
-        c = wang_rgb(Lv); ec = wang_rgb(max(0.16, Lv - 0.22)); pp = ppos[s]
-        ax.scatter([pp[0]], [pp[1]], s=104, facecolor=[c], edgecolors=[ec],
+        c = wang_rgb(Lv); ec = wang_rgb(max(0.16, Lv - 0.22)); pp = tppos[s]
+        ax.scatter([pp[0]], [pp[1]], s=92, facecolor=[c], edgecolors=[ec],
                    linewidths=0.9, zorder=5)
+    # 각 강 군집 중심에 흐린 번호(리더선이 향하는 지점)
+    for n in nums:
+        h = thub[n]
+        ax.text(h[0], h[1], str(n), fontsize=15, color="#E3E7EB",
+                fontweight="bold", ha="center", va="center", zorder=2)
 
-    # ---- title ----
-    ax.text(0.015, 0.985, "%s — 전체 연구 지도" % course, fontsize=17,
-            fontweight="bold", color="#212529", va="top")
-    ax.text(0.015, 0.945,
+    # ── 주변 네모박스: 제N강 + 제목 (강 순서대로 원형 배치 · 리더선 연결) ────────
+    def wrap_title(t, width=12, maxlines=2):
+        t = " ".join((t or "").split())
+        lines = [t[i:i + width] for i in range(0, len(t), width)][:maxlines]
+        if lines and len("".join(lines)) < len(t):
+            lines[-1] = lines[-1][:max(1, width - 1)] + "…"
+        return "\n".join(lines)
+
+    R_ring, bw, bh = 0.375, 0.152, 0.070
+    slots = []
+    for i, n in enumerate(nums):
+        th = np.pi / 2 - 2 * np.pi * i / len(nums)          # 1강 상단, 시계방향
+        slots.append((n, 0.5 + R_ring * np.cos(th), 0.5 + R_ring * np.sin(th)))
+    # 리더선 먼저(박스가 위에 덮이도록)
+    for n, bxc, byc in slots:
+        hx, hy = thub[n]
+        ax.plot([bxc, hx], [byc, hy], color="#C7CDD3", lw=0.8, alpha=0.6,
+                zorder=1.6, solid_capstyle="round")
+    # 네모박스 + 텍스트
+    for n, bxc, byc in slots:
+        ax.add_patch(FancyBboxPatch((bxc - bw / 2, byc - bh / 2), bw, bh,
+                     boxstyle="round,pad=0.006,rounding_size=0.012",
+                     fc="#FFFFFF", ec=wang_rgb(0.45), lw=1.15, alpha=0.5, zorder=8))
+        ax.text(bxc, byc + bh * 0.26, "제%d강" % n, fontsize=9.2, fontweight="bold",
+                color=wang_rgb(0.28), ha="center", va="center", zorder=9)
+        ax.text(bxc, byc - bh * 0.17, wrap_title(title_of[n]), fontsize=7.1,
+                color="#212529", ha="center", va="center", linespacing=1.18, zorder=9)
+
+    # ---- title (상단 중앙) ----
+    ax.text(0.5, 0.987, "%s — 전체 연구 지도" % course, fontsize=17,
+            fontweight="bold", color="#212529", ha="center", va="top")
+    ax.text(0.5, 0.960,
             "논문 %d편 (Wang 그룹 %d · 타 그룹 %d) · %d–%d"
             % (len(featured), len(wang), len(other), ymin, ymax),
-            fontsize=10.5, color="#868E96", va="top")
+            fontsize=10.5, color="#868E96", ha="center", va="top")
 
-    # ---- legend: group swatches ----
-    lx, ly = 0.70, 0.955
-    ax.scatter([lx], [ly], s=150, facecolor=[wang_rgb(0.55)],
-               edgecolors=[wang_rgb(0.33)], linewidths=1.0,
-               transform=ax.transAxes, clip_on=False, zorder=10)
-    ax.text(lx + 0.018, ly, "Dashun Wang 그룹", fontsize=11, color="#212529",
-            va="center", transform=ax.transAxes)
-    ax.scatter([lx], [ly - 0.045], s=110, facecolor=[gray_rgb(0.55)],
-               edgecolors="#FFFFFF", linewidths=0.6,
-               transform=ax.transAxes, clip_on=False, zorder=10)
-    ax.text(lx + 0.018, ly - 0.045, "다른 그룹", fontsize=11, color="#212529",
-            va="center", transform=ax.transAxes)
-    ax.plot([lx - 0.007, lx + 0.007], [ly - 0.092, ly - 0.092], color=wang_rgb(0.5),
-            lw=2.4, solid_capstyle="round", transform=ax.transAxes, clip_on=False, zorder=10)
-    ax.text(lx + 0.018, ly - 0.092, "Wang 그룹 시간순 연결", fontsize=10,
-            color="#212529", va="center", transform=ax.transAxes)
-    ax.plot([lx - 0.007, lx + 0.007], [ly - 0.132, ly - 0.132], color=gray_rgb(0.5),
-            lw=1.3, transform=ax.transAxes, clip_on=False, zorder=10)
-    ax.text(lx + 0.018, ly - 0.132, "기타 → 연관 Wang 논문", fontsize=10,
-            color="#212529", va="center", transform=ax.transAxes)
+    # ---- 하단 가로 컬러바 (연도: 오래될수록 밝게 · 최신일수록 진하게) ----
+    from matplotlib.colors import LinearSegmentedColormap
+    grad = np.linspace(0.0, 1.0, 256)                          # 0=oldest .. 1=newest
+    cols = [wang_rgb(L_HI - t * (L_HI - L_LO)) for t in grad]   # 왼쪽 밝음(old) .. 오른쪽 진함(new)
+    cmap = LinearSegmentedColormap.from_list("wang_year", cols)
+    cax = fig.add_axes([0.32, 0.040, 0.36, 0.013])             # 가늘고 긴 바(하단 중앙)
+    cax.imshow(grad.reshape(1, -1), aspect="auto", cmap=cmap, extent=[0, 1, 0, 1])
+    cax.set_yticks([]); cax.set_xlim(0, 1)
+    nd = len(distinct)
+    if nd > 1:
+        fr = [0.0, 0.25, 0.5, 0.75, 1.0]
+        cax.set_xticks(fr)
+        cax.set_xticklabels([str(distinct[round(f * (nd - 1))]) for f in fr],
+                            fontsize=8.5, color="#495057")
+    else:
+        cax.set_xticks([])
+    cax.tick_params(length=3, pad=2.5, colors="#868E96")
+    for sp in cax.spines.values():
+        sp.set_edgecolor("#CED4DA"); sp.set_linewidth(0.6)
+    cax.text(0.5, 2.1, "논문 연도  —  오래될수록 밝게 · 최신일수록 진하고 굵게",
+             fontsize=9.5, color="#495057", ha="center", va="bottom",
+             transform=cax.transAxes)
 
-    # ---- year gradient bars (older = brighter) ----
-    bx, bw = 0.72, 0.05
-    by0, by1 = 0.25, 0.68           # bottom(new/dark) .. top(old/bright)
-    steps = 64
-    for i in range(steps):
-        t = i / (steps - 1)                       # 0 bottom .. 1 top
-        yy = by0 + (by1 - by0) * t
-        Lv = L_LO + (L_HI - L_LO) * t             # top brightest
-        ax.add_patch(Rectangle((bx, yy), bw, (by1 - by0) / steps + 0.001,
-                               facecolor=wang_rgb(Lv), edgecolor="none",
-                               transform=ax.transAxes, zorder=9))
-        ax.add_patch(Rectangle((bx + bw + 0.012, yy), bw, (by1 - by0) / steps + 0.001,
-                               facecolor=gray_rgb(Lv), edgecolor="none",
-                               transform=ax.transAxes, zorder=9))
-    ax.text(bx, by1 + 0.02, "연도별 명암 (오래될수록 밝게)", fontsize=10.5,
-            fontweight="bold", color="#212529", transform=ax.transAxes)
-    ax.text(bx - 0.005, by1, "  %d (oldest)" % ymin, fontsize=9, color="#495057",
-            ha="right", va="center", transform=ax.transAxes)
-    ax.text(bx - 0.005, by0, "  %d (newest)" % ymax, fontsize=9, color="#495057",
-            ha="right", va="center", transform=ax.transAxes)
-    ax.text(bx - 0.005, (by0 + by1) / 2, "  ↑ 오래된 논문", fontsize=8.2,
-            color="#868E96", ha="right", va="center", transform=ax.transAxes)
-    ax.text(bx, by0 - 0.03, "Wang", fontsize=8.5, color="#B34700",
-            ha="center", transform=ax.transAxes)
-    ax.text(bx + bw + 0.012 + bw / 2, by0 - 0.03, "기타", fontsize=8.5,
-            color="#868E96", ha="center", transform=ax.transAxes)
-
-    fig.savefig(out_path, bbox_inches="tight", facecolor="white")
+    fig.savefig(out_path, facecolor="white")
     print("saved", out_path, os.path.getsize(out_path), "bytes")
     print("featured=%d wang=%d other=%d years=%d-%d"
           % (len(featured), len(wang), len(other), ymin, ymax))
