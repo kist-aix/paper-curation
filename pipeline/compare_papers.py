@@ -775,7 +775,8 @@ def build_html(papers, comp, md_text, theme, name, image_b64=None):
     name_js = json.dumps(name)
     # 다운로드본은 로컬 상대링크가 깨지므로 data-portable(DOI/arXiv/Scholar)로
     # 치환하고, _CMP_PORTABLE 플래그를 켜서 그래프 노드 클릭도 portable 로 보낸다.
-    dl_js = ("window._CMP_PORTABLE = false; "
+    dl_js = (RH._DL_SCRUB_JS +
+             "window._CMP_PORTABLE = false; "
              "function _dl(blob, fname) { "
              "var a = document.createElement('a'); "
              "a.href = URL.createObjectURL(blob); "
@@ -789,6 +790,8 @@ def build_html(papers, comp, md_text, theme, name, image_b64=None):
              "root.querySelectorAll('a[data-portable]').forEach(function (a) { "
              "var u = a.getAttribute('data-portable'); "
              "if (u) { a.setAttribute('href', u); a.setAttribute('target', '_blank'); } }); "
+             # 빌드 시 구워 넣은 로컬 키를 사본에서 제거 (review 페이지와 공유).
+             "_dlScrubKeys(root); "
              "var h = '<!DOCTYPE html>' + root.outerHTML; "
              "var flag = 'window._CMP_PORTABLE = '; "
              "h = h.split(flag + 'false').join(flag + 'true'); "

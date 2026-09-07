@@ -24,6 +24,10 @@ papers/*/notes.md
 # Multi-paper comparisons (paper-curio local feature)
 papers/_comparisons/
 
+# .html 다운로드용 figure data URI (file:// 전용 크러치 — 전량 약 1GB).
+# https 에서는 버튼이 fetch 로 원본 바이트를 그대로 가져오므로 불필요하다.
+papers/*/_figs_inline.js
+
 # Source markdown (only HTML is served)
 papers/*/review.md
 papers/*/text.md

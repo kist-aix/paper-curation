@@ -7,9 +7,9 @@ Usage:
   PYTHONUTF8=1 python review_to_html.py --all              # regenerate all
   PYTHONUTF8=1 python review_to_html.py --slugs 251-394    # specific range
 """
-import os, re, sys, json, argparse
+import os, re, sys, json, base64, hashlib, argparse
 from html import escape as esc
-from urllib.parse import quote as _urlquote
+from urllib.parse import quote as _urlquote, unquote as _urlunquote
 
 from config_loader import PAPERS_DIR as _PAPERS_DIR
 from lib.audio_overview import (
@@ -198,6 +198,7 @@ td:last-child {{ text-align: center; font-weight: 600; color: {t['accent']}; }}
 .dl-bar {{ margin: 0.5rem 0; }}
 .dl-btn {{ background: {t['accent']}; color: #fff; border: none; border-radius: 8px; padding: 0.45rem 0.9rem; font-size: 0.85rem; cursor: pointer; font-family: inherit; }}
 .dl-btn:hover {{ background: {t['accent_dark']}; }}
+.dl-note {{ display: block; margin: 0.35rem 0 0; font-size: 0.78rem; color: #666; line-height: 1.5; }}
 .essence-box {{ border: 2px solid {t['essence_border']}; border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0; background: {t['essence_bg']}; }}
 .essence-box h2 {{ color: {t['essence_border']}; margin: 0 0 0.5rem; border: none; padding: 0; }}
 code {{ background: #e8edf3; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }}
@@ -523,62 +524,228 @@ def _inline(text):
     return text
 
 
-# .html 다운로드: 링크를 portable URL 로 치환하고 figure 를 data URI 로
-# 인라인한 자기완결 복사본을 만든다 (플레인 문자열 — JS 문자열 안 개행 없음).
-_DL_JS = r"""
-async function downloadPageHtml() {
-  var btn = document.querySelector('.dl-btn');
-  var oldLabel = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '이미지 임베딩 중…'; }
-  var root = document.documentElement.cloneNode(true);
-  root.querySelectorAll('a[data-portable]').forEach(function (a) {
-    var u = a.getAttribute('data-portable');
-    if (u) { a.setAttribute('href', u); a.setAttribute('target', '_blank'); }
+# ── portable figure payload ──────────────────────────────────────────────
+# file:// 페이지가 이미지 바이트에 닿는 유일한 통로는 `<script src>` 다 — fetch 와
+# XHR 은 차단되고 canvas 는 drawImage 즉시 오염된다(맨 아래 _DL_JS 주석의 실측).
+# 그래서 이 페이지가 참조하는 figure 를 빌드 시 data URI 로 굳혀 옆에 둔다. 페이지
+# 로드가 아니라 **다운로드 버튼을 눌렀을 때만** 지연 로드되므로 열람 비용은 0 이다.
+#
+# 비용은 쟴 만하다: 페이지당 참조 figure 평균 1.85장 × 96KB → base64 약 240KB 로,
+# 같은 폴더의 text.md(수백 KB)보다 작다. 코퍼스 전체로는 약 1GB 이고 gitignore·
+# .assetsignore 로 배포에도 안 올라간다(https 에선 fetch 가 원본을 그대로 가져온다).
+# 해상도를 긎는 안은 버렸다 — 코퍼스 figure 중간 폭이 이미 1,396px 라 1600px 재인코딩은
+# 25%만 줄이면서 세대 손실만 남긴다(실측 120장).
+PAYLOAD_NAME = "_figs_inline.js"
+_FIG_MIME = {".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg",
+             ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml"}
+_MIN_VALID_WEBP_BYTES = 200  # = prepare_deploy.MIN_VALID_WEBP_BYTES
+
+
+def _figure_data_uri(path):
+    """figure 원본 → data URI.
+
+    PNG 만 배포와 동일한 설정(WebP q90)으로 줄여 싣는다 — 이 코퍼스의 PNG 는
+    장당 800KB를 넘어 메일에 붙일 수 없는 사본을 만든다(3장짜리 한 편이 3.5MB).
+    이미 WebP 인 97% 는 바이트 그대로 싣는다 — 재인코딩은 세대 손실만 낳는다.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    with open(path, "rb") as f:
+        raw = f.read()
+    if ext == ".png":
+        try:
+            import io
+            from PIL import Image
+            buf = io.BytesIO()
+            Image.open(path).save(buf, "WEBP", quality=90)
+            enc = buf.getvalue()
+            if _MIN_VALID_WEBP_BYTES <= len(enc) < len(raw):
+                return "data:image/webp;base64," + base64.b64encode(enc).decode("ascii")
+        except Exception:
+            pass  # Pillow 없거나 변환 실패 → 원본 PNG 그대로
+    mime = _FIG_MIME.get(ext, "application/octet-stream")
+    return "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")
+
+
+def write_figure_payload(slug_dir, html):
+    """이 페이지가 참조하는 figure 를 data URI 로 굳혀 PAYLOAD_NAME 에 쓴다.
+
+    원본 figure 의 (경로, 크기, mtime) 서명을 첫 줄에 남겨 변한 게 없으면 그대로
+    둔다 — 증분 재빌드가 매번 base64 를 다시 띄지 않게 한다. 참조 figure 가 없으면
+    묵은 payload 를 지운다(review.md 가 figure 를 끈 경우).
+    """
+    path = os.path.join(slug_dir, PAYLOAD_NAME)
+    srcs = sorted(set(re.findall(r'<img[^>]+src="(figures/[^"]+)"', html)))
+    present = []
+    for s in srcs:
+        p = os.path.join(slug_dir, _urlunquote(s))
+        if os.path.exists(p):
+            present.append((s, p))
+    if not present:
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        return 0
+    sig_src = json.dumps([[s, os.path.getsize(p), int(os.path.getmtime(p))]
+                          for s, p in present], sort_keys=True)
+    head = "// figs-sig:" + hashlib.sha256(sig_src.encode("utf-8")).hexdigest()[:16]
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            if f.readline().strip() == head:
+                return len(present)
+    except OSError:
+        pass
+    mapping = {s: _figure_data_uri(p) for s, p in present}
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        # base64 알파벳에 '<' 가 없으므로 </script> 문제가 없다.
+        f.write(head + "\n")
+        f.write("window._FIG_INLINE = " + json.dumps(mapping) + ";\n")
+    os.replace(tmp, path)
+    return len(present)
+
+
+# 다운로드본에서 빌드 시 구워 넣은 로컬 키를 지운다. 배포본은 prepare_deploy 가
+# 이미 빈 슬롯으로 만들지만 **로컬 페이지에는 진짜 키가 들어 있고**
+# (window._GEMINI_KEY = "AIza…"), 다운로드는 문서 전체를 통째로 복제하므로
+# 그대로 두면 공유·보관용 사본과 함께 키가 나간다. compare_papers 의 다운로드도
+# 같은 문서를 복제하므로 이 스니펫 하나를 공유한다 (사본을 만들면 갈라진다).
+_DL_SCRUB_JS = r"""
+function _dlScrubKeys(root) {
+  var pats = [
+    [/(_GEMINI_KEY\s*=\s*)"[^"]*"/g, '$1""'],
+    [/(_ANTHROPIC_KEY\s*=\s*)"[^"]*"/g, '$1""'],
+    [/(_OPENAI_KEY\s*=\s*)"[^"]*"/g, '$1""'],
+    [/(_LLM_KEY\s*=\s*)"[^"]*"/g, '$1""'],
+    [/(_LOCAL_EMAILS\s*=\s*)\[[^\]]*\]/g, '$1[]']
+  ];
+  var n = 0;
+  root.querySelectorAll('script').forEach(function (s) {
+    var t = s.textContent;
+    if (!t) return;
+    var before = t;
+    for (var i = 0; i < pats.length; i++) t = t.replace(pats[i][0], pats[i][1]);
+    if (t !== before) { s.textContent = t; n++; }
   });
-  var live = document.querySelectorAll('img');
-  var cloned = root.querySelectorAll('img');
-  async function toDataUrl(src, liveImg) {
-    // 1) Fetch the exact bytes (same-origin: local server or Cloudflare). This
-    //    embeds the real webp/png losslessly and never taints — unlike canvas.
-    try {
-      var resp = await fetch(src, { cache: 'force-cache' });
-      if (resp && resp.ok) {
-        var blob = await resp.blob();
-        return await new Promise(function (res, rej) {
-          var fr = new FileReader();
-          fr.onload = function () { res(fr.result); };
-          fr.onerror = rej;
-          fr.readAsDataURL(blob);
-        });
-      }
-    } catch (e) { /* fall through to canvas */ }
-    // 2) Canvas fallback (when fetch is blocked, e.g. file:// origin).
-    try {
-      if (liveImg && liveImg.complete && liveImg.naturalWidth) {
-        var c = document.createElement('canvas');
-        c.width = liveImg.naturalWidth; c.height = liveImg.naturalHeight;
-        c.getContext('2d').drawImage(liveImg, 0, 0);
-        return c.toDataURL('image/webp', 0.92);
-      }
-    } catch (e) { /* tainted → keep original path */ }
-    return null;
-  }
-  for (var i = 0; i < live.length && i < cloned.length; i++) {
-    var src = cloned[i].getAttribute('src') || '';
-    if (!src || src.indexOf('data:') === 0) continue;
-    var dataUrl = await toDataUrl(src, live[i]);
-    if (dataUrl) cloned[i].setAttribute('src', dataUrl);
-  }
-  var h = '<!DOCTYPE html>' + root.outerHTML;
-  var b = new Blob([h], { type: 'text/html' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = window._PAGE_SLUG + '.html';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+  return n;
 }
 """
+
+# .html 다운로드: 링크를 portable URL 로 치환하고 figure 를 data URI 로
+# 인라인한 자기완결 복사본을 만든다 (플레인 문자열 — JS 문자열 안 개행 없음).
+#
+# file:// 로 연 페이지에서는 이미지 바이트에 닿을 방법이 없다. 실측(Chromium):
+#   fetch('figures/fig1.png')  → TypeError: Failed to fetch
+#   canvas.drawImage → toDataURL → SecurityError: Tainted canvases may not be exported
+# 예전 코드는 캔버스를 "fetch 가 막히는 file:// 대비 fallback" 이라고 적어 뒀지만,
+# 캔버스가 오염되는 경우가 바로 그 file:// 이라 두 경로가 함께 실패했다. 그래도
+# 다운로드는 그대로 진행돼서 사본은 'figures/…' 상대경로를 그대로 들고 ~/Downloads
+# 로 떨어졌고 — 거기엔 figures/ 가 없으니 — 그림이 전멸한 채 조용히 저장됐다.
+#
+# 막히지 않는 통로는 `<script src>` 하나다(이것도 실측 확인). 그래서 버튼을
+# 누를 때 PAYLOAD_NAME 을 지연 로드해 빌드 시 굳혀 둔 data URI 를 가져온다 —
+# file:// 에서도 그림이 들어간 자기완결 HTML 이 나온다. http(s) 에선 fetch 가
+# 원본 바이트를 무손실로 가져오므로 payload 는 거기서만 3차 fallback 이다.
+_DL_JS = (_DL_SCRUB_JS + r"""
+function _dlLoadFigPayload() {
+  // file:// 에서도 로드되는 유일한 형태. 로드된 태그는 바로 지워 다음번 복제본에
+  // 따라들어가지 않게 한다 (window._FIG_INLINE 은 사라지지 않는다).
+  return new Promise(function (res) {
+    if (window._FIG_INLINE) { res(window._FIG_INLINE); return; }
+    var s = document.createElement('script');
+    s.src = 'PAYLOAD_SRC';
+    var done = function (v) { if (s.parentNode) s.parentNode.removeChild(s); res(v); };
+    s.onload = function () { done(window._FIG_INLINE || null); };
+    s.onerror = function () { done(null); };
+    (document.head || document.documentElement).appendChild(s);
+  });
+}
+async function _dlToDataUrl(src, liveImg) {
+  // 1) 원본 바이트를 그대로 받아 무손실 인라인 (same-origin: 로컬 서버·Cloudflare).
+  try {
+    var resp = await fetch(src, { cache: 'force-cache' });
+    if (resp && resp.ok) {
+      var blob = await resp.blob();
+      return await new Promise(function (res, rej) {
+        var fr = new FileReader();
+        fr.onload = function () { res(fr.result); };
+        fr.onerror = rej;
+        fr.readAsDataURL(blob);
+      });
+    }
+  } catch (e) { /* CORS 헤더 없는 외부 이미지 → 캔버스로 재시도 */ }
+  // 2) 캔버스 fallback — 오염되지 않은(같은 origin 이거나 CORS 허용) 이미지만 살아난다.
+  try {
+    if (liveImg && liveImg.complete && liveImg.naturalWidth) {
+      var c = document.createElement('canvas');
+      c.width = liveImg.naturalWidth; c.height = liveImg.naturalHeight;
+      c.getContext('2d').drawImage(liveImg, 0, 0);
+      return c.toDataURL('image/webp', 0.92);
+    }
+  } catch (e) { /* tainted → 원본 경로 유지 */ }
+  return null;
+}
+async function downloadPageHtml() {
+  var btn = document.querySelector('.dl-btn');
+  var note = document.getElementById('dl-note');
+  var oldLabel = btn ? btn.textContent : '';
+  var isFile = location.protocol === 'file:';
+  if (btn) { btn.disabled = true; btn.textContent = '이미지 임베딩 중…'; }
+  if (note) { note.textContent = ''; }
+  try {
+    var root = document.documentElement.cloneNode(true);
+    root.querySelectorAll('a[data-portable]').forEach(function (a) {
+      var u = a.getAttribute('data-portable');
+      if (u) { a.setAttribute('href', u); a.setAttribute('target', '_blank'); }
+    });
+    _dlScrubKeys(root);
+    var live = document.querySelectorAll('img');
+    var cloned = root.querySelectorAll('img');
+    var total = 0, embedded = 0, payload;
+    for (var i = 0; i < live.length && i < cloned.length; i++) {
+      var src = cloned[i].getAttribute('src') || '';
+      if (!src || src.indexOf('data:') === 0) continue;
+      total++;
+      // file:// 은 fetch·canvas 가 둘 다 막히므로 시도하지 않고 바로 payload 로 간다.
+      var dataUrl = isFile ? null : await _dlToDataUrl(src, live[i]);
+      if (!dataUrl) {
+        if (payload === undefined) payload = await _dlLoadFigPayload();
+        if (payload) dataUrl = payload[src] || payload[src.split('/').pop()] || null;
+      }
+      if (dataUrl) { cloned[i].setAttribute('src', dataUrl); embedded++; }
+      else if (isFile) { cloned[i].setAttribute('src', new URL(src, location.href).href); }
+    }
+    var h = '<!DOCTYPE html>' + root.outerHTML;
+    var b = new Blob([h], { type: 'text/html' });
+    var a = document.createElement('a');
+    var objUrl = URL.createObjectURL(b);
+    a.href = objUrl;
+    a.download = (window._PAGE_SLUG || 'review') + '.html';
+    a.click();
+    // 즉시 revoke 하면 저장이 시작되기 전에 blob 이 사라지는 브라우저가 있다.
+    setTimeout(function () { URL.revokeObjectURL(objUrl); }, 60000);
+    if (note) {
+      if (total && embedded === total) {
+        note.textContent = '이미지 ' + total + '장 포함 · 자기완결 HTML — 그대로 보내도 그림이 보입니다.';
+      } else if (embedded) {
+        note.textContent = '이미지 ' + embedded + '/' + total + '장만 포함됐습니다 — 나머지는 '
+          + '이 기기 경로로 남아 외부에선 보이지 않습니다. python pipeline/review_to_html.py --slugs '
+          + (window._PAGE_SLUG || '').split('_')[0] + ' 로 페이지를 다시 생성하세요.';
+      } else if (total) {
+        note.textContent = '이미지를 하나도 넣지 못했습니다 — 그림 데이터(' + 'PAYLOAD_SRC' + ')가 '
+          + '없거나 오래됐습니다. python pipeline/review_to_html.py --slugs '
+          + (window._PAGE_SLUG || '').split('_')[0] + ' 로 페이지를 다시 생성하세요.';
+      }
+    }
+  } catch (e) {
+    if (note) { note.textContent = '다운로드 실패: ' + ((e && e.message) || e); }
+    throw e;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+  }
+}
+""").replace("PAYLOAD_SRC", PAYLOAD_NAME)
 
 
 def convert_review(md_path, topic, slug_dir):
@@ -662,6 +829,7 @@ def convert_review(md_path, topic, slug_dir):
     body_parts.append(
         '<div class="dl-bar">'
         '<button class="dl-btn" onclick="downloadPageHtml()">.html 다운로드</button>'
+        '<span class="dl-note" id="dl-note"></span>'
         '</div>')
     # Audio Overview button (localhost-only; disabled when no key on deploy)
     body_parts.append(audio_bar_html())
@@ -988,6 +1156,14 @@ Developed by Jehyun Lee, KIST AIX Strategy Department | jehyun.lee@gmail.com
 </footer>
 </body>
 </html>"""
+    # 이 페이지가 참조하는 figure 를 다운로드용 data URI 로 굳혀 옆에 둔다.
+    # convert_review 안에 두는 이유: index.html 을 쓰는 호출자가 네 곳이라
+    # (review_to_html·run_update_force·fix_review_headers·validate_papers) 밖에 두면
+    # 한 곳이 빼먹을 때 payload 만 묵어 조용히 오래된 그림을 내보낸다.
+    try:
+        write_figure_payload(slug_dir, html)
+    except Exception as e:  # payload 실패가 페이지 생성을 죽이면 안 된다
+        print(f"  WARN: {_slug}: figure payload 생성 실패: {e}")
     return html
 
 
